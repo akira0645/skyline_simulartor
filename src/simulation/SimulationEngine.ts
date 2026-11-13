@@ -1,6 +1,10 @@
 import type { WorldState } from './WorldState';
 
+import { BuildingSystem } from './BuildingSystem';
+import { TileMap } from './TileMap';
+
 export class SimulationEngine {
+  readonly city = new BuildingSystem(new TileMap());
   private readonly state: WorldState;
 
   constructor(initialState: WorldState) {
@@ -8,7 +12,10 @@ export class SimulationEngine {
   }
 
   advance(ticks: number): number {
-    this.state.tick += ticks;
+    for (let step = 0; step < ticks; step++) {
+      this.state.tick++;
+      this.city.grow(this.state.tick);
+    }
     return this.state.tick;
   }
 

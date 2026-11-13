@@ -1,10 +1,15 @@
 import { Application } from 'pixi.js';
-import { MAP_SIZE, TileMap, type Cell } from '../simulation/TileMap';
+import { MAP_SIZE, type Cell } from '../simulation/TileMap';
 import { selection, type Tool } from '../app/tools';
 import { Camera } from './Camera';
 import { TileRenderer } from './TileRenderer';
 
+import type { BuildingSystem } from '../simulation/BuildingSystem';
+
 export class CityRenderer {
+  refresh?: () => void;
+
+  constructor(private readonly city: BuildingSystem) {}
   private app?: Application;
   private observer?: ResizeObserver;
 
@@ -19,7 +24,7 @@ export class CityRenderer {
     }
 
     this.app = app;
-    const map = new TileMap();
+    const map = this.city.map;
     const camera = new Camera();
     const tiles = new TileRenderer();
     const canvas = app.canvas;
@@ -29,9 +34,10 @@ export class CityRenderer {
     let preview: Cell[] = [];
     let drag: { id: number; tool: Tool; start: Cell; x: number; y: number } | undefined;
     const draw = () => {
-      tiles.draw(map, camera, app.screen.width, app.screen.height, preview);
+      tiles.draw(this.city, camera, app.screen.width, app.screen.height, preview);
       app.render();
     };
+    this.refresh = draw;
     const position = (event: MouseEvent) => {
       const rect = canvas.getBoundingClientRect();
       return { x: event.clientX - rect.left, y: event.clientY - rect.top };
@@ -77,7 +83,7 @@ export class CityRenderer {
       const { x, y } = position(event);
       if (tool !== 'pan') {
         const cells = selection(tool, start, boundedCell(x, y));
-        const result = map.execute(tool === 'road' ? { type: 'BUILD_ROAD', path: cells } :
+        const result = this.city.execute(tool === 'road' ? { type: 'BUILD_ROAD', path: cells } :
           tool === 'demolish' ? { type: 'DEMOLISH', ...start } :
           { type: 'SET_ZONE', tiles: cells, zone: tool });
         report(result.error ?? (result.changed.length ? '已更新地圖。' : '地圖無變更。'));
@@ -106,6 +112,7 @@ export class CityRenderer {
   }
 
   destroy(): void {
+    this.refresh = undefined;
     this.observer?.disconnect();
     this.app?.destroy(true, { children: true });
     this.app = undefined;

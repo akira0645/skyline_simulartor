@@ -19,9 +19,12 @@ export function App() {
   const [message, setMessage] = useState('');
   const [tick, setTick] = useState(0);
   const [speed, setSpeed] = useState<SimulationSpeed>(1);
-  const [clock] = useState(() => new SimulationClock(
+  const [engine] = useState(() =>
     new SimulationEngine({ version: 1, seed: 42, tick: 0 }),
-  ));
+  );
+  const [clock] = useState(() => new SimulationClock(engine));
+  const [stats, setStats] = useState(() => engine.city.getStats());
+  const rendererRef = useRef<CityRenderer>(null);
   const lastTime = useRef(0);
 
   function updateClock() {
@@ -45,8 +48,12 @@ export function App() {
     if (!host) return;
 
     const lifetime = new AbortController();
-    const renderer = new CityRenderer();
-    void renderer.mount(host, lifetime.signal, () => activeTool.current, setMessage).catch((error: unknown) => {
+    const renderer = new CityRenderer(engine.city);
+    rendererRef.current = renderer;
+    void renderer.mount(host, lifetime.signal, () => activeTool.current, message => {
+      setMessage(message);
+      setStats(engine.city.getStats());
+    }).catch((error: unknown) => {
       if (lifetime.signal.aborted) return;
       console.error('PixiJS initialization failed', error);
       setFailed(true);
@@ -56,7 +63,12 @@ export function App() {
       lifetime.abort();
       renderer.destroy();
     };
-  }, []);
+  }, [engine]);
+
+  useEffect(() => {
+    setStats(engine.city.getStats());
+    rendererRef.current?.refresh?.();
+  }, [engine, tick]);
 
   return (
     <main>
@@ -71,6 +83,7 @@ export function App() {
           }}>{value === 0 ? '暫停' : `${value}×`}</button>
         ))}
       </div>
+      <p>人口 {stats.population} · 就業 {stats.employed} / {stats.jobs} · 建築 {stats.buildings}</p>
       <div className="viewport" ref={viewport} role="region" aria-label="城市地圖" />
       {failed && <p role="alert">無法初始化城市地圖。</p>}
       <div className="tools" role="group" aria-label="地圖工具">

@@ -1,7 +1,8 @@
 import { isZone, MAP_SIZE, TILES } from './TileMap';
 
 import { economy, milestones } from './Economy';
-import { MAX_LEVEL } from './LandValue';
+import { COMPLEX_LEVEL } from './LandValue';
+import { transit, type SavedLine } from './Transit';
 import { growth } from './ZoneDemandSystem';
 import type { Zone } from './TileMap';
 
@@ -18,6 +19,8 @@ export interface SavedBuilding {
   occupants: number;
   /** 1 to 3. Saves made before buildings could upgrade have none and load as level 1. */
   level: number;
+  /** For a home in a housing complex: the tile of the complex's top left home. */
+  block?: number;
 }
 
 export interface SaveData {
@@ -36,12 +39,43 @@ export interface SaveData {
   rank: number;
   /** Tax rate in percent. Saves from before it could be set have none and load at the default. */
   taxRate: number;
+  /** Bus and metro lines. Saves from before there were any have none. */
+  lines: SavedLine[];
+  /** The ids of the goals already rewarded. */
+  goals: string[];
+  /** Months left to pay on each loan. */
+  loans: number[];
 }
 
 const zonedCode = (code: number) => isZone(TILES[code]);
 const isCount = (value: unknown): value is number =>
   Number.isSafeInteger(value) && (value as number) >= 0;
 
+
+/** A list that older saves do not have, checked item by item. */
+function parseList(list: unknown, valid: (value: unknown) => boolean): unknown[] {
+  if (list === undefined) return [];
+  if (!Array.isArray(list) || list.length > 64 || !list.every(valid)) throw new Error('存檔資料損壞。');
+  return [...list];
+}
+
+/** Every line must have a known kind, a sane number of vehicles and stops of its own kind. */
+function parseLines(lines: unknown, tiles: Uint8Array): SavedLine[] {
+  if (lines === undefined) return [];
+  if (!Array.isArray(lines) || lines.length > transit.maxLines) throw new Error('存檔資料損壞。');
+  const ids = new Set<number>();
+  return lines.map(line => {
+    const { id, kind, stops, vehicles } = (line ?? {}) as Record<string, unknown>;
+    if (!isCount(id) || ids.has(id) || (kind !== 'bus' && kind !== 'metro') ||
+        !isCount(vehicles) || vehicles < 1 || vehicles > transit.maxVehicles ||
+        !Array.isArray(stops) || new Set(stops).size !== stops.length ||
+        !stops.every(stop => isCount(stop) && TILES[tiles[stop]] === kind)) {
+      throw new Error('存檔資料損壞。');
+    }
+    ids.add(id);
+    return { id, kind, stops: [...stops] as number[], vehicles };
+  });
+}
 
 /** Checks everything before anything is applied, so a bad save cannot half-load. */
 export function parseSave(data: unknown): SaveData {
@@ -88,11 +122,13 @@ export function parseSave(data: unknown): SaveData {
     const capacity = schemaVersion === 1 ? growth.capacity[zone] : entry.capacity;
     const occupants = schemaVersion === 1 ? (zone === 'residential' ? capacity : 0) : entry.occupants;
     const level = schemaVersion === 1 ? 1 : entry.level ?? 1;
+    const block = schemaVersion === 1 ? undefined : entry.block;
     if (!isCount(capacity) || capacity === 0 || !isCount(occupants) || occupants > capacity ||
-        !isCount(level) || level < 1 || level > MAX_LEVEL) {
+        !isCount(level) || level < 1 || level > COMPLEX_LEVEL ||
+        (level === COMPLEX_LEVEL) !== (block !== undefined) || (block !== undefined && !zoned.has(block))) {
       throw new Error('存檔資料損壞。');
     }
-    records.push({ id, capacity, occupants, level });
+    records.push(block === undefined ? { id, capacity, occupants, level } : { id, capacity, occupants, level, block });
   }
   const homes = records.filter(b => TILES[tiles[b.id]] === 'residential');
   const workplaces = records.filter(b => TILES[tiles[b.id]] !== 'residential');
@@ -103,5 +139,7 @@ export function parseSave(data: unknown): SaveData {
     if (available < 0) throw new Error('存檔資料損壞。');
   }
   return { schemaVersion: SCHEMA_VERSION, seed: seed as number, tick, tiles, zones, buildings: records,
-    funds: funds as number, rank, taxRate };
+    funds: funds as number, rank, taxRate, lines: parseLines((data as Record<string, unknown>).lines, tiles),
+    goals: parseList((data as Record<string, unknown>).goals, value => typeof value === 'string') as string[],
+    loans: parseList((data as Record<string, unknown>).loans, isCount) as number[] };
 }

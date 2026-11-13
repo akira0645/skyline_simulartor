@@ -3,7 +3,11 @@ import cityUrl from '../assets/city.png';
 import tilesUrl from '../assets/tiles.png';
 import { isFacility, isRoad, isService, MAP_SIZE, TILE_SIZE, type Cell } from '../simulation/TileMap';
 import { services } from '../simulation/Services';
-import { traffic } from '../simulation/Traffic';
+import { transit } from '../simulation/Transit';
+import { lineColour } from '../app/lineColours';
+
+/** Milliseconds a line's vehicle takes per tile at 1× speed. */
+const LINE_PACE = { bus: 320, metro: 110 };
 import { drawScene, sceneLength, type Scene } from './emergencyScenes';
 
 /** An emergency older than this many ticks when first seen is not played back. */
@@ -28,6 +32,8 @@ import type { BuildingSystem } from '../simulation/BuildingSystem';
 
 export class CityRenderer {
   refresh?: () => void;
+  /** Called with the cell clicked while the line tool is in use. */
+  onLineClick?: (cell: Cell) => void;
   /** Clears the inspected tile. */
   deselect?: () => void;
 
@@ -70,6 +76,11 @@ export class CityRenderer {
     host.appendChild(canvas);
 
     let animationTime = 0;
+    /** Whether routes are drawn: in their own map view, and while laying out transport. */
+    const routesShown = () => {
+      const tool = getTool();
+      return this.overlay() === 'lines' || tool === 'line' || tool === 'bus' || tool === 'metro';
+    };
     // Where each commuter is, by home and workplace: settled at one end, or since when on the way.
     const trips = new Map<string, { at: 'home' | 'work'; since?: number }>();
     const drawPeople = () => {
@@ -112,18 +123,7 @@ export class CityRenderer {
         if (driving) {
           const next = commuterPosition(route, time, mode, Math.max(0, progress - 0.01), returning);
           const vertical = next && Math.abs(next.y - position.y) > Math.abs(next.x - position.x);
-          if (route.riders > 0) {
-            // A bus: longer than a car, yellow, with a row of windows.
-            const left = x + 4 - (vertical ? 6 : 12);
-            const top = y + 5 - (vertical ? 12 : 6);
-            people.rect(left, top, vertical ? 12 : 24, vertical ? 24 : 12).fill(0x232831);
-            people.rect(left + 1, top + 1, vertical ? 10 : 22, vertical ? 22 : 10).fill(0xf2c94c);
-            for (let pane = 0; pane < 3; pane++) {
-              people.rect(left + (vertical ? 3 : 3 + pane * 7), top + (vertical ? 3 + pane * 7 : 3),
-                vertical ? 6 : 5, vertical ? 5 : 6).fill(0xa9d8de);
-            }
-            continue;
-          }
+
           const left = x + 4 - (vertical ? 5 : 8);
           const top = y + 5 - (vertical ? 8 : 5);
           people.rect(left, top, vertical ? 10 : 16, vertical ? 16 : 10).fill(0x232831);
@@ -138,6 +138,48 @@ export class CityRenderer {
         people.rect(x + 2, y, 4, 4).fill(0xffd1a0);
         people.rect(x + 1, y + 4, 6, 4).fill(i % 2 ? 0x7edbed : 0xf6ba67);
         people.rect(x + 1, y + 8, 2, 2 + stride).rect(x + 5, y + 8, 2, 3 - stride).fill(0xece6dd);
+      }
+
+      // Each line's vehicles, evenly spread, running to the far end and back.
+      for (const line of this.city.getLines()) {
+        const last = line.path.length - 1;
+        if (!line.active || last < 1) continue;
+        // The metro runs underground: its trains only show while the routes are on display.
+        if (line.kind === 'metro' && !routesShown()) continue;
+        const colour = lineColour(line.id);
+        /** The middle of the tile `along` tiles down the route, and whether it is heading up or down. */
+        const at = (along: number) => {
+          const clamped = Math.max(0, Math.min(last, along));
+          const index = Math.min(last - 1, Math.floor(clamped));
+          const from = line.path[index];
+          const to = line.path[index + 1];
+          const part = clamped - index;
+          return { x: (from.x + (to.x - from.x) * part + 0.5) * TILE_SIZE,
+            y: (from.y + (to.y - from.y) * part + 0.5) * TILE_SIZE, upright: to.x === from.x };
+        };
+        const lap = 2 * last * LINE_PACE[line.kind];
+        for (let vehicle = 0; vehicle < line.vehicles; vehicle++) {
+          const turn = (animationTime / lap + vehicle / line.vehicles) % 1;
+          const outbound = turn < 0.5;
+          const along = (outbound ? turn : 1 - turn) * 2 * last;
+          // A bus is one box; a train is three cars, the later ones trailing behind the first.
+          const cars = line.kind === 'metro' ? 3 : 1;
+          for (let car = 0; car < cars; car++) {
+            const { x, y, upright } = at(along - (outbound ? 1 : -1) * car * 0.55);
+            const long = line.kind === 'metro' ? 16 : 22;
+            const wide = 12;
+            const width = upright ? wide : long;
+            const height = upright ? long : wide;
+            people.rect(x - width / 2 - 1, y - height / 2 - 1, width + 2, height + 2).fill(0x1b1d22);
+            people.rect(x - width / 2, y - height / 2, width, height).fill(line.kind === 'metro' ? colour : 0xf2c94c);
+            // A bus wears its line's colour as a stripe; a train as its whole body, with pale windows.
+            if (line.kind === 'bus') {
+              people.rect(x - width / 2, y - height / 2, upright ? 3 : width, upright ? height : 3).fill(colour);
+            }
+            people.rect(x - (upright ? 3 : width / 2 - 3), y - (upright ? height / 2 - 3 : 3),
+              upright ? 6 : width - 6, upright ? height - 6 : 6).fill(0xdfeef2);
+          }
+        }
       }
     };
     const drawEffects = () => {
@@ -181,13 +223,17 @@ export class CityRenderer {
         !centre ? undefined :
         isFacility(kind) ? { centre, radius: utilities.radius, kind } :
         isService(kind) ? { centre, radius: services.radius[kind], kind } :
-        kind === 'bus' ? { centre, radius: traffic.bus.radius, kind: 'bus' as const } : undefined;
+        kind === 'bus' ? { centre, radius: transit.bus.radius, kind: 'bus' as const } :
+        kind === 'metro' ? { centre, radius: transit.metro.radius, kind: 'metro' as const } : undefined;
       const range = reach(tool, hover) ?? reach(inspected, selected);
 
       const layer = this.overlay();
       tiles.draw(this.city, camera, app.screen.width, app.screen.height, preview, selected,
-        layer === 'none' && (isFacility(tool) || isService(tool) || tool === 'bus') ? tool : layer,
-        range, this.hour());
+        layer === 'none' && (isFacility(tool) || isService(tool) || tool === 'bus' || tool === 'metro') ?
+          tool : layer,
+        range, this.hour(),
+        // Routes show while laying out transport, and in the map view for them.
+        routesShown() ? this.city.getLines() : []);
       drawPeople();
       drawEffects();
       app.render();
@@ -226,7 +272,8 @@ export class CityRenderer {
       if (!drag) {
         const cell = camera.cellAt(x, y);
         const tool = getTool();
-        const next = (isFacility(tool) || isService(tool) || tool === 'bus') && map.get(cell) !== undefined ?
+        const next = (isFacility(tool) || isService(tool) || tool === 'bus' || tool === 'metro') &&
+          map.get(cell) !== undefined ?
           cell : undefined;
         if (next?.x !== hover?.x || next?.y !== hover?.y) {
           hover = next;
@@ -259,6 +306,8 @@ export class CityRenderer {
           selected = start;
           inspect(start);
         }
+      } else if (tool === 'line') {
+        this.onLineClick?.(start);
       } else if (tool !== 'pan') {
         const cells = selection(tool, start, boundedCell(x, y));
         const result = this.city.execute(isRoad(tool) ? { type: 'BUILD_ROAD', path: cells, road: tool } :
@@ -266,6 +315,7 @@ export class CityRenderer {
           isFacility(tool) ? { type: 'BUILD_FACILITY', ...start, facility: tool } :
           isService(tool) ? { type: 'BUILD_SERVICE', ...start, service: tool } :
           tool === 'bus' ? { type: 'BUILD_BUS_STOP', ...start } :
+          tool === 'metro' ? { type: 'BUILD_METRO', ...start } :
           tool === 'park' ? { type: 'BUILD_PARK', tiles: cells } :
           { type: 'SET_ZONE', tiles: cells, zone: tool });
         const stranded = result.changed.length > 0 && (isFacility(tool) || isService(tool) || tool === 'bus') &&

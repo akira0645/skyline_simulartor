@@ -1,5 +1,6 @@
 import { expect, it } from 'vitest';
 import { landValue } from './LandValue';
+import { countTrait, traits } from './Residents';
 import { SimulationEngine } from './SimulationEngine';
 import { MAP_SIZE, type Cell } from './TileMap';
 import { traffic } from './Traffic';
@@ -45,16 +46,21 @@ it('values land by utilities, parks, pollution and commute', () => {
   const { strength, radius } = landValue.park;
   city.execute({ type: 'BUILD_PARK', tiles: [{ x: 1, y: 0 }] });
   expect(city.landValueAt(home)).toBeCloseTo(landValue.base + landValue.utilities + strength * (1 - 1 / radius));
-  // However many parks, their bonus stops at the maximum.
+  // However many parks, their bonus stops at the maximum; seven that touch are a big park, which adds its own.
   city.execute({ type: 'BUILD_PARK', tiles: [...row(0, 0, 4), { x: 0, y: 1 }, { x: 2, y: 1 }] });
-  expect(city.landValueAt(home)).toBe(landValue.base + landValue.utilities + landValue.park.max);
+  expect(city.inspect({ x: 0, y: 0 })).toMatchObject({ tile: 'park', parkTiles: 7, bigPark: true });
+  expect(city.getStats().bigParks).toBe(1);
+  const best = landValue.base + landValue.utilities + landValue.park.max + landValue.bigPark.bonus;
+  expect(city.landValueAt(home)).toBe(best);
 
   // Once someone commutes, the minutes come off the home but not off the shop.
   engine.advance(8);
   const minutes = city.inspect(home)!.commute!;
   expect(minutes).toBeCloseTo(3 * traffic.minutesPerTile, 2);
-  expect(city.landValueAt(home)).toBeCloseTo(
-    landValue.base + landValue.utilities + landValue.park.max - landValue.commute.perMinute * minutes);
+  // Gardeners among the residents add a little of their own.
+  const people = city.inspect(home)!.occupants!;
+  const garden = Math.min(traits.gardener.most, traits.gardener.value * countTrait(3, id(home), 0, people, 'gardener'));
+  expect(city.landValueAt(home)).toBeCloseTo(best - landValue.commute.perMinute * minutes + garden);
   expect(city.landValueAt(shop)).toBeGreaterThan(landValue.base + landValue.utilities);
 });
 

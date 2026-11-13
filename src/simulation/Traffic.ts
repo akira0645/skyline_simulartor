@@ -19,11 +19,6 @@ export const traffic = {
   maxCommute: 60,
   /** A home whose residents average more than this many minutes to work takes no newcomers. */
   longCommute: 40,
-  /**
-   * Buses. A stop serves the homes and workplaces within its radius. Where both ends of a
-   * commute are served, this share of the commuters ride and stay off the road.
-   */
-  bus: { radius: 5, share: 0.5 },
 };
 
 const spec = (road: Road) => road === 'avenue' ? traffic.avenue : traffic;

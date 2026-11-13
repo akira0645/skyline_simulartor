@@ -23,6 +23,8 @@ const block = (fromX: number, toX: number, fromY: number, toY: number): Cell[] =
 export function demoCity(engine: SimulationEngine) {
   const city = engine.city;
   const id = ({ x, y }: Cell) => y * MAP_SIZE + x;
+  // The town is laid out with money to spare, then handed over with the usual opening balance.
+  engine.load({ ...engine.save(), funds: 1_000_000 });
   city.execute({ type: 'BUILD_ROAD', path: block(1, 18, 5, 5), road: 'avenue' });
   city.execute({ type: 'BUILD_ROAD', path: block(1, 13, 2, 2) });
   // The south street runs on east past the plants and stations, but not up to the factories.
@@ -45,8 +47,13 @@ export function demoCity(engine: SimulationEngine) {
     ['school', 4, 1], ['school', 10, 1], ['clinic', 7, 1],
   ] as const;
   for (const [service, x, y] of stations) city.execute({ type: 'BUILD_SERVICE', x, y, service });
-  // Bus stops by the homes and by the factories, so some of the factory hands ride.
-  for (const [x, y] of [[3, 1], [9, 1], [16, 7]]) city.execute({ type: 'BUILD_BUS_STOP', x, y });
+  // A metro line from behind the homes to the factories, with two trains.
+  const metro = city.addLine('metro').id!;
+  for (const [x, y] of [[3, 0], [10, 0], [17, 7]]) {
+    city.execute({ type: 'BUILD_METRO', x, y });
+    city.toggleStop(metro, { x, y });
+  }
+  city.setVehicles(metro, 2);
 
   const homes = [{ x: 1, y: 4 }, { x: 2, y: 4 }, { x: 8, y: 4 }, { x: 10, y: 4 }];
   const shops = [{ x: 2, y: 6 }, { x: 8, y: 6 }];

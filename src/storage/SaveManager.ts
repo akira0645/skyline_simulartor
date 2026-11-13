@@ -27,11 +27,14 @@ async function run<T>(mode: IDBTransactionMode, use: (store: IDBObjectStore) => 
   }
 }
 
-export async function writeSave(save: SaveData): Promise<void> {
-  await run('readwrite', store => store.put(save, SLOT));
+/** The slot the game writes to by itself every so often, apart from the player's own save. */
+export const AUTO_SLOT = 'auto';
+
+export async function writeSave(save: SaveData, slot: string = SLOT): Promise<void> {
+  await run('readwrite', store => store.put(save, slot));
 }
 
 /** Returns the stored value unchecked, or undefined when nothing was saved. */
-export function readSave(): Promise<unknown> {
-  return run('readonly', store => store.get(SLOT));
+export function readSave(slot: string = SLOT): Promise<unknown> {
+  return run('readonly', store => store.get(slot));
 }

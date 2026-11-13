@@ -10,7 +10,8 @@ Sheet layout (in tiles), mirrored by src/rendering/TileRenderer.ts:
              all of them so that neighbours of one level do not look alike. Which column
              belongs to which level is the BUILDING_ART table in TileRenderer.ts.
   row 5      civic buildings: power plant, water tower, fire station, police station,
-             school, clinic, bus stop (CIVIC_ART in TileRenderer.ts)
+             school, clinic, bus stop, metro station (CIVIC_ART in TileRenderer.ts)
+  rows 6-7   buildings two tiles wide and two tall: the housing complex
 Buildings are transparent around their footprint and are drawn over their lot.
 Light comes from the top left; shadows fall to the bottom right.
 """
@@ -29,13 +30,14 @@ def rgba(color):
 
 
 class Tile:
-    def __init__(self, background=None):
-        self.image = Image.new('RGBA', (T, T), rgba(background) if background else (0, 0, 0, 0))
+    def __init__(self, background=None, size=T):
+        self.size = size
+        self.image = Image.new('RGBA', (size, size), rgba(background) if background else (0, 0, 0, 0))
 
     def rect(self, x0, y0, x1, y1, color):
         """Fills an inclusive rectangle, clipped to the tile."""
-        for y in range(max(0, y0), min(T - 1, y1) + 1):
-            for x in range(max(0, x0), min(T - 1, x1) + 1):
+        for y in range(max(0, y0), min(self.size - 1, y1) + 1):
+            for x in range(max(0, x0), min(self.size - 1, x1) + 1):
                 self.image.putpixel((x, y), rgba(color))
 
     def shadow(self, x0, y0, x1, y1):
@@ -558,6 +560,53 @@ def bus_stop():
     return t
 
 
+def metro_station():
+    t = Tile()
+    t.shadow(1, 4, 14, 13)
+    t.slab(1, 4, 14, 7, '#8d98a6', '#6b7684', '#4d5661')    # canopy
+    t.rect(5, 1, 10, 5, '#e5484d')         # sign
+    t.rect(6, 2, 9, 2, PAPER)
+    t.rect(6, 4, 9, 4, PAPER)
+    t.rect(1, 8, 14, 13, '#2b2f36')        # entrance
+    t.rect(3, 8, 12, 13, '#15171b')        # stairs going down
+    for y in (9, 11, 13):
+        t.rect(4, y, 11, y, STEEL_DARK)
+    t.rect(1, 8, 1, 13, STEEL)             # handrails
+    t.rect(14, 8, 14, 13, STEEL)
+    return t
+
+
+# --- Buildings of two tiles by two
+def housing_complex():
+    """Four wings round a garden, seen from above, with the street front along the bottom."""
+    t = Tile(size=2 * T)
+    t.shadow(2, 2, 29, 29)
+    t.slab(2, 2, 29, 22, '#e9dcc0', '#d4c4a2', '#ad9c78')   # roofs
+    t.rect(6, 6, 25, 6, '#bfa981')         # ridge lines
+    t.rect(6, 6, 6, 19, '#bfa981')
+    t.rect(25, 6, 25, 19, '#bfa981')
+    t.rect(10, 9, 21, 19, '#6fb565')       # the garden
+    t.rect(10, 9, 21, 9, '#4f9a55')
+    t.rect(10, 9, 10, 19, '#4f9a55')
+    t.rect(14, 12, 17, 15, LEAF_DARK)      # a tree and two flower beds
+    t.rect(15, 13, 16, 14, LEAF_LIGHT)
+    t.rect(12, 17, 13, 18, '#e8799a')
+    t.rect(18, 11, 19, 12, '#f6e27a')
+    for x, y in ((4, 4), (25, 4), (4, 17)):                 # stair towers
+        t.slab(x, y, x + 2, y + 2, STEEL_LIGHT, STEEL, STEEL_DARK)
+    t.rect(2, 23, 29, 29, '#c98b74')       # the street front
+    t.rect(29, 23, 29, 29, '#a86f5b')
+    for x in range(4, 28, 4):
+        t.window(x, 24, x + 1, 25)
+    for x in (4, 8, 20, 24):
+        t.window(x, 27, x + 1, 28)
+    t.rect(13, 26, 18, 29, '#a86f5b')      # entrance
+    t.rect(15, 27, 16, 29, WOOD_DARK)
+    return t
+
+
+BIG = [housing_complex()]
+
 ROWS = [
     [road(mask) for mask in range(16)],
     [residential_lot(), commercial_lot(), industrial_lot()],
@@ -589,13 +638,16 @@ ROWS = [
      heavy_plant().recolour({'#e0b23e': '#74c7ed', '#c4962c': '#4a9cc4', '#96701c': '#2f7396'}),
      heavy_plant().recolour({'#9a5b4d': '#6d7379', '#5a332b': '#3f4347', '#8d8f96': '#a8907d',
                              '#e0b23e': '#d98838', '#c4962c': '#b06a22', '#96701c': '#7f4a14'})],
-    [power_plant(), water_tower(), fire_station(), police_station(), school(), clinic(), bus_stop()],
+    [power_plant(), water_tower(), fire_station(), police_station(), school(), clinic(), bus_stop(),
+     metro_station()],
 ]
 
 if __name__ == '__main__':
-    sheet = Image.new('RGBA', (16 * T, len(ROWS) * T), (0, 0, 0, 0))
+    sheet = Image.new('RGBA', (16 * T, (len(ROWS) + 2) * T), (0, 0, 0, 0))
     for row, tiles in enumerate(ROWS):
         for column, tile in enumerate(tiles):
             sheet.paste(tile.image, (column * T, row * T))
+    for column, tile in enumerate(BIG):
+        sheet.paste(tile.image, (column * 2 * T, len(ROWS) * T))
     sheet.save(OUT)
     print(f'wrote {OUT}')

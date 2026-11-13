@@ -8,11 +8,11 @@ export type Facility = 'power' | 'water';
 export type Road = 'road' | 'avenue' | 'bridge';
 /** Public services, which cover an area without a limit on buildings. */
 export type Service = 'fire' | 'police' | 'school' | 'clinic';
-export type Tile = 'grass' | Road | Zone | Facility | 'park' | Service | 'river' | 'bus';
+export type Tile = 'grass' | Road | Zone | Facility | 'park' | Service | 'river' | 'bus' | 'metro';
 /** Save files store tiles as indices into this list, so only append to it. */
 export const TILES: readonly Tile[] =
   ['grass', 'road', 'residential', 'commercial', 'industrial', 'power', 'water', 'avenue', 'park',
-    'fire', 'police', 'school', 'clinic', 'river', 'bridge', 'bus'];
+    'fire', 'police', 'school', 'clinic', 'river', 'bridge', 'bus', 'metro'];
 export const isZone = (tile: Tile | undefined): tile is Zone =>
   tile === 'residential' || tile === 'commercial' || tile === 'industrial';
 export const isFacility = (tile: string | undefined): tile is Facility =>
@@ -29,6 +29,7 @@ export type GameCommand =
   | { type: 'BUILD_PARK'; tiles: Cell[] }
   | { type: 'BUILD_SERVICE'; x: number; y: number; service: Service }
   | { type: 'BUILD_BUS_STOP'; x: number; y: number }
+  | { type: 'BUILD_METRO'; x: number; y: number }
   | { type: 'DEMOLISH'; x: number; y: number };
 
 /** The part of a generated map, from the top left corner, that never gets water. */
@@ -125,7 +126,8 @@ export class TileMap {
       command.type === 'BUILD_FACILITY' ? command.facility :
       command.type === 'BUILD_PARK' ? 'park' :
       command.type === 'BUILD_SERVICE' ? command.service :
-      command.type === 'BUILD_BUS_STOP' ? 'bus' : 'grass';
+      command.type === 'BUILD_BUS_STOP' ? 'bus' :
+      command.type === 'BUILD_METRO' ? 'metro' : 'grass';
 
     for (const cell of cells) {
       const current = this.get(cell);
@@ -138,7 +140,7 @@ export class TileMap {
         return { changed: [], error: '道路上不能劃分區，要先拆掉道路。' };
       }
       if ((command.type === 'BUILD_FACILITY' || command.type === 'BUILD_SERVICE' ||
-          command.type === 'BUILD_BUS_STOP') && isRoad(current)) {
+          command.type === 'BUILD_BUS_STOP' || command.type === 'BUILD_METRO') && isRoad(current)) {
         return { changed: [], error: '道路上不能蓋東西，要先拆掉道路。' };
       }
       if (command.type === 'BUILD_PARK' && isRoad(current)) {

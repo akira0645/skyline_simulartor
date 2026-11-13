@@ -1,5 +1,6 @@
 import { expect, it } from 'vitest';
 import { economy } from './Economy';
+import { countTrait, traits } from './Residents';
 import { SimulationEngine } from './SimulationEngine';
 import { MAP_SIZE, type Cell } from './TileMap';
 import { traffic } from './Traffic';
@@ -76,7 +77,8 @@ it('scales income with the tax rate and cools or heats demand', () => {
 
   const usual = city.getStats();
   expect(usual.taxRate).toBe(economy.taxRate.default);
-  expect(usual.budget.tax).toBe(20 * economy.tax.resident + 20 * economy.tax.job);
+  const rich = countTrait(1, id(home), 0, 20, 'rich');
+  expect(usual.budget.tax).toBe((20 + rich * (traits.rich.taxTimes - 1)) * economy.tax.resident + 20 * economy.tax.job);
 
   expect(city.setTaxRate(12)).toBe(12);
   const high = city.getStats();

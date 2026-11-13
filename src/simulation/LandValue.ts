@@ -10,6 +10,11 @@ export const landValue = {
   utilities: 25,
   /** Each park adds its strength on its own tile, fading to nothing at its radius; up to `max`. */
   park: { strength: 10, radius: 4, max: 25 },
+  /**
+   * Parks that touch, `tiles` or more of them, make one big park: every tile within `radius`
+   * of it gets `bonus` on top, and it cleans the air `clean` times as hard.
+   */
+  bigPark: { tiles: 6, bonus: 6, radius: 6, clean: 2 },
   /** Added within this many tiles of water. */
   waterfront: { value: 8, radius: 3 },
   /** Taken off per point of pollution. Factories do not mind their own smoke. */
@@ -20,10 +25,16 @@ export const landValue = {
   upgrade: [45, 65],
   /** Chance per growth step that a full building on good enough land upgrades. */
   chance: 0.04,
-  /** What a building holds at levels 1, 2 and 3. */
+  /**
+   * What a building holds at levels 1, 2 and 3. Homes have a fourth figure: four full level 3
+   * homes in a square join into one housing complex, and each then holds that many.
+   */
   capacity: {
-    residential: [4, 6, 10], commercial: [3, 5, 8], industrial: [5, 8, 12],
+    residential: [4, 6, 10, 16], commercial: [3, 5, 8], industrial: [5, 8, 12],
   } satisfies Record<Zone, number[]>,
 };
 
+/** The highest level a building reaches by itself. */
 export const MAX_LEVEL = 3;
+/** The level of the four homes of a housing complex. */
+export const COMPLEX_LEVEL = 4;

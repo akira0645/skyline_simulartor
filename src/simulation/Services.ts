@@ -29,4 +29,13 @@ export const emergencies = [
   { service: 'clinic', trouble: 'sick', handled: 'sick-helped' },
 ] as const;
 
+/**
+ * What a growing city expects. From each population on, a home out of reach of the service
+ * loses `penalty` land value and says so.
+ */
+export const expectations: readonly { population: number; service: Service; penalty: number }[] = [
+  { population: 150, service: 'school', penalty: 8 },
+  { population: 400, service: 'clinic', penalty: 8 },
+];
+
 export const SERVICES: readonly Service[] = ['fire', 'police', 'school', 'clinic'];

@@ -12,6 +12,7 @@ export class SimulationEngine {
 
   constructor(initialState: WorldState) {
     this.state = { ...initialState };
+    this.city.seed = initialState.seed;
   }
 
   advance(ticks: number): number {

@@ -1,6 +1,9 @@
 import { expect, it } from 'vitest';
 import { calendar } from './calendar';
 import { economy, milestones } from './Economy';
+import { goals } from './Goals';
+import { goods } from './Goods';
+import { countTrait, traits } from './Residents';
 import { SimulationEngine } from './SimulationEngine';
 import { MAP_SIZE, type Cell } from './TileMap';
 import { traffic } from './Traffic';
@@ -54,9 +57,13 @@ it('settles tax and upkeep once a month and keeps the balance in the save', () =
   ] });
 
   const { funds, budget } = city.getStats();
-  const tax = 4 * economy.tax.resident + 3 * economy.tax.job;
+  // Four residents, the rich among them counted twice, and three of them at work in the shop.
+  const rich = countTrait(1, id(home), 0, 4, 'rich');
+  const tax = (4 + rich * (traits.rich.taxTimes - 1)) * economy.tax.resident + 3 * economy.tax.job;
+  // With no factory, everything the four of them need is bought in.
+  const trade = -4 * goods.perResident * goods.importCost;
   const upkeep = 3 * economy.upkeep.road + economy.upkeep.avenue + economy.upkeep.power + economy.upkeep.water;
-  expect(budget).toEqual({ tax, upkeep, net: tax - upkeep });
+  expect(budget).toEqual({ tax, fares: 0, trade, loans: 0, upkeep, net: tax + trade - upkeep });
   expect(budget.net).toBeLessThan(0);
 
   // A thirtieth of the month's figure is paid each day, at the day's last tick.
@@ -97,16 +104,23 @@ it('pays each population milestone once', () => {
 
   // 160 people pass the first two milestones at once.
   people(16);
-  const paid = before + milestones[0].grant + milestones[1].grant;
+  // Passing 150 people also meets two of the goals, which pay once each as well.
+  const rewards = (ids: string[]) => goals.filter(goal => ids.includes(goal.id))
+    .reduce((sum, goal) => sum + goal.reward, 0);
   expect(milestones[1].population).toBeLessThanOrEqual(160);
   expect(milestones[2].population).toBeGreaterThan(160);
   engine.advance(4);
-  expect(city.getStats()).toMatchObject({ rank: 2, funds: paid });
-  // Nothing more is paid for the same milestones; the only change is a day's tax and upkeep.
+  expect(city.getStats()).toMatchObject({ rank: 2, funds: before + milestones[0].grant + milestones[1].grant });
+  // Goals are looked at once a day, at the same tick the day's tax and upkeep are paid.
   engine.advance(4);
   const after = city.getStats();
   expect(after.rank).toBe(2);
+  expect(after.goals).toEqual(['first-homes', 'village']);
+  const paid = before + milestones[0].grant + milestones[1].grant + rewards(after.goals);
   expect(Math.abs(after.funds - paid)).toBeLessThan(100);
+  // Neither milestones nor goals pay twice.
+  engine.advance(calendar.ticksPerDay);
+  expect(Math.abs(city.getStats().funds - paid)).toBeLessThan(200);
 });
 
 it('keeps avenues when a street is drawn across them, and joins both into one network', () => {

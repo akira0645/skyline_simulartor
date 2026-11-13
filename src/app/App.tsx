@@ -2,6 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import { CityRenderer } from '../rendering/CityRenderer';
 import cityUrl from '../assets/city.png';
 import { TrendChart, type TrendPoint } from './TrendChart';
+import { lineColourCss, lineName } from './lineColours';
+import { transit } from '../simulation/Transit';
+import { landValue } from '../simulation/LandValue';
 import type { Overlay, Tool } from './tools';
 import type { Cell, Tile } from '../simulation/TileMap';
 import { demoCity, powerPlant, waterTower, works } from './demoCity';
@@ -16,13 +19,16 @@ import { isFacility, isService, TILES, type Service } from '../simulation/TileMa
 import { services } from '../simulation/Services';
 import { SimulationClock, type SimulationSpeed } from '../simulation/SimulationClock';
 import { SimulationEngine } from '../simulation/SimulationEngine';
-import { readSave, writeSave } from '../storage/SaveManager';
+import { AUTO_SLOT, readSave, writeSave } from '../storage/SaveManager';
+import { goals } from '../simulation/Goals';
+import { TRAITS, type Trait } from '../simulation/Residents';
 
 const speeds = [0, 1, 2, 4] as const;
 
 /** The build tools, one group per tab of the toolbar. */
 const toolGroups: [string, [Tool, string][]][] = [
-  ['道路', [['road', '道路'], ['avenue', '大道'], ['bus', '公車站']]],
+  ['道路', [['road', '道路'], ['avenue', '大道']]],
+  ['交通', [['bus', '公車站'], ['metro', '捷運站']]],
   ['分區', [['residential', '住宅'], ['commercial', '商業'], ['industrial', '工業']]],
   ['水電', [['power', '電廠'], ['water', '水塔']]],
   ['服務', [['fire', '消防局'], ['police', '警察局'], ['school', '學校'], ['clinic', '診所']]],
@@ -32,19 +38,20 @@ const toolGroups: [string, [Tool, string][]][] = [
 /** Where each tool's picture sits in city.png, as [column, row]; the rest are drawn in CSS. */
 const iconAt: Partial<Record<Tool, [number, number]>> = {
   road: [10, 0], avenue: [10, 0], residential: [0, 2], commercial: [0, 3], industrial: [0, 4],
-  power: [0, 5], water: [1, 5], fire: [2, 5], police: [3, 5], school: [4, 5], clinic: [5, 5], bus: [6, 5],
+  power: [0, 5], water: [1, 5], fire: [2, 5], police: [3, 5], school: [4, 5], clinic: [5, 5], bus: [6, 5], metro: [7, 5],
 };
 const iconStyle = (tool: Tool) => {
   const at = iconAt[tool];
   return at && { backgroundImage: `url(${cityUrl})`, backgroundPosition: `-${at[0] * 32}px -${at[1] * 32}px` };
 };
 
-const panelTabs = [['tile', '這一格'], ['city', '城市'], ['trend', '變化'], ['log', '紀錄']] as const;
+const panelTabs = [['tile', '這一格'], ['city', '城市'], ['goals', '目標'], ['lines', '路線'], ['log', '紀錄']] as const;
 type PanelTab = (typeof panelTabs)[number][0];
 
 /** What one tile of a tool costs; nothing for the tool that only looks. */
 const toolCost = (tool: Tool) =>
-  tool === 'pan' || tool === 'inspect' ? undefined : tileCost(tool === 'demolish' ? 'grass' : tool);
+  tool === 'pan' || tool === 'inspect' || tool === 'line' ? undefined :
+  tileCost(tool === 'demolish' ? 'grass' : tool);
 
 /** One line on how to use each tool, shown when it is picked. */
 function toolTip(tool: Tool): string {
@@ -58,7 +65,9 @@ function toolTip(tool: Tool): string {
   }
   switch (tool) {
     case 'road': return '按住拖曳鋪一條直線的路。住宅、商店、工廠都要緊貼著路才蓋得起來。鋪過河會變成橋，每格 $80。';
-    case 'bus': return '點一下蓋公車站，要緊貼著路。家和公司附近都有站的人，有一半會改搭公車，路上的車就變少。';
+    case 'bus': return '點一下蓋公車站，要緊貼著路。蓋好站以後，到右邊「路線」分頁把站連成一條路線，公車才會開始跑。';
+    case 'metro': return '點一下蓋捷運站，不用貼著路。捷運走地下，比開車快很多，平常在地面上看不到列車。蓋好站以後，到右邊「路線」分頁把站連成路線。';
+    case 'line': return '照順序點地圖上的站，把它們加進這條路線；再點一次已經加入的站會把它拿掉。弄好了按右邊的「完成」。';
     case 'avenue': return '大道比道路快一倍，能走三倍的車，可以直接鋪在舊的道路上。';
     case 'residential': return '按住拖曳劃出住宅區，要緊貼著路。離工廠遠一點，不然沒人想住。';
     case 'commercial': return '按住拖曳劃出商業區，要緊貼著路。商店提供工作。';
@@ -78,6 +87,7 @@ const overlays: [Overlay, string, string][] = [
   ['traffic', '車流', '顯示現在這個時間路上的車：綠色順暢，黃色車多，橘色和紅色是塞車。上下班時間才會變色。'],
   ['pollution', '污染', '紫色越深污染越重。住宅在太髒的地方不會有人搬進來。'],
   ['value', '地價', '綠色是好地段，紅色最差。地價夠高、住滿人的建築會升級。'],
+  ['lines', '路線', '顯示公車和捷運的路線，每條路線一個顏色，框起來的是站。捷運在地下，只有在這裡才看得到列車。'],
   ['power', '供電', '綠色的建築有電，紅色沒有。'],
   ['water', '供水', '綠色的建築有水，紅色沒有。'],
 ];
@@ -87,6 +97,7 @@ const zones = [['residential', '住宅'], ['commercial', '商業'], ['industrial
 const issueNames: Record<Issue, string> = {
   'no-road': '旁邊沒有路', 'no-power': '沒有電', 'no-water': '沒有水',
   'no-jobs': '有人找不到工作', 'long-commute': '上班路程太久', pollution: '污染太重', crime: '治安不好',
+  'no-school': '附近沒有學校', 'no-clinic': '附近沒有診所',
   vacancies: '找不到員工',
 };
 
@@ -94,7 +105,7 @@ const tileNames: Record<Tile, string> = {
   grass: '草地', road: '道路', avenue: '大道', residential: '住宅區', commercial: '商業區',
   industrial: '工業區', power: '電廠', water: '水塔', park: '公園',
   fire: '消防局', police: '警察局', school: '學校', clinic: '診所',
-  river: '河流', bridge: '橋', bus: '公車站',
+  river: '河流', bridge: '橋', bus: '公車站', metro: '捷運站',
 };
 
 /** What happened, for the message line and the list of recent events. */
@@ -105,6 +116,15 @@ const eventText: Record<CityEvent['kind'], string> = {
   'crime-stopped': '遭小偷，警車趕到抓到人了',
   sick: '有人生病，附近沒有診所，搬走了',
   'sick-helped': '有人生病，救護車送去診所了',
+};
+
+/** What each kind of person is called, and what they do to the city. */
+const traitNames: Record<Trait, [string, string]> = {
+  rich: ['有錢人', '繳兩倍的稅'],
+  driver: ['愛開車', '絕對不搭公車和捷運'],
+  rider: ['愛搭車', '有車可搭就一定搭'],
+  helper: ['熱心助人', '讓失火、小偷、生病變少'],
+  gardener: ['綠手指', '讓自己住的地方地價變高'],
 };
 
 const serviceNames: Record<Service, string> = { fire: '消防', police: '警察', school: '學校', clinic: '診所' };
@@ -164,8 +184,12 @@ export function App() {
   const [overlay, setOverlay] = useState<Overlay>('none');
   const knownRank = useRef(0);
   const knownEvent = useRef(0);
+  const knownGoals = useRef(0);
   const [toolTab, setToolTab] = useState(0);
   const [panelTab, setPanelTab] = useState<PanelTab>('city');
+  // The line whose stops are being picked on the map, if any.
+  const [editing, setEditing] = useState<number>();
+  const editingRef = useRef<number>(undefined);
   // A sample of the city every five game days, for the charts. Kept for this visit only.
   const [history, setHistory] = useState<{ tick: number; population: number; funds: number }[]>([]);
 
@@ -208,6 +232,7 @@ export function App() {
     setTick(engine.getSnapshot().tick);
     setStats(engine.city.getStats());
     knownRank.current = engine.city.getStats().rank;
+    knownGoals.current = engine.city.getStats().goals.length;
     rendererRef.current?.refresh?.();
     setDemo(false);
     setMessage('已經回到上次存的城市。');
@@ -244,9 +269,42 @@ export function App() {
   }, [selected]);
 
   useEffect(() => {
+    let cancelled = false;
+    void readSave(AUTO_SLOT).then(data => {
+      if (cancelled || data === undefined) return;
+      try {
+        engine.load(data);
+      } catch {
+        return;
+      }
+      clock.reset();
+      lastTime.current = performance.now();
+      const now = engine.city.getStats();
+      knownRank.current = now.rank;
+      knownGoals.current = now.goals.length;
+      setTick(engine.getSnapshot().tick);
+      setStats(now);
+      rendererRef.current?.refresh?.();
+      setMessage('已經回到你上次離開時的城市。想重新開始可以按上面的「新地圖」。');
+    }).catch(() => undefined);
+    // Every quarter of a minute, and when the page is put away.
+    const keep = () => void writeSave(engine.save(), AUTO_SLOT).catch(() => undefined);
+    const timer = window.setInterval(keep, 15000);
+    const onHide = () => { if (document.visibilityState === 'hidden') keep(); };
+    document.addEventListener('visibilitychange', onHide);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', onHide);
+    };
+  }, [engine, clock]);
+
+  useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
       activeTool.current = 'inspect';
+      editingRef.current = undefined;
+      setEditing(undefined);
       setTool('inspect');
       setMessage('');
       rendererRef.current?.refresh?.();
@@ -292,6 +350,11 @@ export function App() {
       setMessage(`城市長大成「${rankNames[next.rank]}」了，拿到獎金 ${money(milestones[next.rank - 1].grant)}。`);
     }
     knownRank.current = next.rank;
+    if (next.goals.length > knownGoals.current) {
+      const goal = goals.find(candidate => candidate.id === next.goals.at(-1));
+      if (goal) setMessage(`完成目標「${goal.title}」，拿到獎金 ${money(goal.reward)}。`);
+    }
+    knownGoals.current = next.goals.length;
     const latest = engine.city.getEvents().at(-1);
     if (latest && latest.tick > knownEvent.current) {
       knownEvent.current = latest.tick;
@@ -325,6 +388,8 @@ export function App() {
     rendererRef.current?.deselect?.();
     knownRank.current = 0;
     knownEvent.current = 0;
+    knownGoals.current = 0;
+    void writeSave(engine.save(), AUTO_SLOT).catch(() => undefined);
     setStats(engine.city.getStats());
     rendererRef.current?.refresh?.();
     setMessage(done);
@@ -362,8 +427,45 @@ export function App() {
     activeTool.current = value;
     setTool(value);
     setMessage(toolTip(value));
+    if (value !== 'line') {
+      editingRef.current = undefined;
+      setEditing(undefined);
+    }
     rendererRef.current?.refresh?.();
   };
+  const lines = engine.city.getLines();
+  /** Runs something that changes the lines, then shows the result. */
+  const changeLines = (action: () => { error?: string } | void, done: string) => {
+    const result = action();
+    setStats(engine.city.getStats());
+    rendererRef.current?.refresh?.();
+    setMessage(result?.error ?? done);
+  };
+  const editLine = (id: number | undefined) => {
+    editingRef.current = id;
+    setEditing(id);
+    pick(id === undefined ? 'inspect' : 'line');
+    if (id !== undefined) {
+      editingRef.current = id;
+      setEditing(id);
+    }
+  };
+  const startLine = (kind: 'bus' | 'metro') => {
+    const { id, error } = engine.city.addLine(kind);
+    if (error) setMessage(error);
+    else editLine(id);
+    setStats(engine.city.getStats());
+  };
+  if (rendererRef.current) {
+    rendererRef.current.onLineClick = cell => {
+      const id = editingRef.current;
+      if (id === undefined) return;
+      const result = engine.city.toggleStop(id, cell);
+      setStats(engine.city.getStats());
+      rendererRef.current?.refresh?.();
+      setMessage(result.error ?? (result.added ? '這一站加進路線了，繼續點下一站，或按「完成」。' : '這一站從路線拿掉了。'));
+    };
+  }
 
   const group = toolGroups[toolTab];
 
@@ -372,7 +474,7 @@ export function App() {
       <div className="viewport" ref={viewport} data-tool={tool} role="region" aria-label="城市地圖" />
 
       <header className="hud top">
-        <div className="stat" title={`每月稅收 ${money(stats.budget.tax)}，維護費 ${money(stats.budget.upkeep)}，每 30 天結算一次。`}>
+        <div className="stat" title={`每月：稅收 ${money(stats.budget.tax)}，車票 ${money(stats.budget.fares)}，民生用品買賣 ${money(stats.budget.trade)}，維護費 ${money(stats.budget.upkeep)}，還款 ${money(stats.budget.loans)}。每天進帳一點。`}>
           <span>資金</span>
           <b>{money(stats.funds)}</b>
           <small className={stats.budget.net < 0 ? 'loss' : undefined}>每月 {stats.budget.net >= 0 ? '+' : ''}{money(stats.budget.net)}</small>
@@ -426,7 +528,7 @@ export function App() {
         </div>
 
         {panelTab === 'tile' && (selected && info ? <section>
-          <h2>{tileNames[info.tile]}</h2>
+          <h2>{info.complex ? '集合住宅' : info.bigPark ? '大公園' : tileNames[info.tile]}</h2>
           <dl>
             {info.building === false && <>
               <dt>狀況</dt><dd>{info.roadAccess ? '空地，等有人需要就會蓋' : '旁邊要有路才會蓋'}</dd>
@@ -440,7 +542,11 @@ export function App() {
               </>}
               {shift && <><dt>上班時間</dt><dd>{shift.start}:00–{shift.end}:00</dd></>}
               <dt>水電</dt><dd>{info.power ? '有電' : '沒電'}、{info.water ? '有水' : '沒水'}</dd>
-              <dt>附近有</dt><dd>{[...info.services.map(service => serviceNames[service]), ...(info.bus ? ['公車站'] : [])].join('、') || '沒有服務'}</dd>
+              <dt>附近有</dt><dd>{[...info.services.map(service => serviceNames[service]), ...(info.transit ? ['公車或捷運'] : [])].join('、') || '沒有服務'}</dd>
+            </>}
+            {info.parkTiles !== undefined && <>
+              <dt>大小</dt><dd>{info.bigPark ? `共 ${info.parkTiles} 格，是一座大公園` :
+                `連在一起的有 ${info.parkTiles} 格，滿 ${landValue.bigPark.tiles} 格會變成大公園`}</dd>
             </>}
             {info.value !== undefined && <>
               <dt>地價</dt><dd>{info.value}{info.building && info.nextLevel !== undefined && `（${info.nextLevel} 以上會升級）`}</dd>
@@ -455,6 +561,9 @@ export function App() {
             {info.running === false && <>
               <dt>狀況</dt><dd>旁邊沒有路，沒有在運作</dd>
             </>}
+            {info.lines !== undefined && <>
+              <dt>路線</dt><dd>{info.lines.length ? info.lines.map(id => lineName(lines.find(line => line.id === id)!)).join('、') : '還沒有加進任何路線'}</dd>
+            </>}
             {info.reaching !== undefined && <>
               <dt>範圍</dt><dd>{info.radius} 格，裡面有 {info.reaching} 棟建築</dd>
             </>}
@@ -468,6 +577,17 @@ export function App() {
               <dt>問題</dt><dd>{info.issues.length ? info.issues.map(issue => issueNames[issue]).join('、') : '沒有'}</dd>
             </>}
           </dl>
+          {info.residents !== undefined && info.residents.length > 0 && <>
+            <h2 className="sub">住在這裡的人</h2>
+            <ul className="people">
+              {info.residents.slice(0, 8).map((person, place) => <li key={place}>
+                <b>{person.name}</b>
+                <span>{person.shift === undefined ? '找工作中' : shifts[person.shift].title}</span>
+                {person.trait && <i title={traitNames[person.trait][1]}>{traitNames[person.trait][0]}</i>}
+              </li>)}
+            </ul>
+            {info.residents.length > 8 && <p className="hint">還有 {info.residents.length - 8} 位。</p>}
+          </>}
         </section> : <p className="hint">在地圖上點一格，這裡會顯示它的資料。</p>)}
 
         {panelTab === 'city' && <>
@@ -476,7 +596,21 @@ export function App() {
               <dt>工作</dt><dd>{stats.employed} 人有工作，共 {stats.jobs} 個職位</dd>
               <dt>上班路程</dt><dd>{stats.employed ? `平均 ${Math.round(stats.commute)} 分鐘` : '—'}</dd>
               <dt>路上</dt><dd>{rush.length ? `${rush.join('、')}正在上下班` : '現在車少'}</dd>
-              <dt>搭公車</dt><dd>{stats.riders} 人</dd>
+              <dt>搭車</dt><dd>{stats.riders} 人搭公車或捷運</dd>
+              <dt>民生用品</dt>
+              <dd>{stats.goods.needed === 0 ? '還沒有人需要' : stats.goods.made >= stats.goods.needed ?
+                `夠用，多的賣出去每月賺 ${money(stats.goods.trade)}` :
+                `不夠，每月花 ${money(-stats.goods.trade)} 從外面買`}</dd>
+              {stats.goods.served < stats.goods.needed && <>
+                <dt>商店</dt><dd className="full">不夠，有 {stats.goods.needed - stats.goods.served} 人買不到東西</dd>
+              </>}
+              <dt>借款</dt>
+              <dd className="tax" title={`一次借 ${money(economy.loan.amount)}，之後 ${economy.loan.months} 個月每月還 ${money(economy.loan.payment)}。最多同時借 ${economy.loan.max} 筆。`}>
+                {stats.loans.length} 筆
+                <button type="button" className="wide" disabled={stats.loans.length >= economy.loan.max}
+                  onClick={() => changeLines(() => engine.city.borrow(), `借到 ${money(economy.loan.amount)}，之後每月要還 ${money(economy.loan.payment)}。`)}>
+                  借 {money(economy.loan.amount)}</button>
+              </dd>
               <dt>稅率</dt>
               <dd className="tax" title="稅率越高每月收入越多，但太高大家就不想來蓋房子；調低則相反。">
                 <button type="button" aria-label="調低稅率" disabled={stats.taxRate <= economy.taxRate.min}
@@ -494,6 +628,15 @@ export function App() {
               {problems.map(issue => <li key={issue}>{issueNames[issue]}（{stats.complaints[issue]} 棟）</li>)}
             </ul> : <p className="hint">沒有問題。</p>}
           </section>
+          <section>
+            <h2>城裡的人</h2>
+            {TRAITS.some(trait => stats.traits[trait] > 0) ? <ul>
+              {TRAITS.filter(trait => stats.traits[trait] > 0).map(trait =>
+                <li key={trait}>{traitNames[trait][0]} {stats.traits[trait]} 位：{traitNames[trait][1]}</li>)}
+            </ul> : <p className="hint">大部分人很普通；有些人有自己的個性，會影響城市。</p>}
+          </section>
+          <TrendChart title="人口" points={trend(history, 'population')} format={value => `${Math.round(value).toLocaleString('en-US')} 人`} />
+          <TrendChart title="資金" points={trend(history, 'funds')} format={money} />
           {demo && <section>
             <h2>試試看出狀況</h2>
             <div className="row">
@@ -516,10 +659,57 @@ export function App() {
           </section>}
         </>}
 
-        {panelTab === 'trend' && <>
-          <TrendChart title="人口" points={trend(history, 'population')} format={value => `${Math.round(value).toLocaleString('en-US')} 人`} />
-          <TrendChart title="資金" points={trend(history, 'funds')} format={money} />
+        {panelTab === 'lines' && <>
+          {lines.length === 0 && <p className="hint">還沒有路線。先到下面「交通」蓋至少兩個站，再按這裡的按鈕把站連起來。</p>}
+          {lines.map(line => {
+            const spec = transit[line.kind];
+            return <section key={line.id} className="line">
+              <h2><i style={{ background: lineColourCss(line.id) }} />{lineName(line)}
+                <button type="button" aria-label={`刪除${lineName(line)}`}
+                  onClick={() => changeLines(() => {
+                    if (editingRef.current === line.id) editLine(undefined);
+                    engine.city.removeLine(line.id);
+                  }, '路線刪掉了。站還留著，可以再用。')}>×</button>
+              </h2>
+              <dl>
+                <dt>站</dt><dd>{line.stops.length} 個{!line.active && (line.stops.length < 2 ? '，至少要兩個才會跑' :
+                  '，但站和站之間沒有路相通')}</dd>
+                {line.active && <>
+                  <dt>班次</dt><dd>每 {line.headway < 10 ? line.headway.toFixed(1) : Math.round(line.headway)} 分鐘一班</dd>
+                  <dt>最忙時</dt><dd className={line.busiest >= line.capacity ? 'full' : undefined}>
+                    載 {line.busiest} 人，最多 {line.capacity} 人{line.busiest >= line.capacity && '（客滿）'}</dd>
+                  <dt>每天</dt><dd>{line.riders} 人搭</dd>
+                </>}
+                <dt>車輛</dt>
+                <dd className="tax" title={`多一輛 ${money(spec.vehicleCost)}，每輛每月維護 ${money(spec.vehicleUpkeep)}。車越多班次越密，載得越多。`}>
+                  <button type="button" aria-label="減少車輛" disabled={line.vehicles <= 1}
+                    onClick={() => changeLines(() => engine.city.setVehicles(line.id, line.vehicles - 1), '少了一輛車。')}>−</button>
+                  {line.vehicles} 輛
+                  <button type="button" aria-label="增加車輛" disabled={line.vehicles >= transit.maxVehicles}
+                    onClick={() => changeLines(() => engine.city.setVehicles(line.id, line.vehicles + 1),
+                      `多了一輛車，花了 ${money(spec.vehicleCost)}。`)}>+</button>
+                </dd>
+              </dl>
+              {editing === line.id ?
+                <button type="button" aria-pressed="true" onClick={() => editLine(undefined)}>完成</button> :
+                <button type="button" onClick={() => editLine(line.id)}>改站</button>}
+            </section>;
+          })}
+          {lines.length < transit.maxLines && <div className="row">
+            <button type="button" onClick={() => startLine('bus')}>新公車路線</button>
+            <button type="button" onClick={() => startLine('metro')}>新捷運路線</button>
+          </div>}
         </>}
+
+        {panelTab === 'goals' && <ul className="goals">
+          {goals.map(goal => {
+            const done = stats.goals.includes(goal.id);
+            return <li key={goal.id} className={done ? 'done' : undefined}>
+              <b>{done ? '✓' : '□'} {goal.title}</b>
+              <span>{done ? '完成了' : goal.hint} 獎金 {money(goal.reward)}</span>
+            </li>;
+          })}
+        </ul>}
 
         {panelTab === 'log' && (events.length ? <ul>{events.map(event => {
           const day = dateAt(event.tick);
@@ -560,6 +750,17 @@ export function App() {
       </nav>
 
       {failed && <p className="hud toast" role="alert">地圖無法顯示。</p>}
+
+      {stats.bankrupt && <div className="hud over" role="alertdialog" aria-label="破產">
+        <h2>城市破產了</h2>
+        <p>欠的錢超過 {money(-economy.bankrupt)}，什麼都蓋不了。可以借錢撐過去、回到之前存的城市，或是重新開始。</p>
+        <div className="row">
+          <button type="button" disabled={stats.loans.length >= economy.loan.max}
+            onClick={() => changeLines(() => engine.city.borrow(), `借到 ${money(economy.loan.amount)}。`)}>借 {money(economy.loan.amount)}</button>
+          <button type="button" onClick={() => void load()}>讀取</button>
+          <button type="button" onClick={startNew}>新地圖</button>
+        </div>
+      </div>}
 
       <p className="dev">
         <button type="button" aria-pressed={debug} onClick={() => setDebug(!debug)}>開發用資料</button>

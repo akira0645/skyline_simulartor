@@ -2,6 +2,8 @@ import { MAP_SIZE, type Cell, type GameCommand, type TileMap, type Zone } from '
 import type { SaveData, SavedBuilding } from './SaveData';
 import { growth, ZoneDemandSystem } from './ZoneDemandSystem';
 
+import { RoadGraph } from './RoadGraph';
+
 const neighbors = [[0, -1], [1, 0], [0, 1], [-1, 0]];
 const indexOf = ({ x, y }: Cell) => y * MAP_SIZE + x;
 
@@ -10,7 +12,18 @@ export class BuildingSystem {
   private readonly buildings = new Map<number, SavedBuilding>();
   private readonly demand = new ZoneDemandSystem();
 
-  constructor(readonly map: TileMap) {}
+  private readonly commutes: { homeId: number; workId: number; workers: number; path: Cell[] }[] = [];
+  readonly roadGraph: RoadGraph;
+
+  constructor(readonly map: TileMap) {
+    this.roadGraph = new RoadGraph(map);
+  }
+
+  getCommutes() {
+    return this.commutes as readonly {
+      homeId: number; workId: number; workers: number; path: readonly Cell[];
+    }[];
+  }
 
   hasBuilding(cell: Cell): boolean {
     return this.getBuilding(cell) !== undefined;
@@ -59,10 +72,14 @@ export class BuildingSystem {
   }
 
   grow(tick: number, seed: number): void {
+    let changed = false;
     for (const [id, building] of this.buildings) {
       const cell = this.zones.get(id)!;
       if (this.map.get(cell) === 'residential' && building.occupants < building.capacity &&
-          this.hasRoadAccess(cell)) building.occupants++;
+          this.hasRoadAccess(cell)) {
+        building.occupants++;
+        changed = true;
+      }
     }
 
     if (tick % growth.interval === 0) {
@@ -81,17 +98,44 @@ export class BuildingSystem {
         const hash = Math.imul(seed ^ tick ^ 0x9e3779b9, 0x85ebca6b);
         const building = candidates[((hash ^ (hash >>> 16)) >>> 0) % candidates.length];
         this.buildings.set(building.id, building);
+        changed = true;
       }
     }
-    this.assignJobs();
+    if (changed) this.assignJobs();
   }
 
   private assignJobs(): void {
-    let available = this.getStats().population;
+    this.commutes.length = 0;
+    const homes: { building: SavedBuilding; road: Cell }[] = [];
+    const workplaces: { building: SavedBuilding; road: Cell }[] = [];
+
     for (const [id, building] of this.buildings) {
-      if (this.map.get(this.zones.get(id)!) === 'residential') continue;
-      building.occupants = Math.min(available, building.capacity);
-      available -= building.occupants;
+      const cell = this.zones.get(id)!;
+      const road = this.roadAccess(cell);
+      if (this.map.get(cell) === 'residential') {
+        if (road && building.occupants > 0) homes.push({ building, road });
+      } else {
+        building.occupants = 0;
+        if (road) workplaces.push({ building, road });
+      }
+    }
+    if (!workplaces.length) return;
+
+    for (const home of homes) {
+      let remaining = home.building.occupants;
+      const distances = this.roadGraph.distancesFrom(home.road);
+      const reachable = workplaces
+        .map(work => ({ ...work, distance: distances.get(indexOf(work.road)) ?? Infinity }))
+        .filter(work => Number.isFinite(work.distance) && work.building.occupants < work.building.capacity)
+        .sort((a, b) => a.distance - b.distance || a.building.id - b.building.id);
+      for (const work of reachable) {
+        const workers = Math.min(remaining, work.building.capacity - work.building.occupants);
+        const route = this.roadGraph.shortestPath(home.road, work.road)!;
+        this.commutes.push({ homeId: home.building.id, workId: work.building.id, workers, path: route.path });
+        work.building.occupants += workers;
+        remaining -= workers;
+        if (!remaining) break;
+      }
     }
   }
 
@@ -106,6 +150,7 @@ export class BuildingSystem {
     this.buildings.clear();
     for (const id of zones) this.zones.set(id, { x: id % MAP_SIZE, y: Math.floor(id / MAP_SIZE) });
     for (const building of buildings) this.buildings.set(building.id, { ...building });
+    this.assignJobs();
   }
 
   getStats() {

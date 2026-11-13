@@ -3,11 +3,11 @@ import type { WorldState } from './WorldState';
 import { BuildingSystem } from './BuildingSystem';
 import { parseSave, SCHEMA_VERSION, type SaveData } from './SaveData';
 import { TileMap } from './TileMap';
-import { RoadGraph } from './RoadGraph';
+
 
 export class SimulationEngine {
   readonly city = new BuildingSystem(new TileMap());
-  readonly roadGraph = new RoadGraph(this.city.map);
+  readonly roadGraph = this.city.roadGraph;
   private readonly state: WorldState;
 
   constructor(initialState: WorldState) {

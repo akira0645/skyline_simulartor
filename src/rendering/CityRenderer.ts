@@ -1,7 +1,7 @@
-import { Application, Assets, type Texture } from 'pixi.js';
+import { Application, Assets, Graphics, type Texture } from 'pixi.js';
 import cityUrl from '../assets/city.png';
 import tilesUrl from '../assets/tiles.png';
-import { MAP_SIZE, type Cell } from '../simulation/TileMap';
+import { MAP_SIZE, TILE_SIZE, type Cell } from '../simulation/TileMap';
 import { selection, type Tool } from '../app/tools';
 import { Camera } from './Camera';
 import { TileRenderer } from './TileRenderer';
@@ -11,7 +11,7 @@ import type { BuildingSystem } from '../simulation/BuildingSystem';
 export class CityRenderer {
   refresh?: () => void;
 
-  constructor(private readonly city: BuildingSystem) {}
+  constructor(private readonly city: BuildingSystem, private readonly speed: () => number) {}
   private app?: Application;
   private observer?: ResizeObserver;
 
@@ -37,13 +37,47 @@ export class CityRenderer {
     const tiles = new TileRenderer(sheets[0].source, sheets[1].source);
     const canvas = app.canvas;
     app.stage.addChild(tiles.view);
+    const people = new Graphics();
+    app.stage.addChild(people);
     host.appendChild(canvas);
+
+    let animationTime = 0;
+    const drawPeople = () => {
+      people.clear();
+      people.position.set(camera.x, camera.y);
+      people.scale.set(camera.scale);
+      const routes = this.city.getCommutes();
+      for (let i = 0; i < Math.min(routes.length, 80); i++) {
+        const { path } = routes[i];
+        const length = path.length - 1;
+        const phase = length ? (animationTime / 500 + i * 0.37) % (2 * length) : 0;
+        const progress = length - Math.abs(length - phase);
+        const from = path[Math.floor(progress)];
+        const to = path[Math.ceil(progress)];
+        const fraction = progress % 1;
+        const x = Math.round((from.x + (to.x - from.x) * fraction) * TILE_SIZE + 12);
+        const y = Math.round((from.y + (to.y - from.y) * fraction) * TILE_SIZE + 11);
+        const stride = Math.floor(animationTime / 140 + i) % 2;
+        people.rect(x - 1, y - 1, 9, 13).fill(0x25232b);
+        people.rect(x + 2, y, 4, 4).fill(0xffd1a0);
+        people.rect(x + 1, y + 4, 6, 4).fill(i % 2 ? 0x7edbed : 0xf6ba67);
+        people.rect(x + 1, y + 8, 2, 2 + stride).rect(x + 5, y + 8, 2, 3 - stride).fill(0xece6dd);
+      }
+    };
+    app.ticker.add(ticker => {
+      const speed = this.speed();
+      if (!speed || !this.city.getCommutes().length) return;
+      animationTime += ticker.deltaMS * speed;
+      drawPeople();
+    });
+    app.start();
 
     let preview: Cell[] = [];
     let selected: Cell | undefined;
     let drag: { id: number; tool: Tool; start: Cell; x: number; y: number } | undefined;
     const draw = () => {
       tiles.draw(this.city, camera, app.screen.width, app.screen.height, preview, selected);
+      drawPeople();
       app.render();
     };
     this.refresh = draw;

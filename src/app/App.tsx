@@ -118,7 +118,7 @@ export function App() {
     if (!host) return;
 
     const lifetime = new AbortController();
-    const renderer = new CityRenderer(engine.city);
+    const renderer = new CityRenderer(engine.city, () => clock.speed);
     rendererRef.current = renderer;
     void renderer.mount(host, lifetime.signal, () => activeTool.current, message => {
       setMessage(message);

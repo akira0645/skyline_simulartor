@@ -41,6 +41,24 @@ export class RoadGraph {
     }
   }
 
+  distancesFrom(from: Cell): ReadonlyMap<number, number> {
+    const distances = new Map<number, number>();
+    if (this.componentAt(from) === undefined) return distances;
+
+    const start = indexOf(from);
+    distances.set(start, 0);
+    const queue = [start];
+    for (let i = 0; i < queue.length; i++) {
+      const id = queue[i];
+      for (const next of this.edges.get(id)!) {
+        if (distances.has(next)) continue;
+        distances.set(next, distances.get(id)! + 1);
+        queue.push(next);
+      }
+    }
+    return distances;
+  }
+
   private sync(): void {
     if (this.revision === this.map.roadRevision) return;
     this.edges.clear();

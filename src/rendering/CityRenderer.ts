@@ -5,6 +5,7 @@ import { MAP_SIZE, TILE_SIZE, type Cell } from '../simulation/TileMap';
 import { selection, type Tool } from '../app/tools';
 import { Camera } from './Camera';
 import { TileRenderer } from './TileRenderer';
+import { commuterPosition } from './commuterPosition';
 
 import type { BuildingSystem } from '../simulation/BuildingSystem';
 
@@ -48,15 +49,10 @@ export class CityRenderer {
       people.scale.set(camera.scale);
       const routes = this.city.getCommutes();
       for (let i = 0; i < Math.min(routes.length, 80); i++) {
-        const { path } = routes[i];
-        const length = path.length - 1;
-        const phase = length ? (animationTime / 500 + i * 0.37) % (2 * length) : 0;
-        const progress = length - Math.abs(length - phase);
-        const from = path[Math.floor(progress)];
-        const to = path[Math.ceil(progress)];
-        const fraction = progress % 1;
-        const x = Math.round((from.x + (to.x - from.x) * fraction) * TILE_SIZE + 12);
-        const y = Math.round((from.y + (to.y - from.y) * fraction) * TILE_SIZE + 11);
+        const position = commuterPosition(routes[i], animationTime + i * 185);
+        if (!position) continue;
+        const x = Math.round(position.x * TILE_SIZE + 12);
+        const y = Math.round(position.y * TILE_SIZE + 11);
         const stride = Math.floor(animationTime / 140 + i) % 2;
         people.rect(x - 1, y - 1, 9, 13).fill(0x25232b);
         people.rect(x + 2, y, 4, 4).fill(0xffd1a0);

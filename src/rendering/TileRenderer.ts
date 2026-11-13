@@ -91,6 +91,13 @@ export class TileRenderer {
             if (map.get({ x: x + dx, y: y + dy }) === 'road') mask |= bit;
           }
           cityAt(mask, ROAD_ROW, x, y);
+          const left = x * TILE_SIZE;
+          const top = y * TILE_SIZE;
+          if (mask === 10) {
+            g.rect(left, top, TILE_SIZE, 5).rect(left, top + 27, TILE_SIZE, 5).fill(0xa5a29a);
+          } else if (mask === 5) {
+            g.rect(left, top, 5, TILE_SIZE).rect(left + 27, top, 5, TILE_SIZE).fill(0xa5a29a);
+          }
         } else {
           cityAt(zoneIndex[tile], LOT_ROW, x, y);
           const building = city.getBuilding({ x, y });

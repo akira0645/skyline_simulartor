@@ -49,10 +49,26 @@ export class CityRenderer {
       people.scale.set(camera.scale);
       const routes = this.city.getCommutes();
       for (let i = 0; i < Math.min(routes.length, 80); i++) {
-        const position = commuterPosition(routes[i], animationTime + i * 185);
+        const route = routes[i];
+        const driving = route.path.length >= 5;
+        const time = animationTime + i * 185;
+        const mode = driving ? 'drive' : 'walk';
+        const position = commuterPosition(route, time, mode);
         if (!position) continue;
         const x = Math.round(position.x * TILE_SIZE + 12);
         const y = Math.round(position.y * TILE_SIZE + 11);
+        if (driving) {
+          const next = commuterPosition(route, time + 24, mode);
+          const vertical = next && Math.abs(next.y - position.y) > Math.abs(next.x - position.x);
+          const left = x + 4 - (vertical ? 5 : 8);
+          const top = y + 5 - (vertical ? 8 : 5);
+          people.rect(left, top, vertical ? 10 : 16, vertical ? 16 : 10).fill(0x232831);
+          people.rect(left + 1, top + 1, vertical ? 8 : 14, vertical ? 14 : 8)
+            .fill(i % 2 ? 0x5bb6ce : 0xd87856);
+          people.rect(left + (vertical ? 2 : 4), top + (vertical ? 4 : 2), vertical ? 6 : 8, vertical ? 8 : 6)
+            .fill(0xa9d8de);
+          continue;
+        }
         const stride = Math.floor(animationTime / 140 + i) % 2;
         people.rect(x - 1, y - 1, 9, 13).fill(0x25232b);
         people.rect(x + 2, y, 4, 4).fill(0xffd1a0);

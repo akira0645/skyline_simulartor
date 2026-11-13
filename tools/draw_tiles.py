@@ -5,7 +5,9 @@
 Sheet layout (in tiles), mirrored by src/rendering/TileRenderer.ts:
   row 0      roads, column = neighbour mask (north 1, east 2, south 4, west 8)
   row 1      empty lots: residential, commercial, industrial
-  rows 2-4   buildings: residential, commercial, industrial, four variants each
+  rows 2-4   buildings: residential, commercial, industrial. Columns 0-3 are the original
+             four; 4 and up are the larger buildings of levels 2 and 3. Which column
+             belongs to which level is the BUILDING_ART table in TileRenderer.ts.
 Buildings are transparent around their footprint and are drawn over their lot.
 Light comes from the top left; shadows fall to the bottom right.
 """
@@ -353,12 +355,93 @@ def workshop():
     return t
 
 
+# --- Larger buildings for levels 2 and 3
+def condo():
+    t = Tile()
+    t.shadow(2, 0, 13, 14)
+    t.slab(2, 0, 13, 3, '#dfe6ea', '#c3ccd3', '#9aa5ae')    # roof
+    t.rect(2, 4, 13, 14, '#e9e2d0')        # wall
+    t.rect(13, 4, 13, 14, '#c2baa5')
+    for y in (5, 8, 11):
+        for x in (3, 6, 9):
+            t.window(x, y, x + 1, y + 1)
+        t.rect(11, y + 1, 12, y + 1, '#d0705a')             # balconies
+    t.rect(7, 12, 8, 14, WOOD_DARK)        # door
+    return t
+
+
+def tower():
+    t = Tile()
+    t.shadow(3, 0, 12, 14)
+    t.slab(3, 0, 12, 2, '#f1e3c2', '#d8c59c', '#ad9a70')    # roof
+    t.rect(6, 0, 9, 0, '#d0705a')
+    t.rect(3, 3, 12, 14, '#d98f6f')        # wall
+    t.rect(12, 3, 12, 14, '#b06f54')
+    for y in (4, 6, 8, 10, 12):            # five floors of windows
+        for x in (4, 7, 10):
+            t.rect(x, y, x + 1, y, GLASS_LIGHT)
+    t.rect(7, 13, 8, 14, WOOD_DARK)        # door
+    t.rect(3, 14, 5, 14, LEAF)             # hedges
+    t.rect(10, 14, 12, 14, LEAF)
+    return t
+
+
+def department_store():
+    t = Tile()
+    t.shadow(1, 1, 14, 14)
+    t.slab(1, 1, 14, 5, '#f0d9a0', '#dcc07e', '#b39a5c')    # roof
+    t.rect(4, 2, 11, 4, '#c8553d')         # sign
+    t.rect(5, 3, 10, 3, PAPER)
+    t.rect(1, 6, 14, 14, '#efe9dc')        # wall
+    t.rect(14, 6, 14, 14, '#c9c2b2')
+    for x in (2, 6, 10):
+        t.window(x, 7, x + 2, 8)
+    t.rect(1, 10, 14, 10, '#c8553d')       # canopy
+    t.window(2, 11, 5, 13)
+    t.window(10, 11, 13, 13)
+    t.rect(7, 11, 8, 14, '#22344d')        # entrance
+    return t
+
+
+def glass_tower():
+    t = Tile()
+    t.shadow(3, 0, 12, 14)
+    t.slab(3, 0, 12, 2, '#9fb0c4', '#74859b', '#4f5d70')    # roof
+    t.rect(7, 0, 8, 0, '#e0b23e')          # beacon
+    t.rect(3, 3, 12, 14, GLASS)            # curtain wall
+    for y in range(3, 15, 2):
+        t.rect(3, y, 12, y, GLASS_LIGHT)
+    for x in (5, 8, 11):
+        t.rect(x, 3, x, 14, GLASS_DARK)
+    t.rect(12, 3, 12, 14, GLASS_DARK)
+    t.rect(7, 13, 8, 14, '#22344d')        # entrance
+    return t
+
+
+def heavy_plant():
+    t = Tile()
+    t.shadow(1, 2, 14, 14)
+    t.slab(1, 5, 14, 9, STEEL_LIGHT, STEEL, STEEL_DARK)     # roof
+    for x in (3, 7):                       # two chimneys
+        t.rect(x, 0, x + 1, 7, '#9a5b4d')
+        t.rect(x, 0, x + 1, 0, '#5a332b')
+        t.rect(x, 2, x + 1, 2, PAPER)
+    t.slab(10, 2, 13, 7, '#e0b23e', '#c4962c', '#96701c')   # silo
+    t.rect(1, 10, 14, 14, '#8d8f96')       # wall
+    t.rect(14, 10, 14, 14, STEEL_DEEP)
+    t.rect(2, 11, 6, 14, STEEL_DEEP)       # loading door
+    t.rect(2, 12, 6, 12, STEEL_DARK)
+    t.window(8, 11, 9, 12)
+    t.window(11, 11, 12, 12)
+    return t
+
+
 ROWS = [
     [road(mask) for mask in range(16)],
     [residential_lot(), commercial_lot(), industrial_lot()],
-    [house_red(), house_blue(), cottage(), apartments()],
-    [shop_red(), shop_green(), office(), store_white()],
-    [factory(), warehouse(), tanks(), workshop()],
+    [house_red(), house_blue(), cottage(), apartments(), condo(), tower()],
+    [shop_red(), shop_green(), office(), store_white(), department_store(), glass_tower()],
+    [factory(), warehouse(), tanks(), workshop(), heavy_plant()],
 ]
 
 if __name__ == '__main__':

@@ -17,7 +17,3 @@ export function shiftPhase(hour: number, start: number, end: number, travelHours
   if (sinceStart >= 24 - travelHours) return { atWork: false, progress: 1 - (24 - sinceStart) / travelHours };
   return { atWork: false };
 }
-
-export function gameHour(dayProgress: number) {
-  return (7 + dayProgress * 24) % 24;
-}

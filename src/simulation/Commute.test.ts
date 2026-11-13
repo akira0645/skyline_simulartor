@@ -18,8 +18,8 @@ it('fills the closest jobs first, then leaves unreachable workers unemployed', (
     { id: id(near), capacity: 3, occupants: 0 },
   ] });
   expect(city.getCommutes().map(({ workId, workers, path }) => [workId, workers, path.length]))
-    .toEqual([[id(near), 3, 2], [id(far), 1, 5]]);
+    .toEqual([[id(near), 2, 2], [id(far), 2, 5]]);
   city.execute({ type: 'DEMOLISH', x: 3, y: 2 });
-  expect(city.getStats()).toMatchObject({ employed: 3, jobs: 6 });
+  expect(city.getStats()).toMatchObject({ employed: 2, jobs: 4 });
   expect(city.getBuilding(far)?.occupants).toBe(0);
 });

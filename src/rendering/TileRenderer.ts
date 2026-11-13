@@ -1,5 +1,6 @@
 import { Container, Graphics, Rectangle, Texture, type TextureSource } from 'pixi.js';
-import { MAP_SIZE, TILE_SIZE, type Cell, type Zone } from '../simulation/TileMap';
+import { isFacility, isRoad, MAP_SIZE, TILE_SIZE, type Cell, type Facility, type Zone } from '../simulation/TileMap';
+import type { Overlay } from '../app/tools';
 import { Camera } from './Camera';
 
 import type { BuildingSystem } from '../simulation/BuildingSystem';
@@ -18,10 +19,29 @@ const BUSHES = [[31, 13], [34, 13], [31, 13], [32, 13]];
 const ROAD_ROW = 0;
 const LOT_ROW = 1;
 const BUILDING_ROW = 2;
-const BUILDING_VARIANTS = 4;
+// Columns of each building row by level: small buildings first, the largest last.
+const BUILDING_ART: Record<Zone, number[][]> = {
+  residential: [[0, 1, 2], [3, 4], [5]],
+  commercial: [[0, 1, 3], [2, 4], [5]],
+  industrial: [[1, 3], [0, 2], [4]],
+};
 const zoneIndex: Record<Zone, number> = { residential: 0, commercial: 1, industrial: 2 };
 // Bit per neighbouring road, matching the column order of the road row.
 const roadSides = [[0, -1, 1], [1, 0, 2], [0, 1, 4], [-1, 0, 8]];
+
+// Traffic tint by flow as a share of road capacity: free, busy, full, jammed.
+const TRAFFIC_COLOURS: [number, number][] = [[0.5, 0x4fc46b], [1, 0xf2d04b], [1.5, 0xf08a3c], [Infinity, 0xd9423a]];
+// The yellow median that tells an avenue from a street: [x, y, width, height] per road side.
+const MEDIAN = 0xf2c94c;
+const medianArms = [[15, 0, 2, 16], [16, 15, 16, 2], [15, 16, 2, 16], [0, 15, 16, 2]];
+const SMOG = 0x6b3fa0;
+// Land value from poor to prime.
+const VALUE_COLOURS: [number, number][] = [[30, 0xd9423a], [45, 0xf08a3c], [65, 0xf2d04b], [Infinity, 0x4fc46b]];
+const LEVEL_PIP = 0xffd95a;
+const SERVED = 0x4fc46b;
+const UNSERVED = 0xd9423a;
+// Roof colours of the facilities, which are drawn here rather than taken from a sheet.
+const FACILITY_ROOF = { power: 0xf4ca65, water: 0x74c7ed };
 
 const hash = (x: number, y: number) =>
   (Math.imul(x, 73856093) ^ Math.imul(y, 19349663) ^ Math.imul(x + y, 83492791)) >>> 0;
@@ -53,7 +73,8 @@ export class TileRenderer {
   }
 
   draw(city: BuildingSystem, camera: Camera, width: number, height: number, preview: Cell[],
-    selected?: Cell) {
+    selected?: Cell, layer: Overlay = 'none',
+    range?: { centre: Cell; radius: number; kind: Facility }) {
     const map = city.map;
     const start = camera.cellAt(0, 0);
     const end = camera.cellAt(width, height);
@@ -85,10 +106,10 @@ export class TileRenderer {
           } else if (roll < 8) {
             tileAt(BUSHES[(seed >>> 16) % BUSHES.length], x, y);
           }
-        } else if (tile === 'road') {
+        } else if (isRoad(tile)) {
           let mask = 0;
           for (const [dx, dy, bit] of roadSides) {
-            if (map.get({ x: x + dx, y: y + dy }) === 'road') mask |= bit;
+            if (isRoad(map.get({ x: x + dx, y: y + dy }))) mask |= bit;
           }
           cityAt(mask, ROAD_ROW, x, y);
           const left = x * TILE_SIZE;
@@ -98,12 +119,96 @@ export class TileRenderer {
           } else if (mask === 5) {
             g.rect(left, top, 5, TILE_SIZE).rect(left + 27, top, 5, TILE_SIZE).fill(0xa5a29a);
           }
+          if (tile === 'avenue') {
+            g.rect(left + 14, top + 14, 4, 4);
+            medianArms.forEach(([ax, ay, width, height], side) => {
+              if (mask & (1 << side)) g.rect(left + ax, top + ay, width, height);
+            });
+            g.fill(MEDIAN);
+          }
+        } else if (tile === 'park') {
+          tileAt(GRASS[1], x, y);
+          const left = x * TILE_SIZE;
+          const top = y * TILE_SIZE;
+          // A lawn with a pale path round it and a shrub or a flower bed in the middle.
+          g.rect(left, top, TILE_SIZE, 3).rect(left, top + 29, TILE_SIZE, 3)
+            .rect(left, top, 3, TILE_SIZE).rect(left + 29, top, 3, TILE_SIZE).fill(0xd9cfa8);
+          if (seed % 3) tileAt(BUSHES[(seed >>> 16) % BUSHES.length], x, y);
+          else g.rect(left + 11, top + 11, 10, 10).fill(0xe8799a).rect(left + 14, top + 14, 4, 4).fill(0xf6e27a);
+        } else if (isFacility(tile)) {
+          tileAt(GRASS[0], x, y);
+          const left = x * TILE_SIZE;
+          const top = y * TILE_SIZE;
+          g.rect(left + 4, top + 5, 24, 23).fill(0x26353e);
+          g.rect(left + 8, top + 8, 16, 11).fill(FACILITY_ROOF[tile]);
+          g.rect(left + 9, top + 20, 14, 5).fill(0x83949e);
         } else {
           cityAt(zoneIndex[tile], LOT_ROW, x, y);
           const building = city.getBuilding({ x, y });
           if (building) {
-            cityAt(((seed >>> 4) + building.level - 1) % BUILDING_VARIANTS, BUILDING_ROW + zoneIndex[tile], x, y);
+            const art = BUILDING_ART[tile][building.level - 1];
+            cityAt(art[(seed >>> 4) % art.length], BUILDING_ROW + zoneIndex[tile], x, y);
+            // One gold pip per level above the first, in the top right corner of the lot.
+            for (let pip = 1; pip < building.level; pip++) {
+              const left = x * TILE_SIZE + TILE_SIZE - 7 * pip;
+              g.rect(left - 1, y * TILE_SIZE + 1, 7, 7).fill(0x25232b);
+              g.rect(left, y * TILE_SIZE + 2, 5, 5).fill(LEVEL_PIP);
+            }
           }
+        }
+      }
+    }
+
+    if (layer !== 'none') {
+      for (let y = Math.max(0, start.y); y <= Math.min(MAP_SIZE - 1, end.y); y++) {
+        for (let x = Math.max(0, start.x); x <= Math.min(MAP_SIZE - 1, end.x); x++) {
+          const cell = { x, y };
+          let colour: number | undefined;
+          if (layer === 'pollution') {
+            const level = city.pollutionAt(cell);
+            if (level > 0) {
+              overlay.rect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE)
+                .fill({ color: SMOG, alpha: 0.15 + 0.6 * level / 100 });
+            }
+            continue;
+          }
+          if (layer === 'value') {
+            const tile = map.get(cell);
+            if (tile !== 'residential' && tile !== 'commercial' && tile !== 'industrial') continue;
+            const value = city.landValueAt(cell);
+            overlay.rect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE)
+              .fill({ color: VALUE_COLOURS.find(([limit]) => value < limit)![1], alpha: 0.55 });
+            continue;
+          }
+          if (layer === 'traffic') {
+            if (!isRoad(map.get(cell))) continue;
+            const load = city.congestionAt(cell);
+            colour = TRAFFIC_COLOURS.find(([limit]) => load <= limit)![1];
+          } else if (city.hasBuilding(cell)) {
+            colour = city.isServed(cell, layer) ? SERVED : UNSERVED;
+          }
+          if (colour === undefined) continue;
+          overlay.rect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE)
+            .fill({ color: colour, alpha: 0.55 });
+        }
+      }
+    }
+
+    if (range) {
+      // The reach of a facility: a tinted diamond with a solid edge.
+      const { centre, radius } = range;
+      const colour = FACILITY_ROOF[range.kind];
+      const inside = (x: number, y: number) => Math.abs(x - centre.x) + Math.abs(y - centre.y) <= radius;
+      for (let y = centre.y - radius; y <= centre.y + radius; y++) {
+        for (let x = centre.x - radius; x <= centre.x + radius; x++) {
+          if (!inside(x, y) || map.get({ x, y }) === undefined) continue;
+          const left = x * TILE_SIZE;
+          const top = y * TILE_SIZE;
+          overlay.rect(left, top, TILE_SIZE, TILE_SIZE).fill({ color: colour, alpha: 0.16 });
+          if (!inside(x, y - 1)) overlay.rect(left, top, TILE_SIZE, 3).fill({ color: colour, alpha: 0.95 });
+          if (!inside(x, y + 1)) overlay.rect(left, top + TILE_SIZE - 3, TILE_SIZE, 3).fill({ color: colour, alpha: 0.95 });
+          if (!inside(x - 1, y)) overlay.rect(left, top, 3, TILE_SIZE).fill({ color: colour, alpha: 0.95 });
+          if (!inside(x + 1, y)) overlay.rect(left + TILE_SIZE - 3, top, 3, TILE_SIZE).fill({ color: colour, alpha: 0.95 });
         }
       }
     }

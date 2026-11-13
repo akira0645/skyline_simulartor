@@ -1,14 +1,23 @@
-import { MAP_SIZE, TILES } from './TileMap';
+import { isZone, MAP_SIZE, TILES } from './TileMap';
 
+import { economy, milestones } from './Economy';
+import { MAX_LEVEL } from './LandValue';
 import { growth } from './ZoneDemandSystem';
 import type { Zone } from './TileMap';
 
-export const SCHEMA_VERSION = 2;
+/**
+ * 4 added funds, the milestone rank and avenue tiles; 3 added power and water facility tiles;
+ * 2 added per-building capacity and occupants.
+ */
+export const SCHEMA_VERSION = 4;
+const READABLE = [1, 2, 3, SCHEMA_VERSION];
 
 export interface SavedBuilding {
   id: number;
   capacity: number;
   occupants: number;
+  /** 1 to 3. Saves made before buildings could upgrade have none and load as level 1. */
+  level: number;
 }
 
 export interface SaveData {
@@ -21,9 +30,13 @@ export interface SaveData {
   zones: number[];
   /** Cell indices that hold a building. */
   buildings: SavedBuilding[];
+  /** City money; negative when upkeep has outrun tax. */
+  funds: number;
+  /** How many population milestones have been paid out. */
+  rank: number;
 }
 
-const FIRST_ZONE = 2;
+const zonedCode = (code: number) => isZone(TILES[code]);
 const isCount = (value: unknown): value is number =>
   Number.isSafeInteger(value) && (value as number) >= 0;
 
@@ -32,7 +45,13 @@ const isCount = (value: unknown): value is number =>
 export function parseSave(data: unknown): SaveData {
   if (typeof data !== 'object' || data === null) throw new Error('存檔資料損壞。');
   const { schemaVersion, seed, tick, tiles, zones, buildings } = data as Record<string, unknown>;
-  if (schemaVersion !== 1 && schemaVersion !== SCHEMA_VERSION) throw new Error('存檔版本不相容。');
+  // Saves from before the city had money start with the opening balance and no milestones paid.
+  const { funds = economy.startingFunds, rank = 0 } = (schemaVersion as number) < 4 ? {} :
+    data as Record<string, unknown>;
+  if (!Number.isFinite(funds) || !isCount(rank) || rank > milestones.length) {
+    throw new Error('存檔資料損壞。');
+  }
+  if (!READABLE.includes(schemaVersion as number)) throw new Error('存檔版本不相容。');
 
   if (!Number.isFinite(seed) || !isCount(tick) ||
       !(tiles instanceof Uint8Array) || tiles.length !== MAP_SIZE ** 2 ||
@@ -44,12 +63,12 @@ export function parseSave(data: unknown): SaveData {
   let zonedTiles = 0;
   for (const code of tiles) {
     if (code >= TILES.length) throw new Error('存檔資料損壞。');
-    if (code >= FIRST_ZONE) zonedTiles++;
+    if (zonedCode(code)) zonedTiles++;
   }
   // zones must list every zoned tile exactly once; buildings must stand on zones.
   const zoned = new Set<number>(zones);
   if (zoned.size !== zonedTiles || zones.length !== zonedTiles ||
-      zones.some(id => !(tiles[id] >= FIRST_ZONE))) {
+      zones.some(id => !zonedCode(tiles[id]))) {
     throw new Error('存檔資料損壞。');
   }
 
@@ -62,10 +81,12 @@ export function parseSave(data: unknown): SaveData {
     const zone = TILES[tiles[id]] as Zone;
     const capacity = schemaVersion === 1 ? growth.capacity[zone] : entry.capacity;
     const occupants = schemaVersion === 1 ? (zone === 'residential' ? capacity : 0) : entry.occupants;
-    if (!isCount(capacity) || capacity === 0 || !isCount(occupants) || occupants > capacity) {
+    const level = schemaVersion === 1 ? 1 : entry.level ?? 1;
+    if (!isCount(capacity) || capacity === 0 || !isCount(occupants) || occupants > capacity ||
+        !isCount(level) || level < 1 || level > MAX_LEVEL) {
       throw new Error('存檔資料損壞。');
     }
-    records.push({ id, capacity, occupants });
+    records.push({ id, capacity, occupants, level });
   }
   const homes = records.filter(b => TILES[tiles[b.id]] === 'residential');
   const workplaces = records.filter(b => TILES[tiles[b.id]] !== 'residential');
@@ -75,5 +96,6 @@ export function parseSave(data: unknown): SaveData {
     available -= b.occupants;
     if (available < 0) throw new Error('存檔資料損壞。');
   }
-  return { schemaVersion: SCHEMA_VERSION, seed: seed as number, tick, tiles, zones, buildings: records };
+  return { schemaVersion: SCHEMA_VERSION, seed: seed as number, tick, tiles, zones, buildings: records,
+    funds: funds as number, rank };
 }

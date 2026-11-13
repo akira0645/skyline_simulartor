@@ -9,7 +9,8 @@ export class SimulationClock {
 
   constructor(private readonly engine: SimulationEngine) {}
 
-  get dayProgress(): number {
+  /** The fraction of the next tick that has already elapsed. */
+  get tickProgress(): number {
     return this.accumulated / TICK_MS;
   }
 

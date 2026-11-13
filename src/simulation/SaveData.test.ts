@@ -50,7 +50,7 @@ it('migrates a legacy city while preserving its full homes and employment', () =
   const save = engine.save();
   engine.load({ ...save, schemaVersion: 1, buildings: save.buildings.map(b => b.id) });
   const migrated = engine.save();
-  expect(migrated.schemaVersion).toBe(2);
+  expect(migrated.schemaVersion).toBe(4);
   const stats = engine.city.getStats();
   const homes = migrated.buildings.filter(b => migrated.tiles[b.id] === 2);
   expect(stats.population).toBe(homes.length * 4);

@@ -1,19 +1,30 @@
 import { Application, Assets, Graphics, type Texture } from 'pixi.js';
 import cityUrl from '../assets/city.png';
 import tilesUrl from '../assets/tiles.png';
-import { MAP_SIZE, TILE_SIZE, type Cell } from '../simulation/TileMap';
-import { selection, type Tool } from '../app/tools';
+import { isFacility, isRoad, MAP_SIZE, TILE_SIZE, type Cell } from '../simulation/TileMap';
+import { selection, type Overlay, type Tool } from '../app/tools';
 import { Camera } from './Camera';
 import { TileRenderer } from './TileRenderer';
 import { commuterPosition } from './commuterPosition';
-import { shiftPhase, workShift } from '../simulation/WorkShift';
+import { workShift } from '../simulation/WorkShift';
+import { utilities } from '../simulation/Utilities';
+
+/**
+ * How long a commuter takes per tile, in milliseconds at 1× speed. Trips start by the game
+ * clock but run at this pace: a game day lasts eight seconds, so a commute timed in game hours
+ * would be over in a blink.
+ */
+const PACE = { walk: 900, drive: 450 };
+/** Commuters set out this many game hours before their shift. */
+const HEAD_START = 2;
 
 import type { BuildingSystem } from '../simulation/BuildingSystem';
 
 export class CityRenderer {
   refresh?: () => void;
 
-  constructor(private readonly city: BuildingSystem, private readonly speed: () => number, private readonly hour: () => number, private readonly operating: (cell: Cell) => boolean, private readonly facilities: () => readonly Cell[]) {}
+  constructor(private readonly city: BuildingSystem, private readonly speed: () => number,
+    private readonly hour: () => number, private readonly overlay: () => Overlay) {}
   private app?: Application;
   private observer?: ResizeObserver;
 
@@ -40,11 +51,12 @@ export class CityRenderer {
     const canvas = app.canvas;
     app.stage.addChild(tiles.view);
     const people = new Graphics();
-    const infrastructure = new Graphics();
-    app.stage.addChild(infrastructure, people);
+    app.stage.addChild(people);
     host.appendChild(canvas);
 
     let animationTime = 0;
+    // Where each commuter is, by home and workplace: settled at one end, or since when on the way.
+    const trips = new Map<string, { at: 'home' | 'work'; since?: number }>();
     const drawPeople = () => {
       people.clear();
       people.position.set(camera.x, camera.y);
@@ -57,11 +69,27 @@ export class CityRenderer {
         const mode = driving ? 'drive' : 'walk';
         const workplace = { x: route.workId % MAP_SIZE, y: Math.floor(route.workId / MAP_SIZE) };
         const zone = this.city.map.get(workplace);
-        if (!this.operating(workplace) || (zone !== 'commercial' && zone !== 'industrial')) continue;
+        if (zone !== 'commercial' && zone !== 'industrial') continue;
         const { start, end } = workShift(zone, route.workId);
-        const travel = Math.min(3, 1 + route.path.length * (driving ? 0.08 : 0.18));
-        const { progress, returning } = shiftPhase(this.hour(), start, end, travel);
-        if (progress === undefined) continue;
+        const sinceStart = (this.hour() - start + 24) % 24;
+        const wanted = sinceStart < end - start || sinceStart >= 24 - HEAD_START ? 'work' : 'home';
+        const key = `${route.homeId}:${route.workId}`;
+        let trip = trips.get(key);
+        if (!trip) trips.set(key, trip = { at: 'home' });
+        const duration = (route.path.length + 1) * PACE[mode];
+        if (trip.since !== undefined && animationTime - trip.since >= duration) {
+          trip = { at: trip.at === 'home' ? 'work' : 'home' };
+          trips.set(key, trip);
+        }
+        if (trip.since === undefined) {
+          if (trip.at === wanted) continue;
+          // Stagger departures a little so a household does not leave as one stack.
+          trip.since = animationTime + (i % 5) * 120;
+        }
+        const elapsed = animationTime - trip.since;
+        if (elapsed < 0) continue;
+        const returning = trip.at === 'work';
+        const progress = returning ? 1 - elapsed / duration : elapsed / duration;
         const position = commuterPosition(route, time, mode, progress, returning);
         if (!position) continue;
         const x = Math.round(position.x * TILE_SIZE + 12);
@@ -94,21 +122,20 @@ export class CityRenderer {
     app.start();
 
     let preview: Cell[] = [];
+    let hover: Cell | undefined;
     let selected: Cell | undefined;
     let drag: { id: number; tool: Tool; start: Cell; x: number; y: number } | undefined;
     const draw = () => {
-      tiles.draw(this.city, camera, app.screen.width, app.screen.height, preview, selected);
+      // Placing a plant or tower shows what it would reach, and which buildings are served now.
+      const tool = getTool();
+      const inspected = selected && map.get(selected);
+      const range = isFacility(tool) && hover ? { centre: hover, radius: utilities.radius, kind: tool } :
+        selected && isFacility(inspected) ? { centre: selected, radius: utilities.radius, kind: inspected } :
+        undefined;
+      const layer = this.overlay();
+      tiles.draw(this.city, camera, app.screen.width, app.screen.height, preview, selected,
+        layer === 'none' && isFacility(tool) ? tool : layer, range);
       drawPeople();
-      infrastructure.clear();
-      infrastructure.position.set(camera.x, camera.y);
-      infrastructure.scale.set(camera.scale);
-      this.facilities().forEach(({ x, y }, index) => {
-        const left = x * TILE_SIZE;
-        const top = y * TILE_SIZE;
-        infrastructure.rect(left + 4, top + 5, 24, 23).fill(0x26353e);
-        infrastructure.rect(left + 8, top + 8, 16, 11).fill(index ? 0x74c7ed : 0xf4ca65);
-        infrastructure.rect(left + 9, top + 20, 14, 5).fill(0x83949e);
-      });
       app.render();
     };
     this.refresh = draw;
@@ -136,8 +163,17 @@ export class CityRenderer {
     }, { signal });
 
     canvas.addEventListener('pointermove', event => {
-      if (!drag || drag.id !== event.pointerId) return;
       const { x, y } = position(event);
+      if (!drag) {
+        const cell = camera.cellAt(x, y);
+        const next = isFacility(getTool()) && map.get(cell) !== undefined ? cell : undefined;
+        if (next?.x !== hover?.x || next?.y !== hover?.y) {
+          hover = next;
+          draw();
+        }
+        return;
+      }
+      if (drag.id !== event.pointerId) return;
       if (drag.tool === 'pan') camera.pan(x - drag.x, y - drag.y, app.screen.width, app.screen.height);
       else preview = selection(drag.tool, drag.start, boundedCell(x, y));
       drag.x = x;
@@ -160,12 +196,19 @@ export class CityRenderer {
         inspect(start);
       } else if (tool !== 'pan') {
         const cells = selection(tool, start, boundedCell(x, y));
-        const result = this.city.execute(tool === 'road' ? { type: 'BUILD_ROAD', path: cells } :
+        const result = this.city.execute(isRoad(tool) ? { type: 'BUILD_ROAD', path: cells, road: tool } :
           tool === 'demolish' ? { type: 'DEMOLISH', ...start } :
+          isFacility(tool) ? { type: 'BUILD_FACILITY', ...start, facility: tool } :
+          tool === 'park' ? { type: 'BUILD_PARK', tiles: cells } :
           { type: 'SET_ZONE', tiles: cells, zone: tool });
-        report(result.error ?? (result.changed.length ? '已更新地圖。' : '地圖無變更。'));
+        report(result.error ?? (result.changed.length ? `已更新地圖，花費 $${result.cost}。` : '地圖無變更。'));
       }
       clearDrag(event);
+    }, { signal });
+    canvas.addEventListener('pointerleave', () => {
+      if (!hover) return;
+      hover = undefined;
+      draw();
     }, { signal });
     canvas.addEventListener('pointercancel', clearDrag, { signal });
     canvas.addEventListener('lostpointercapture', clearDrag, { signal });

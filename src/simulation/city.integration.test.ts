@@ -24,30 +24,32 @@ function planTown() {
 
 it('counts thirty-day months from the first day of year one', () => {
   expect(dateAt(0)).toEqual({ year: 1, month: 1, day: 1 });
-  expect(dateAt(29)).toEqual({ year: 1, month: 1, day: 30 });
-  expect(dateAt(30)).toEqual({ year: 1, month: 2, day: 1 });
-  expect(dateAt(360)).toEqual({ year: 2, month: 1, day: 1 });
+  expect(dateAt(29 * calendar.ticksPerDay)).toEqual({ year: 1, month: 1, day: 30 });
+  expect(dateAt(MONTH)).toEqual({ year: 1, month: 2, day: 1 });
+  expect(dateAt(12 * MONTH)).toEqual({ year: 2, month: 1, day: 1 });
 });
 
 it('grows a blank map into a small town and then settles', () => {
   const engine = planTown();
   expect(engine.city.getStats().buildings).toBe(0);
 
-  engine.advance(MONTH);
+  engine.advance(40);
   const early = engine.city.getStats();
   expect(early.population).toBeGreaterThan(0);
   expect(early.jobs).toBeGreaterThan(0);
 
-  engine.advance(5 * MONTH);
+  engine.advance(6 * MONTH - 40);
   const grown = engine.city.getStats();
   expect(grown.buildings).toBeGreaterThan(early.buildings);
   expect(grown.buildings).toBeLessThanOrEqual(40);
   expect(row(8, 5, 24).some(cell => engine.city.hasBuilding(cell))).toBe(false);
   expect(dateAt(engine.getSnapshot().tick)).toEqual({ year: 1, month: 7, day: 1 });
 
-  // Once every reachable lot is built, more time changes nothing.
+  // Once every reachable lot is built, more time changes nothing but the balance.
   engine.advance(12 * MONTH);
-  expect(engine.city.getStats()).toEqual(grown);
+  const later = engine.city.getStats();
+  expect({ ...later, funds: 0 }).toEqual({ ...grown, funds: 0 });
+  expect(later.funds).toBe(grown.funds + 12 * grown.budget.net);
 });
 
 it('plays out identically from the same plan, and from a save made part-way', () => {

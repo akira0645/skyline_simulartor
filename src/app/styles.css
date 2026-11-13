@@ -63,6 +63,11 @@ h1 {
 }
 .stats dt { color: var(--steel); }
 .stats dd { margin: 0; font-variant-numeric: tabular-nums; }
+.stats .demand dd { display: flex; align-items: center; gap: 0.4rem; }
+.stats .demand meter { width: 3rem; height: 0.6rem; }
+.stats .loss { color: #d9423a; }
+.tools button small { color: var(--steel); font-variant-numeric: tabular-nums; }
+.tools button[aria-pressed="true"] small { color: inherit; }
 
 .board { display: flex; gap: 0.75rem; }
 .board aside {
@@ -96,7 +101,8 @@ h1 {
   touch-action: none;
 }
 
-.tools { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1rem; }
+.tools { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin-top: 1rem; }
+.tools > span { color: var(--steel); }
 .tools button {
   display: inline-flex;
   align-items: center;
@@ -135,6 +141,10 @@ h1 {
 [data-tool="residential"] { --swatch: var(--residential); }
 [data-tool="commercial"] { --swatch: var(--commercial); }
 [data-tool="industrial"] { --swatch: var(--industrial); }
+[data-tool="avenue"] { --swatch: #f2c94c; }
+[data-tool="park"] { --swatch: #8fd18a; }
+[data-tool="power"] { --swatch: #f4ca65; }
+[data-tool="water"] { --swatch: #74c7ed; }
 [data-tool="demolish"] { --swatch: var(--grass); }
 
 .clock { align-items: center; margin-top: 0; }

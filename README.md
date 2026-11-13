@@ -25,3 +25,7 @@ npm run test
 - `src/app/` 負責 React 主畫面及畫布生命週期。
 - `src/rendering/` 管理 PixiJS 畫布。
 - `src/simulation/` 包含純 TypeScript 的 `SimulationEngine` 與 `WorldState` 骨架。獨立的 TypeScript 設定只載入 ECMAScript 標準函式庫。未來可由 Web Worker 匯入核心，並傳送可結構化複製的狀態快照。
+
+## 模擬時間
+
+上方顯示目前 Tick，可切換暫停、1×、2× 或 4×。1× 每秒推進一個 Tick，畫面幀率不影響模擬進度。

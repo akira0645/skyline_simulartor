@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { CityRenderer } from '../rendering/CityRenderer';
 import type { Tool } from './tools';
+import { SimulationClock, type SimulationSpeed } from '../simulation/SimulationClock';
+import { SimulationEngine } from '../simulation/SimulationEngine';
+
+const speeds = [0, 1, 2, 4] as const;
 
 const tools: [Tool, string][] = [
   ['pan', '移動'], ['road', '道路'], ['residential', '住宅'],
@@ -13,6 +17,28 @@ export function App() {
   const [tool, setTool] = useState<Tool>('road');
   const [failed, setFailed] = useState(false);
   const [message, setMessage] = useState('');
+  const [tick, setTick] = useState(0);
+  const [speed, setSpeed] = useState<SimulationSpeed>(1);
+  const [clock] = useState(() => new SimulationClock(
+    new SimulationEngine({ version: 1, seed: 42, tick: 0 }),
+  ));
+  const lastTime = useRef(0);
+
+  function updateClock() {
+    const now = performance.now();
+    setTick(clock.advance(now - lastTime.current));
+    lastTime.current = now;
+  }
+
+  useEffect(() => {
+    lastTime.current = performance.now();
+    const timer = window.setInterval(() => {
+      const now = performance.now();
+      setTick(clock.advance(now - lastTime.current));
+      lastTime.current = now;
+    }, 100);
+    return () => window.clearInterval(timer);
+  }, [clock]);
 
   useEffect(() => {
     const host = viewport.current;
@@ -35,6 +61,16 @@ export function App() {
   return (
     <main>
       <h1>Pixel City Simulator</h1>
+      <div className="tools clock" role="group" aria-label="模擬時間">
+        <span>Tick {tick}</span>
+        {speeds.map(value => (
+          <button key={value} type="button" aria-pressed={speed === value} onClick={() => {
+            updateClock();
+            clock.speed = value;
+            setSpeed(value);
+          }}>{value === 0 ? '暫停' : `${value}×`}</button>
+        ))}
+      </div>
       <div className="viewport" ref={viewport} role="region" aria-label="城市地圖" />
       {failed && <p role="alert">無法初始化城市地圖。</p>}
       <div className="tools" role="group" aria-label="地圖工具">

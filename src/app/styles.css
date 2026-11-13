@@ -43,3 +43,6 @@ h1 {
 }
 .tools button[aria-pressed="true"] { background: #b9d28d; color: #172318; }
 .hint { color: #c2d2c5; }
+
+.clock { align-items: center; margin-bottom: 0.75rem; }
+.clock span { min-width: 5rem; font-variant-numeric: tabular-nums; }

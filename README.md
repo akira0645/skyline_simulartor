@@ -1,6 +1,6 @@
 # Pixel City Simulator
 
-目前進度為 Task 01。開啟首頁會看到 React 主畫面與空白 PixiJS 畫布。
+首頁提供 128 × 128 格草地地圖。選道路拖曳鋪設直線，選住宅、商業或工業拖曳劃設矩形分區，選拆除後點擊地塊。選移動或按住滑鼠中鍵拖曳地圖，使用滾輪縮放。重新整理會重置地圖。
 
 ## 本機啟動
 
@@ -11,7 +11,7 @@ npm ci
 npm run dev
 ```
 
-在瀏覽器開啟 Vite 終端機顯示的網址。
+在瀏覽器開啟 Vite 終端機顯示的網址。若 PowerShell 封鎖 npm.ps1，請以 npm.cmd 執行上述指令。重新安裝依賴前，先用 Ctrl+C 停止開發伺服器。
 
 ```sh
 npm run build

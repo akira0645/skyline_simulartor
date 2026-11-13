@@ -28,3 +28,18 @@ h1 {
   display: block;
   image-rendering: pixelated;
 }
+
+.viewport { overflow: hidden; }
+.viewport canvas { touch-action: none; }
+.tools { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1rem; }
+.tools button {
+  font: inherit;
+  color: inherit;
+  background: #263e2d;
+  border: 1px solid #65836d;
+  border-radius: 0.35rem;
+  padding: 0.45rem 0.9rem;
+  cursor: pointer;
+}
+.tools button[aria-pressed="true"] { background: #b9d28d; color: #172318; }
+.hint { color: #c2d2c5; }

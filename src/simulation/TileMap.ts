@@ -12,6 +12,12 @@ export type GameCommand =
   | { type: 'DEMOLISH'; x: number; y: number };
 
 export class TileMap {
+  private roadVersion = 0;
+
+  get roadRevision(): number {
+    return this.roadVersion;
+  }
+
   private readonly tiles: Tile[] = Array<Tile>(MAP_SIZE ** 2).fill('grass');
 
   get({ x, y }: Cell): Tile | undefined {
@@ -35,6 +41,7 @@ export class TileMap {
     }
 
     const changed = cells.filter(cell => this.get(cell) !== tile);
+    if (changed.some(cell => tile === 'road' || this.get(cell) === 'road')) this.roadVersion++;
     for (const { x, y } of changed) this.tiles[y * MAP_SIZE + x] = tile;
     return { changed };
   }
@@ -44,6 +51,7 @@ export class TileMap {
   }
 
   load(codes: Uint8Array): void {
+    this.roadVersion++;
     codes.forEach((code, index) => { this.tiles[index] = TILES[code]; });
   }
 }

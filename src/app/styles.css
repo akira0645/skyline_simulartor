@@ -1,0 +1,30 @@
+:root {
+  font-family: system-ui, sans-serif;
+  color: #edf5ec;
+  background: #131d19;
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+}
+
+main {
+  width: min(72rem, calc(100% - 2rem));
+  margin: 2rem auto;
+}
+
+h1 {
+  font-size: clamp(1.25rem, 3vw, 2rem);
+}
+
+.viewport {
+  height: min(70vh, 44rem);
+  border: 1px solid #496355;
+  background: #253b30;
+}
+
+.viewport canvas {
+  display: block;
+  image-rendering: pixelated;
+}

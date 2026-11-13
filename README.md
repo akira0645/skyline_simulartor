@@ -1,1 +1,27 @@
-# skyline_simulartor
+# Pixel City Simulator
+
+目前進度為 Task 01。開啟首頁會看到 React 主畫面與空白 PixiJS 畫布。
+
+## 本機啟動
+
+需要 Node.js 20.19+（20.x）或 22.12+，以及 npm。
+
+```sh
+npm ci
+npm run dev
+```
+
+在瀏覽器開啟 Vite 終端機顯示的網址。
+
+```sh
+npm run build
+npm run test
+```
+
+建置先獨立檢查模擬核心，再檢查應用程式並輸出至 `dist/`。Vitest 在 Node 環境執行。
+
+## 專案架構
+
+- `src/app/` 負責 React 主畫面及畫布生命週期。
+- `src/rendering/` 管理 PixiJS 畫布。
+- `src/simulation/` 包含純 TypeScript 的 `SimulationEngine` 與 `WorldState` 骨架。獨立的 TypeScript 設定只載入 ECMAScript 標準函式庫。未來可由 Web Worker 匯入核心，並傳送可結構化複製的狀態快照。

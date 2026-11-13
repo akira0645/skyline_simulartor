@@ -1,4 +1,5 @@
-import { Application } from 'pixi.js';
+import { Application, Assets, type Texture } from 'pixi.js';
+import tilesUrl from '../assets/tiles.png';
 import { MAP_SIZE, type Cell } from '../simulation/TileMap';
 import { selection, type Tool } from '../app/tools';
 import { Camera } from './Camera';
@@ -17,7 +18,12 @@ export class CityRenderer {
     report: (message: string) => void): Promise<void> {
     const app = new Application();
     await app.init({ width: host.clientWidth, height: host.clientHeight,
-      background: '#263e2d', antialias: false, autoStart: false });
+      background: '#1d1f24', antialias: false, autoStart: false });
+    const sheet = await Assets.load<Texture>(tilesUrl).catch((error: unknown) => {
+      app.destroy(true);
+      throw error;
+    });
+    sheet.source.scaleMode = 'nearest';
     if (signal.aborted) {
       app.destroy(true);
       return;
@@ -26,7 +32,7 @@ export class CityRenderer {
     this.app = app;
     const map = this.city.map;
     const camera = new Camera();
-    const tiles = new TileRenderer();
+    const tiles = new TileRenderer(sheet.source);
     const canvas = app.canvas;
     app.stage.addChild(tiles.graphic);
     host.appendChild(canvas);

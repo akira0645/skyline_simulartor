@@ -72,23 +72,29 @@ export function App() {
 
   return (
     <main>
-      <h1>Pixel City Simulator</h1>
-      <div className="tools clock" role="group" aria-label="模擬時間">
-        <span>Tick {tick}</span>
-        {speeds.map(value => (
-          <button key={value} type="button" aria-pressed={speed === value} onClick={() => {
-            updateClock();
-            clock.speed = value;
-            setSpeed(value);
-          }}>{value === 0 ? '暫停' : `${value}×`}</button>
-        ))}
-      </div>
-      <p>人口 {stats.population} · 就業 {stats.employed} / {stats.jobs} · 建築 {stats.buildings}</p>
+      <header>
+        <h1>Pixel City Simulator</h1>
+        <div className="tools clock" role="group" aria-label="模擬時間">
+          <span>Tick {tick}</span>
+          {speeds.map(value => (
+            <button key={value} type="button" aria-pressed={speed === value} onClick={() => {
+              updateClock();
+              clock.speed = value;
+              setSpeed(value);
+            }}>{value === 0 ? '暫停' : `${value}×`}</button>
+          ))}
+        </div>
+      </header>
+      <dl className="stats">
+        <div><dt>人口</dt><dd>{stats.population}</dd></div>
+        <div><dt>就業</dt><dd>{stats.employed} / {stats.jobs}</dd></div>
+        <div><dt>建築</dt><dd>{stats.buildings}</dd></div>
+      </dl>
       <div className="viewport" ref={viewport} role="region" aria-label="城市地圖" />
       {failed && <p role="alert">無法初始化城市地圖。</p>}
       <div className="tools" role="group" aria-label="地圖工具">
         {tools.map(([value, label]) => (
-          <button key={value} type="button" aria-pressed={tool === value} onClick={() => {
+          <button key={value} type="button" data-tool={value} aria-pressed={tool === value} onClick={() => {
             activeTool.current = value;
             setTool(value);
             setMessage('');

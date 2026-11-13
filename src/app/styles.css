@@ -1,7 +1,20 @@
+/* Palette sampled from the tilesheet so the UI and the map share one set of colours. */
 :root {
-  font-family: system-ui, sans-serif;
-  color: #edf5ec;
-  background: #131d19;
+  --ink: #1d1f24;
+  --panel: #2b2d33;
+  --asphalt: #404040;
+  --slate: #787a7e;
+  --steel: #a6a9ae;
+  --paper: #d6dbe6;
+  --grass: #409c62;
+  --brick: #b97467;
+  --sand: #cdbe9e;
+  --dirt: #b48355;
+  --shadow: #101114;
+
+  font-family: "Cascadia Mono", Consolas, "Microsoft JhengHei", monospace;
+  color: var(--paper);
+  background: var(--ink);
   color-scheme: dark;
 }
 
@@ -11,38 +24,98 @@ body {
 
 main {
   width: min(72rem, calc(100% - 2rem));
-  margin: 2rem auto;
+  margin: 1.5rem auto;
+}
+
+header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
 }
 
 h1 {
-  font-size: clamp(1.25rem, 3vw, 2rem);
+  margin: 0;
+  font-size: clamp(1.1rem, 3vw, 1.6rem);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--sand);
+  text-shadow: 2px 2px 0 var(--shadow);
 }
+
+.stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0.75rem 0;
+}
+.stats div {
+  display: flex;
+  gap: 0.6rem;
+  padding: 0.3rem 0.7rem;
+  background: var(--panel);
+  border: 2px solid var(--asphalt);
+}
+.stats dt { color: var(--steel); }
+.stats dd { margin: 0; font-variant-numeric: tabular-nums; }
 
 .viewport {
-  height: min(70vh, 44rem);
-  border: 1px solid #496355;
-  background: #253b30;
+  height: min(68vh, 44rem);
+  overflow: hidden;
+  background: var(--ink);
+  border: 2px solid var(--slate);
+  box-shadow: 4px 4px 0 var(--shadow);
 }
-
 .viewport canvas {
   display: block;
   image-rendering: pixelated;
+  touch-action: none;
 }
 
-.viewport { overflow: hidden; }
-.viewport canvas { touch-action: none; }
 .tools { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1rem; }
 .tools button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
   font: inherit;
   color: inherit;
-  background: #263e2d;
-  border: 1px solid #65836d;
-  border-radius: 0.35rem;
-  padding: 0.45rem 0.9rem;
+  background: var(--panel);
+  border: 2px solid var(--slate);
+  border-radius: 0;
+  padding: 0.4rem 0.8rem;
+  box-shadow: 2px 2px 0 var(--shadow);
   cursor: pointer;
 }
-.tools button[aria-pressed="true"] { background: #b9d28d; color: #172318; }
-.hint { color: #c2d2c5; }
+.tools button:hover { border-color: var(--paper); }
+.tools button:focus-visible { outline: 2px solid var(--sand); outline-offset: 2px; }
+.tools button:active,
+.tools button[aria-pressed="true"] {
+  transform: translate(2px, 2px);
+  box-shadow: none;
+}
+.tools button[aria-pressed="true"] {
+  background: var(--sand);
+  border-color: var(--paper);
+  color: var(--ink);
+}
 
-.clock { align-items: center; margin-bottom: 0.75rem; }
-.clock span { min-width: 5rem; font-variant-numeric: tabular-nums; }
+/* Swatches match what each tool paints on the map. */
+.tools button[data-tool]:not([data-tool="pan"])::before {
+  content: "";
+  width: 0.75rem;
+  height: 0.75rem;
+  background: var(--swatch);
+  border: 2px solid var(--shadow);
+}
+[data-tool="road"] { --swatch: var(--asphalt); }
+[data-tool="residential"] { --swatch: var(--brick); }
+[data-tool="commercial"] { --swatch: var(--steel); }
+[data-tool="industrial"] { --swatch: var(--slate); }
+[data-tool="demolish"] { --swatch: var(--grass); }
+
+.clock { align-items: center; margin-top: 0; }
+.clock span { min-width: 5.5rem; color: var(--steel); font-variant-numeric: tabular-nums; }
+
+.hint { color: var(--steel); font-size: 0.9rem; }
+[role="alert"] { color: var(--brick); }

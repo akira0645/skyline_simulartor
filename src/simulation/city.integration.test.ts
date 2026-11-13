@@ -49,7 +49,7 @@ it('grows a blank map into a small town and then settles', () => {
   engine.advance(12 * MONTH);
   const later = engine.city.getStats();
   expect({ ...later, funds: 0 }).toEqual({ ...grown, funds: 0 });
-  expect(later.funds).toBe(grown.funds + 12 * grown.budget.net);
+  expect(later.funds).toBeCloseTo(grown.funds + 12 * grown.budget.net);
 });
 
 it('plays out identically from the same plan, and from a save made part-way', () => {

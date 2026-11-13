@@ -24,7 +24,9 @@ export function demoCity(engine: SimulationEngine) {
   const city = engine.city;
   const id = ({ x, y }: Cell) => y * MAP_SIZE + x;
   city.execute({ type: 'BUILD_ROAD', path: block(1, 18, 5, 5), road: 'avenue' });
-  for (const y of [2, 8]) city.execute({ type: 'BUILD_ROAD', path: block(1, 13, y, y) });
+  city.execute({ type: 'BUILD_ROAD', path: block(1, 13, 2, 2) });
+  // The south street runs on east past the plants and stations, but not up to the factories.
+  city.execute({ type: 'BUILD_ROAD', path: block(1, 18, 8, 8) });
   for (const x of [6, 13]) city.execute({ type: 'BUILD_ROAD', path: block(x, x, 2, 8) });
 
   city.execute({ type: 'SET_ZONE', tiles: [...block(1, 5, 3, 4), ...block(7, 12, 3, 4)], zone: 'residential' });
@@ -35,6 +37,16 @@ export function demoCity(engine: SimulationEngine) {
     city.execute({ type: 'BUILD_FACILITY', ...plant, facility: 'power' });
     city.execute({ type: 'BUILD_FACILITY', ...tower, facility: 'water' });
   }
+
+  // Fire and police cover for both halves, and schools and a clinic among the parks.
+  const stations = [
+    ['fire', 7, 9], ['police', 8, 9], ['fire', 16, 9], ['police', 17, 9],
+    // The schools and the clinic take three plots of the park strip, facing the north street.
+    ['school', 4, 1], ['school', 10, 1], ['clinic', 7, 1],
+  ] as const;
+  for (const [service, x, y] of stations) city.execute({ type: 'BUILD_SERVICE', x, y, service });
+  // Bus stops by the homes and by the factories, so some of the factory hands ride.
+  for (const [x, y] of [[3, 1], [9, 1], [16, 7]]) city.execute({ type: 'BUILD_BUS_STOP', x, y });
 
   const homes = [{ x: 1, y: 4 }, { x: 2, y: 4 }, { x: 8, y: 4 }, { x: 10, y: 4 }];
   const shops = [{ x: 2, y: 6 }, { x: 8, y: 6 }];

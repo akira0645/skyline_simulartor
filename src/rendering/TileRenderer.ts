@@ -1,5 +1,6 @@
 import { Container, Graphics, Rectangle, Texture, type TextureSource } from 'pixi.js';
-import { isFacility, isRoad, MAP_SIZE, TILE_SIZE, type Cell, type Facility, type Zone } from '../simulation/TileMap';
+import { isFacility, isRoad, isService, MAP_SIZE, TILE_SIZE, type Cell, type Facility, type Service,
+  type Zone } from '../simulation/TileMap';
 import type { Overlay } from '../app/tools';
 import { Camera } from './Camera';
 
@@ -21,9 +22,9 @@ const LOT_ROW = 1;
 const BUILDING_ROW = 2;
 // Columns of each building row by level: small buildings first, the largest last.
 const BUILDING_ART: Record<Zone, number[][]> = {
-  residential: [[0, 1, 2], [3, 4], [5]],
-  commercial: [[0, 1, 3], [2, 4], [5]],
-  industrial: [[1, 3], [0, 2], [4]],
+  residential: [[0, 1, 2, 10], [3, 4, 6, 7], [5, 8, 9]],
+  commercial: [[0, 1, 3], [2, 4, 6, 7], [5, 8, 9]],
+  industrial: [[1, 3, 5], [0, 2, 6], [4, 7, 8]],
 };
 const zoneIndex: Record<Zone, number> = { residential: 0, commercial: 1, industrial: 2 };
 // Bit per neighbouring road, matching the column order of the road row.
@@ -41,7 +42,18 @@ const LEVEL_PIP = 0xffd95a;
 const SERVED = 0x4fc46b;
 const UNSERVED = 0xd9423a;
 // Roof colours of the facilities, which are drawn here rather than taken from a sheet.
-const FACILITY_ROOF = { power: 0xf4ca65, water: 0x74c7ed };
+// The colour each civic building's reach is outlined in, and its column in the civic row.
+const FACILITY_ROOF: Record<Facility | Service | 'bus', number> = {
+  power: 0xf4ca65, water: 0x74c7ed, fire: 0xe36a55, police: 0x6f8fd0, school: 0xf0a55a, clinic: 0xf4f6f8,
+  bus: 0xf2c94c,
+};
+const WATER = [0x3f8fc4, 0x6fb4dc, 0x2f78ab];
+const SHORE = 0xd9cfa8;
+const RAIL = 0x8a5a3a;
+const CIVIC_ROW = 5;
+const CIVIC_ART: Record<Facility | Service | 'bus', number> =
+  { power: 0, water: 1, fire: 2, police: 3, school: 4, clinic: 5, bus: 6 };
+
 
 const hash = (x: number, y: number) =>
   (Math.imul(x, 73856093) ^ Math.imul(y, 19349663) ^ Math.imul(x + y, 83492791)) >>> 0;
@@ -74,7 +86,7 @@ export class TileRenderer {
 
   draw(city: BuildingSystem, camera: Camera, width: number, height: number, preview: Cell[],
     selected?: Cell, layer: Overlay = 'none',
-    range?: { centre: Cell; radius: number; kind: Facility }) {
+    range?: { centre: Cell; radius: number; kind: Facility | Service | 'bus' }, hour?: number) {
     const map = city.map;
     const start = camera.cellAt(0, 0);
     const end = camera.cellAt(width, height);
@@ -106,6 +118,32 @@ export class TileRenderer {
           } else if (roll < 8) {
             tileAt(BUSHES[(seed >>> 16) % BUSHES.length], x, y);
           }
+        } else if (tile === 'river' || tile === 'bridge') {
+          const left = x * TILE_SIZE;
+          const top = y * TILE_SIZE;
+          g.rect(left, top, TILE_SIZE, TILE_SIZE).fill(WATER[0]);
+          // Two ripples per tile, placed by the tile's own hash so the water does not look tiled.
+          g.rect(left + (seed >>> 3) % 20, top + 6 + (seed >>> 9) % 6, 10, 2).fill(WATER[1]);
+          g.rect(left + (seed >>> 13) % 18, top + 20 + (seed >>> 17) % 6, 12, 2).fill(WATER[2]);
+          // A strip of sand wherever the water meets land.
+          roadSides.forEach(([dx, dy], side) => {
+            const next = map.get({ x: x + dx, y: y + dy });
+            if (next === undefined || next === 'river' || next === 'bridge') return;
+            const across = side % 2 === 0;
+            g.rect(left + (side === 1 ? TILE_SIZE - 3 : 0), top + (side === 2 ? TILE_SIZE - 3 : 0),
+              across ? TILE_SIZE : 3, across ? 3 : TILE_SIZE).fill(SHORE);
+          });
+          if (tile === 'bridge') {
+            let mask = 0;
+            for (const [dx, dy, bit] of roadSides) {
+              if (isRoad(map.get({ x: x + dx, y: y + dy }))) mask |= bit;
+            }
+            // The deck is the road tile for its neighbours, with a wooden rail on the open sides.
+            const upright = (mask & 5) !== 0 && (mask & 10) === 0;
+            cityAt(upright ? 5 : 10, ROAD_ROW, x, y);
+            if (upright) g.rect(left, top, 4, TILE_SIZE).rect(left + 28, top, 4, TILE_SIZE).fill(RAIL);
+            else g.rect(left, top, TILE_SIZE, 4).rect(left, top + 28, TILE_SIZE, 4).fill(RAIL);
+          }
         } else if (isRoad(tile)) {
           let mask = 0;
           for (const [dx, dy, bit] of roadSides) {
@@ -135,13 +173,9 @@ export class TileRenderer {
             .rect(left, top, 3, TILE_SIZE).rect(left + 29, top, 3, TILE_SIZE).fill(0xd9cfa8);
           if (seed % 3) tileAt(BUSHES[(seed >>> 16) % BUSHES.length], x, y);
           else g.rect(left + 11, top + 11, 10, 10).fill(0xe8799a).rect(left + 14, top + 14, 4, 4).fill(0xf6e27a);
-        } else if (isFacility(tile)) {
+        } else if (isFacility(tile) || isService(tile) || tile === 'bus') {
           tileAt(GRASS[0], x, y);
-          const left = x * TILE_SIZE;
-          const top = y * TILE_SIZE;
-          g.rect(left + 4, top + 5, 24, 23).fill(0x26353e);
-          g.rect(left + 8, top + 8, 16, 11).fill(FACILITY_ROOF[tile]);
-          g.rect(left + 9, top + 20, 14, 5).fill(0x83949e);
+          cityAt(CIVIC_ART[tile], CIVIC_ROW, x, y);
         } else {
           cityAt(zoneIndex[tile], LOT_ROW, x, y);
           const building = city.getBuilding({ x, y });
@@ -182,10 +216,11 @@ export class TileRenderer {
           }
           if (layer === 'traffic') {
             if (!isRoad(map.get(cell))) continue;
-            const load = city.congestionAt(cell);
+            const load = city.congestionAt(cell, hour);
             colour = TRAFFIC_COLOURS.find(([limit]) => load <= limit)![1];
           } else if (city.hasBuilding(cell)) {
-            colour = city.isServed(cell, layer) ? SERVED : UNSERVED;
+            colour = (layer === 'bus' ? city.hasBus(cell) : isService(layer) ? city.isCovered(cell, layer) :
+              city.isServed(cell, layer)) ? SERVED : UNSERVED;
           }
           if (colour === undefined) continue;
           overlay.rect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE)

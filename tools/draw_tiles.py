@@ -6,8 +6,11 @@ Sheet layout (in tiles), mirrored by src/rendering/TileRenderer.ts:
   row 0      roads, column = neighbour mask (north 1, east 2, south 4, west 8)
   row 1      empty lots: residential, commercial, industrial
   rows 2-4   buildings: residential, commercial, industrial. Columns 0-3 are the original
-             four; 4 and up are the larger buildings of levels 2 and 3. Which column
+             four; after them come the larger buildings of levels 2 and 3, and repaints of
+             all of them so that neighbours of one level do not look alike. Which column
              belongs to which level is the BUILDING_ART table in TileRenderer.ts.
+  row 5      civic buildings: power plant, water tower, fire station, police station,
+             school, clinic, bus stop (CIVIC_ART in TileRenderer.ts)
 Buildings are transparent around their footprint and are drawn over their lot.
 Light comes from the top left; shadows fall to the bottom right.
 """
@@ -48,6 +51,18 @@ class Tile:
         self.rect(x0, y0, x0, y1, light)
         self.rect(x0, y1, x1, y1, dark)
         self.rect(x1, y0, x1, y1, dark)
+
+    def recolour(self, colours):
+        """A copy with some colours swapped: the same building in another paint."""
+        swaps = {rgba(old): rgba(new) for old, new in colours.items()}
+        copy = Tile()
+        copy.image = self.image.copy()
+        for y in range(T):
+            for x in range(T):
+                pixel = copy.image.getpixel((x, y))
+                if pixel in swaps:
+                    copy.image.putpixel((x, y), swaps[pixel])
+        return copy
 
     def window(self, x0, y0, x1, y1):
         self.rect(x0, y0, x1, y1, GLASS)
@@ -436,12 +451,145 @@ def heavy_plant():
     return t
 
 
+# --- Civic buildings
+def power_plant():
+    t = Tile()
+    t.shadow(1, 3, 14, 14)
+    t.slab(1, 6, 14, 14, '#5d6672', '#48505b', '#343a43')   # hall
+    for x in (2, 6):                       # cooling stacks
+        t.slab(x, 1, x + 3, 8, STEEL_LIGHT, STEEL, STEEL_DARK)
+        t.rect(x, 1, x + 3, 1, PAPER)
+    t.rect(11, 8, 13, 13, '#f4ca65')       # warning panel with a bolt
+    t.rect(12, 8, 12, 10, '#3a3a3a')
+    t.rect(11, 10, 12, 10, '#3a3a3a')
+    t.rect(11, 11, 11, 13, '#3a3a3a')
+    t.rect(3, 11, 7, 14, STEEL_DEEP)
+    return t
+
+
+def water_tower():
+    t = Tile()
+    t.shadow(3, 1, 12, 14)
+    t.slab(3, 1, 12, 8, '#a9dcf5', '#74c7ed', '#4a9cc4')    # tank
+    t.rect(3, 4, 12, 4, '#4a9cc4')
+    t.rect(5, 2, 7, 2, PAPER)
+    for x in (4, 11):                      # legs
+        t.rect(x, 9, x, 14, STEEL_DARK)
+    t.rect(7, 9, 8, 14, STEEL)             # riser pipe
+    t.rect(4, 12, 11, 12, STEEL_DEEP)
+    return t
+
+
+def fire_station():
+    t = Tile()
+    t.shadow(1, 1, 14, 14)
+    t.slab(1, 1, 14, 5, '#e36a55', '#c8463a', '#963026')    # roof
+    t.rect(11, 0, 13, 3, '#f1e3c2')        # hose tower
+    t.rect(11, 0, 13, 0, '#c8463a')
+    t.rect(1, 6, 14, 14, '#efe2cf')        # wall
+    t.rect(14, 6, 14, 14, '#c9bca8')
+    for x in (2, 8):                       # two engine bays
+        t.rect(x, 8, x + 4, 14, '#c8463a')
+        t.rect(x, 10, x + 4, 10, '#963026')
+        t.rect(x + 1, 8, x + 3, 9, GLASS_LIGHT)
+    t.rect(1, 6, 14, 6, '#f4ca65')
+    return t
+
+
+def police_station():
+    t = Tile()
+    t.shadow(1, 1, 14, 14)
+    t.slab(1, 1, 14, 5, '#5f7fb8', '#3f5f98', '#2c4470')    # roof
+    t.rect(7, 0, 8, 2, '#e04a3c')          # beacon
+    t.rect(1, 6, 14, 14, '#dfe4ec')        # wall
+    t.rect(14, 6, 14, 14, '#b4bac6')
+    t.rect(1, 6, 14, 7, '#3f5f98')         # blue band with a badge
+    t.rect(7, 6, 8, 7, '#f4ca65')
+    for x in (2, 11):
+        t.window(x, 9, x + 2, 11)
+    t.rect(6, 10, 9, 14, '#2c4470')        # door
+    t.rect(7, 11, 8, 14, GLASS)
+    return t
+
+
+def school():
+    t = Tile()
+    t.shadow(1, 2, 14, 14)
+    t.slab(1, 2, 14, 6, '#f0a55a', '#d98838', '#a96422')    # roof
+    t.rect(7, 0, 8, 4, '#f1e3c2')          # bell tower
+    t.rect(7, 0, 8, 0, '#a96422')
+    t.rect(7, 2, 8, 2, '#3a3a3a')
+    t.rect(1, 7, 14, 14, '#f6ecd2')        # wall
+    t.rect(14, 7, 14, 14, '#cfc4a6')
+    for x in (2, 5, 10, 13):
+        t.window(x, 9, x, 11)
+    t.rect(7, 10, 8, 14, WOOD_DARK)        # door
+    t.rect(1, 14, 5, 14, LEAF)             # playground grass
+    return t
+
+
+def clinic():
+    t = Tile()
+    t.shadow(1, 1, 14, 14)
+    t.slab(1, 1, 14, 5, '#f4f6f8', '#dfe4e8', '#b3bcc4')    # roof
+    t.rect(6, 2, 9, 4, '#e04a3c')          # red cross
+    t.rect(7, 1, 8, 5, '#e04a3c')
+    t.rect(1, 6, 14, 14, '#ecf1f4')        # wall
+    t.rect(14, 6, 14, 14, '#bcc6ce')
+    for x in (2, 11):
+        t.window(x, 8, x + 2, 10)
+    t.rect(6, 9, 9, 14, '#7fc6b8')         # entrance
+    t.rect(7, 10, 8, 14, GLASS_LIGHT)
+    t.rect(1, 12, 4, 12, '#e04a3c')
+    return t
+
+
+def bus_stop():
+    t = Tile()
+    t.shadow(2, 4, 13, 13)
+    t.slab(2, 4, 13, 7, '#f6d860', '#f2c94c', '#c49a2c')    # canopy
+    t.rect(3, 8, 3, 13, STEEL_DARK)        # posts
+    t.rect(12, 8, 12, 13, STEEL_DARK)
+    t.rect(4, 8, 11, 11, GLASS)            # glass back
+    t.rect(4, 8, 11, 8, GLASS_LIGHT)
+    t.rect(4, 12, 11, 12, WOOD)            # bench
+    t.rect(14, 5, 15, 8, '#3f6fb0')        # sign
+    t.rect(14, 9, 14, 13, STEEL_DARK)
+    return t
+
+
 ROWS = [
     [road(mask) for mask in range(16)],
     [residential_lot(), commercial_lot(), industrial_lot()],
-    [house_red(), house_blue(), cottage(), apartments(), condo(), tower()],
-    [shop_red(), shop_green(), office(), store_white(), department_store(), glass_tower()],
-    [factory(), warehouse(), tanks(), workshop(), heavy_plant()],
+    [house_red(), house_blue(), cottage(), apartments(), condo(), tower(),
+     # 6-7: level 2 repaints; 8-9: level 3 repaints; 10: a green-roofed house.
+     apartments().recolour({'#c98b74': '#8fa3b8', '#a86f5b': '#6d8196', '#e3d2b0': '#d9dde2',
+                            '#cdb994': '#b9bfc7', '#a8956f': '#8f97a1', '#bfa981': '#a3abb5'}),
+     condo().recolour({'#e9e2d0': '#cfe3ea', '#c2baa5': '#a3bcc6', '#d0705a': '#3f8f8a'}),
+     tower().recolour({'#d98f6f': '#7fa3c7', '#b06f54': '#5b7fa3', '#d0705a': '#3f5f85'}),
+     tower().recolour({'#d98f6f': '#d6cfb8', '#b06f54': '#aaa38c', '#f1e3c2': '#8fb39a',
+                       '#d8c59c': '#6f9a7d', '#ad9a70': '#527a5f', '#d0705a': '#527a5f'}),
+     house_red().recolour({'#b9584a': '#5f9a6a', '#d77c67': '#86bd8f', '#a84c40': '#4f8a5a',
+                           '#8e3d35': '#3f744a'})],
+    [shop_red(), shop_green(), office(), store_white(), department_store(), glass_tower(),
+     # 6-7: level 2 repaints; 8-9: level 3 repaints.
+     office().recolour({'#3f5f85': '#3f857a', '#2f4a6b': '#2f6b61', '#7f8da0': '#8da09a',
+                        '#5f6c7e': '#6c7e78', '#465162': '#51625c'}),
+     department_store().recolour({'#c8553d': '#3f6fb0', '#f0d9a0': '#d9dde2', '#dcc07e': '#b9bfc7',
+                                  '#b39a5c': '#8f97a1'}),
+     glass_tower().recolour({GLASS: '#6fc7a8', GLASS_LIGHT: '#a9ead2', GLASS_DARK: '#3f9678'}),
+     glass_tower().recolour({GLASS: '#c79a6f', GLASS_LIGHT: '#eac9a9', GLASS_DARK: '#96683f',
+                             '#9fb0c4': '#c4b09f', '#74859b': '#9b8574', '#4f5d70': '#705d4f'})],
+    [factory(), warehouse(), tanks(), workshop(), heavy_plant(),
+     # 5: a level 1 repaint; 6: a level 2 repaint; 7-8: level 3 repaints.
+     warehouse().recolour({'#7d95a8': '#a88a7d', '#a3b8c8': '#c8aea3', '#667d90': '#907266',
+                           '#55697a': '#7a5f55', '#e0b23e': '#5f9a6a', '#b98a26': '#3f744a'}),
+     factory().recolour({'#b3a892': '#a8b3bd', '#8f8672': '#7d8a96', '#9a5b4d': '#6d7379',
+                         '#5a332b': '#3f4347'}),
+     heavy_plant().recolour({'#e0b23e': '#74c7ed', '#c4962c': '#4a9cc4', '#96701c': '#2f7396'}),
+     heavy_plant().recolour({'#9a5b4d': '#6d7379', '#5a332b': '#3f4347', '#8d8f96': '#a8907d',
+                             '#e0b23e': '#d98838', '#c4962c': '#b06a22', '#96701c': '#7f4a14'})],
+    [power_plant(), water_tower(), fire_station(), police_station(), school(), clinic(), bus_stop()],
 ]
 
 if __name__ == '__main__':

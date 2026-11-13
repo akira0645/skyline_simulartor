@@ -29,15 +29,18 @@ it('values land by utilities, parks, pollution and commute', () => {
 
   city.execute({ type: 'BUILD_FACILITY', x: 1, y: 3, facility: 'water' });
   expect(city.landValueAt(home)).toBe(landValue.base);
+  // A plant with no road beside it gives no power.
   city.execute({ type: 'BUILD_FACILITY', x: 6, y: 7, facility: 'power' });
+  expect(city.landValueAt(home)).toBe(landValue.base);
+  city.execute({ type: 'BUILD_ROAD', path: [{ x: 6, y: 8 }] });
   expect(city.landValueAt(home)).toBe(landValue.base + landValue.utilities);
 
   // The plant is far enough away to leave the home clean; one next door is not.
-  city.execute({ type: 'BUILD_FACILITY', x: 0, y: 1, facility: 'power' });
+  city.execute({ type: 'BUILD_FACILITY', x: 0, y: 2, facility: 'power' });
   const smog = city.pollutionAt(home);
   expect(smog).toBeGreaterThan(0);
   expect(city.landValueAt(home)).toBeCloseTo(landValue.base + landValue.utilities - landValue.pollution * smog);
-  city.execute({ type: 'DEMOLISH', x: 0, y: 1 });
+  city.execute({ type: 'DEMOLISH', x: 0, y: 2 });
 
   const { strength, radius } = landValue.park;
   city.execute({ type: 'BUILD_PARK', tiles: [{ x: 1, y: 0 }] });
@@ -64,6 +67,7 @@ it('upgrades full buildings on good land, and further once parks raise its value
   engine.advance(800);
   expect(levels()).toEqual([[1, 4], [1, 3]]);
 
+  city.execute({ type: 'BUILD_ROAD', path: [{ x: 6, y: 8 }, { x: 7, y: 8 }] });
   city.execute({ type: 'BUILD_FACILITY', x: 6, y: 7, facility: 'power' });
   city.execute({ type: 'BUILD_FACILITY', x: 7, y: 7, facility: 'water' });
   expect(city.inspect(home)).toMatchObject({ nextLevel: landValue.upgrade[0] });

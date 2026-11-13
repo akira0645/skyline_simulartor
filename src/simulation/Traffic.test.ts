@@ -30,6 +30,8 @@ it('slows a road tile down along the volume-delay curve', () => {
 
 it('adds up commuters per road tile and sends later homes around a jam', () => {
   // A direct street along y = 2 and a longer loop through y = 4 between the same two ends.
+  // The first home puts twice a street's capacity on the direct way; the second, one more.
+  const full = traffic.capacity;
   const first = { x: 0, y: 2 };
   const second = { x: 1, y: 1 };
   const work = { x: 8, y: 2 };
@@ -40,17 +42,17 @@ it('adds up commuters per road tile and sends later homes around a jam', () => {
     city.execute({ type: 'BUILD_ROAD', path: [{ x: 7, y: 3 }] });
     city.execute({ type: 'SET_ZONE', tiles: [first, second], zone: 'residential' });
     city.execute({ type: 'SET_ZONE', tiles: [work], zone: 'industrial' });
-    city.execute({ type: 'BUILD_FACILITY', x: 3, y: 0, facility: 'power' });
-    city.execute({ type: 'BUILD_FACILITY', x: 4, y: 0, facility: 'water' });
+    city.execute({ type: 'BUILD_FACILITY', x: 3, y: 1, facility: 'power' });
+    city.execute({ type: 'BUILD_FACILITY', x: 4, y: 1, facility: 'water' });
   }, [
-    { at: first, capacity: 80, occupants: 80 },
-    { at: second, capacity: 40, occupants: 40 },
-    { at: work, capacity: 120 },
+    { at: first, capacity: 2 * full, occupants: 2 * full },
+    { at: second, capacity: full, occupants: full },
+    { at: work, capacity: 3 * full },
   ]);
 
   const commutes = city.getCommutes();
   expect(commutes.map(({ homeId, workers, path }) => [homeId, workers, path.length]))
-    .toEqual([[id(first), 80, 7], [id(second), 40, 11]]);
+    .toEqual([[id(first), 2 * full, 7], [id(second), full, 11]]);
   expect(city.congestionAt({ x: 4, y: 2 })).toBe(2);
   expect(city.congestionAt({ x: 4, y: 4 })).toBe(1);
   expect(city.congestionAt({ x: 4, y: 3 })).toBe(0);
@@ -98,8 +100,8 @@ it('stops homes filling without work in reach, and fills them once a shortcut op
     city.execute({ type: 'BUILD_ROAD', path: row(5, 1, 14) });
     city.execute({ type: 'SET_ZONE', tiles: [home], zone: 'residential' });
     city.execute({ type: 'SET_ZONE', tiles: [work], zone: 'industrial' });
-    city.execute({ type: 'BUILD_FACILITY', x: 3, y: 3, facility: 'power' });
-    city.execute({ type: 'BUILD_FACILITY', x: 4, y: 3, facility: 'water' });
+    city.execute({ type: 'BUILD_FACILITY', x: 3, y: 2, facility: 'power' });
+    city.execute({ type: 'BUILD_FACILITY', x: 4, y: 2, facility: 'water' });
   }, [{ at: home, capacity: 4 }, { at: work, capacity: 5 }]);
   const { city } = engine;
 
@@ -123,6 +125,9 @@ it('serves the nearest buildings within reach, up to the capacity of each facili
   const plant = { x: 5, y: 0 };
   const { city } = cityWith(city => {
     city.execute({ type: 'SET_ZONE', tiles: [...block, outside], zone: 'residential' });
+    // Each plant needs a road beside it to run.
+    city.execute({ type: 'BUILD_ROAD', path: [{ x: 4, y: 0 }] });
+    city.execute({ type: 'BUILD_ROAD', path: [{ x: 7, y: 0 }] });
     city.execute({ type: 'BUILD_FACILITY', ...plant, facility: 'power' });
   }, [...block, outside].map(at => ({ at, capacity: 4 })));
   const powered = () => block.filter(cell => city.isServed(cell, 'power'));

@@ -25,9 +25,13 @@ it('fades with distance from a factory, adds up, and is cleaned by parks', () =>
   expect(city.pollutionAt({ x: -1, y: 0 })).toBe(0);
 
   // A power plant next door adds its own; the total stops at 100.
+  // It only runs, and only pollutes, once a road reaches it.
   city.execute({ type: 'BUILD_FACILITY', x: 11, y: 10, facility: 'power' });
+  expect(city.pollutionAt({ x: 11, y: 10 })).toBeCloseTo(strength * (1 - 1 / radius));
+  city.execute({ type: 'BUILD_ROAD', path: [{ x: 11, y: 9 }] });
   expect(city.pollutionAt({ x: 11, y: 10 })).toBe(100);
   city.execute({ type: 'DEMOLISH', x: 11, y: 10 });
+  city.execute({ type: 'DEMOLISH', x: 11, y: 9 });
 
   const before = city.pollutionAt({ x: 12, y: 10 });
   const result = city.execute({ type: 'BUILD_PARK', tiles: [{ x: 12, y: 10 }, { x: 13, y: 10 }] });
@@ -38,7 +42,7 @@ it('fades with distance from a factory, adds up, and is cleaned by parks', () =>
   expect(city.getStats().budget.upkeep).toBe(2 * economy.upkeep.park);
   expect(city.execute({ type: 'BUILD_PARK', tiles: [{ x: 5, y: 5 }] }).error).toBeUndefined();
   city.execute({ type: 'BUILD_ROAD', path: [{ x: 6, y: 5 }] });
-  expect(city.execute({ type: 'BUILD_PARK', tiles: [{ x: 6, y: 5 }] }).error).toBe('公園不能覆蓋道路。');
+  expect(city.execute({ type: 'BUILD_PARK', tiles: [{ x: 6, y: 5 }] }).error).toBe('道路上不能蓋公園，要先拆掉道路。');
 });
 
 it('keeps people out of homes beside factories until a park cleans the air', () => {
@@ -50,7 +54,7 @@ it('keeps people out of homes beside factories until a park cleans the air', () 
   city.execute({ type: 'BUILD_ROAD', path: row(2, 1, 8) });
   city.execute({ type: 'SET_ZONE', tiles: homes, zone: 'residential' });
   city.execute({ type: 'SET_ZONE', tiles: factories, zone: 'industrial' });
-  city.execute({ type: 'BUILD_FACILITY', x: 12, y: 1, facility: 'water' });
+  city.execute({ type: 'BUILD_FACILITY', x: 8, y: 3, facility: 'water' });
   engine.load({ ...engine.save(), buildings: [
     ...homes.map(home => ({ id: id(home), capacity: 4, occupants: 0 })),
     ...factories.map(factory => ({ id: id(factory), capacity: 5, occupants: 0 })),

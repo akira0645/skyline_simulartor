@@ -10,6 +10,8 @@ export const landValue = {
   utilities: 25,
   /** Each park adds its strength on its own tile, fading to nothing at its radius; up to `max`. */
   park: { strength: 10, radius: 4, max: 25 },
+  /** Added within this many tiles of water. */
+  waterfront: { value: 8, radius: 3 },
   /** Taken off per point of pollution. Factories do not mind their own smoke. */
   pollution: 0.6,
   /** Taken off homes per minute of average commute, up to `max`. */
@@ -17,7 +19,7 @@ export const landValue = {
   /** The value a building needs to reach level 2 and level 3. */
   upgrade: [45, 65],
   /** Chance per growth step that a full building on good enough land upgrades. */
-  chance: 0.1,
+  chance: 0.04,
   /** What a building holds at levels 1, 2 and 3. */
   capacity: {
     residential: [4, 6, 10], commercial: [3, 5, 8], industrial: [5, 8, 12],

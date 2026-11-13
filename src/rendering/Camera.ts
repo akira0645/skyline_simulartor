@@ -4,6 +4,8 @@ export class Camera {
   x = 0;
   y = 0;
   scale = 1;
+  /** How far, in screen pixels, the map may be dragged past each edge of the view. */
+  margin = 0;
 
   cellAt(x: number, y: number): Cell {
     return {
@@ -14,8 +16,9 @@ export class Camera {
 
   pan(dx: number, dy: number, width: number, height: number) {
     const size = MAP_SIZE * TILE_SIZE * this.scale;
-    this.x = Math.max(Math.min(0, width - size), Math.min(0, this.x + dx));
-    this.y = Math.max(Math.min(0, height - size), Math.min(0, this.y + dy));
+    const { margin } = this;
+    this.x = Math.max(Math.min(0, width - size) - margin, Math.min(margin, this.x + dx));
+    this.y = Math.max(Math.min(0, height - size) - margin, Math.min(margin, this.y + dy));
   }
 
   zoom(x: number, y: number, delta: number, width: number, height: number) {

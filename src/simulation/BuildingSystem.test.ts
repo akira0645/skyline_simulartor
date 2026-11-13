@@ -16,10 +16,18 @@ it('grows only next to roads, applies capacity, and removes demolished buildings
   expect(city.hasBuilding(remote)).toBe(false);
   expect(city.getStats()).toMatchObject({ housing: 2, jobs: 2, buildings: 2 });
   expect(city.inspect(home)).toMatchObject({ tile: 'residential', building: true, roadAccess: true, capacity: 2, power: false, water: false });
-  city.execute({ type: 'BUILD_FACILITY', x: 2, y: 2, facility: 'power' });
-  city.execute({ type: 'BUILD_FACILITY', x: 3, y: 2, facility: 'water' });
+  // A plant away from any road does nothing; beside the road it works.
+  city.execute({ type: 'BUILD_FACILITY', x: 3, y: 2, facility: 'power' });
+  expect(city.inspect({ x: 3, y: 2 })).toMatchObject({ running: false, serving: 0 });
+  expect(city.inspect(home)).toMatchObject({ power: false });
+  expect(city.getStats().idle).toBe(1);
+  city.execute({ type: 'DEMOLISH', x: 3, y: 2 });
+  city.execute({ type: 'BUILD_FACILITY', x: 0, y: 1, facility: 'power' });
+  city.execute({ type: 'BUILD_FACILITY', x: 1, y: 0, facility: 'water' });
+  expect(city.inspect({ x: 0, y: 1 })).toMatchObject({ running: true, serving: 2 });
+  expect(city.getStats().idle).toBe(0);
   expect(city.inspect(home)).toMatchObject({ capacity: 4, power: true, water: true });
-  city.execute({ type: 'DEMOLISH', x: 2, y: 2 });
+  city.execute({ type: 'DEMOLISH', x: 0, y: 1 });
   expect(city.inspect(home)).toMatchObject({ capacity: 2, power: false, water: true });
   expect(city.inspect(remote)).toMatchObject({ tile: 'residential', building: false, roadAccess: false });
   expect(city.inspect({ x: 1, y: 1 })).toMatchObject({ tile: 'road' });

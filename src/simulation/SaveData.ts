@@ -34,6 +34,8 @@ export interface SaveData {
   funds: number;
   /** How many population milestones have been paid out. */
   rank: number;
+  /** Tax rate in percent. Saves from before it could be set have none and load at the default. */
+  taxRate: number;
 }
 
 const zonedCode = (code: number) => isZone(TILES[code]);
@@ -48,6 +50,10 @@ export function parseSave(data: unknown): SaveData {
   // Saves from before the city had money start with the opening balance and no milestones paid.
   const { funds = economy.startingFunds, rank = 0 } = (schemaVersion as number) < 4 ? {} :
     data as Record<string, unknown>;
+  const { taxRate = economy.taxRate.default } = data as Record<string, unknown>;
+  if (!isCount(taxRate) || taxRate < economy.taxRate.min || taxRate > economy.taxRate.max) {
+    throw new Error('存檔資料損壞。');
+  }
   if (!Number.isFinite(funds) || !isCount(rank) || rank > milestones.length) {
     throw new Error('存檔資料損壞。');
   }
@@ -97,5 +103,5 @@ export function parseSave(data: unknown): SaveData {
     if (available < 0) throw new Error('存檔資料損壞。');
   }
   return { schemaVersion: SCHEMA_VERSION, seed: seed as number, tick, tiles, zones, buildings: records,
-    funds: funds as number, rank };
+    funds: funds as number, rank, taxRate };
 }

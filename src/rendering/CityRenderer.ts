@@ -1,7 +1,13 @@
 import { Application, Assets, Graphics, type Texture } from 'pixi.js';
 import cityUrl from '../assets/city.png';
 import tilesUrl from '../assets/tiles.png';
-import { isFacility, isRoad, MAP_SIZE, TILE_SIZE, type Cell } from '../simulation/TileMap';
+import { isFacility, isRoad, isService, MAP_SIZE, TILE_SIZE, type Cell } from '../simulation/TileMap';
+import { services } from '../simulation/Services';
+import { traffic } from '../simulation/Traffic';
+import { drawScene, sceneLength, type Scene } from './emergencyScenes';
+
+/** An emergency older than this many ticks when first seen is not played back. */
+const FRESH_TICKS = 16;
 import { selection, type Overlay, type Tool } from '../app/tools';
 import { Camera } from './Camera';
 import { TileRenderer } from './TileRenderer';
@@ -22,6 +28,8 @@ import type { BuildingSystem } from '../simulation/BuildingSystem';
 
 export class CityRenderer {
   refresh?: () => void;
+  /** Clears the inspected tile. */
+  deselect?: () => void;
 
   constructor(private readonly city: BuildingSystem, private readonly speed: () => number,
     private readonly hour: () => number, private readonly overlay: () => Overlay) {}
@@ -47,11 +55,18 @@ export class CityRenderer {
     this.app = app;
     const map = this.city.map;
     const camera = new Camera();
+    // The panels float over the map: leave room to drag any corner out from under them, and
+    // start with the map's corner clear of the top bar.
+    camera.margin = 260;
+    camera.pan(24, 96, app.screen.width, app.screen.height);
     const tiles = new TileRenderer(sheets[0].source, sheets[1].source);
     const canvas = app.canvas;
     app.stage.addChild(tiles.view);
     const people = new Graphics();
-    app.stage.addChild(people);
+    // Flames, smoke and emergency vehicles, above the commuters.
+    const effects = new Graphics();
+    app.stage.addChild(people, effects);
+    const scenes = new Map<string, Scene>();
     host.appendChild(canvas);
 
     let animationTime = 0;
@@ -97,6 +112,18 @@ export class CityRenderer {
         if (driving) {
           const next = commuterPosition(route, time, mode, Math.max(0, progress - 0.01), returning);
           const vertical = next && Math.abs(next.y - position.y) > Math.abs(next.x - position.x);
+          if (route.riders > 0) {
+            // A bus: longer than a car, yellow, with a row of windows.
+            const left = x + 4 - (vertical ? 6 : 12);
+            const top = y + 5 - (vertical ? 12 : 6);
+            people.rect(left, top, vertical ? 12 : 24, vertical ? 24 : 12).fill(0x232831);
+            people.rect(left + 1, top + 1, vertical ? 10 : 22, vertical ? 22 : 10).fill(0xf2c94c);
+            for (let pane = 0; pane < 3; pane++) {
+              people.rect(left + (vertical ? 3 : 3 + pane * 7), top + (vertical ? 3 + pane * 7 : 3),
+                vertical ? 6 : 5, vertical ? 5 : 6).fill(0xa9d8de);
+            }
+            continue;
+          }
           const left = x + 4 - (vertical ? 5 : 8);
           const top = y + 5 - (vertical ? 8 : 5);
           people.rect(left, top, vertical ? 10 : 16, vertical ? 16 : 10).fill(0x232831);
@@ -113,32 +140,63 @@ export class CityRenderer {
         people.rect(x + 1, y + 8, 2, 2 + stride).rect(x + 5, y + 8, 2, 3 - stride).fill(0xece6dd);
       }
     };
+    const drawEffects = () => {
+      effects.clear();
+      effects.position.set(camera.x, camera.y);
+      effects.scale.set(camera.scale);
+      for (const event of this.city.getEvents()) {
+        const key = `${event.tick}:${event.kind}`;
+        if (scenes.has(key) || this.city.now - event.tick > FRESH_TICKS) continue;
+        const from = event.station && this.city.roadBeside(event.station);
+        const to = this.city.roadBeside(event.cell);
+        const route = from && to ? this.city.roadGraph.shortestPath(from, to)?.path : undefined;
+        scenes.set(key, { event, since: animationTime, route });
+      }
+      for (const [key, scene] of scenes) {
+        const age = animationTime - scene.since;
+        if (age > sceneLength(scene) || this.city.now < scene.event.tick) scenes.delete(key);
+        else drawScene(effects, scene, age);
+      }
+    };
     app.ticker.add(ticker => {
       const speed = this.speed();
       if (!speed || !this.city.getCommutes().length) return;
       animationTime += ticker.deltaMS * speed;
       drawPeople();
+      drawEffects();
     });
     app.start();
 
     let preview: Cell[] = [];
     let hover: Cell | undefined;
     let selected: Cell | undefined;
-    let drag: { id: number; tool: Tool; start: Cell; x: number; y: number } | undefined;
+    // `fromX` and `fromY` are where the pointer went down; `x` and `y` follow it.
+    let drag: { id: number; tool: Tool; start: Cell; x: number; y: number; fromX: number; fromY: number } |
+      undefined;
     const draw = () => {
       // Placing a plant or tower shows what it would reach, and which buildings are served now.
       const tool = getTool();
       const inspected = selected && map.get(selected);
-      const range = isFacility(tool) && hover ? { centre: hover, radius: utilities.radius, kind: tool } :
-        selected && isFacility(inspected) ? { centre: selected, radius: utilities.radius, kind: inspected } :
-        undefined;
+      const reach = (kind: string | undefined, centre: Cell | undefined) =>
+        !centre ? undefined :
+        isFacility(kind) ? { centre, radius: utilities.radius, kind } :
+        isService(kind) ? { centre, radius: services.radius[kind], kind } :
+        kind === 'bus' ? { centre, radius: traffic.bus.radius, kind: 'bus' as const } : undefined;
+      const range = reach(tool, hover) ?? reach(inspected, selected);
+
       const layer = this.overlay();
       tiles.draw(this.city, camera, app.screen.width, app.screen.height, preview, selected,
-        layer === 'none' && isFacility(tool) ? tool : layer, range);
+        layer === 'none' && (isFacility(tool) || isService(tool) || tool === 'bus') ? tool : layer,
+        range, this.hour());
       drawPeople();
+      drawEffects();
       app.render();
     };
     this.refresh = draw;
+    this.deselect = () => {
+      selected = undefined;
+      draw();
+    };
     const position = (event: MouseEvent) => {
       const rect = canvas.getBoundingClientRect();
       return { x: event.clientX - rect.left, y: event.clientY - rect.top };
@@ -154,11 +212,12 @@ export class CityRenderer {
       const { x, y } = position(event);
       const tool = event.button === 1 ? 'pan' : getTool();
       const start = camera.cellAt(x, y);
-      if (tool !== 'pan' && map.get(start) === undefined) return;
+      const looking = tool === 'pan' || tool === 'inspect';
+      if (!looking && map.get(start) === undefined) return;
       event.preventDefault();
       canvas.setPointerCapture(event.pointerId);
-      drag = { id: event.pointerId, tool, start, x, y };
-      preview = tool === 'pan' ? [] : [start];
+      drag = { id: event.pointerId, tool, start, x, y, fromX: x, fromY: y };
+      preview = looking ? [] : [start];
       draw();
     }, { signal });
 
@@ -166,7 +225,9 @@ export class CityRenderer {
       const { x, y } = position(event);
       if (!drag) {
         const cell = camera.cellAt(x, y);
-        const next = isFacility(getTool()) && map.get(cell) !== undefined ? cell : undefined;
+        const tool = getTool();
+        const next = (isFacility(tool) || isService(tool) || tool === 'bus') && map.get(cell) !== undefined ?
+          cell : undefined;
         if (next?.x !== hover?.x || next?.y !== hover?.y) {
           hover = next;
           draw();
@@ -174,8 +235,10 @@ export class CityRenderer {
         return;
       }
       if (drag.id !== event.pointerId) return;
+      // With the look tool a press that moves is a drag of the map; one that stays put is a click.
+      if (drag.tool === 'inspect' && Math.hypot(x - drag.fromX, y - drag.fromY) > 4) drag.tool = 'pan';
       if (drag.tool === 'pan') camera.pan(x - drag.x, y - drag.y, app.screen.width, app.screen.height);
-      else preview = selection(drag.tool, drag.start, boundedCell(x, y));
+      else if (drag.tool !== 'inspect') preview = selection(drag.tool, drag.start, boundedCell(x, y));
       drag.x = x;
       drag.y = y;
       draw();
@@ -192,16 +255,23 @@ export class CityRenderer {
       const { tool, start } = drag;
       const { x, y } = position(event);
       if (tool === 'inspect') {
-        selected = start;
-        inspect(start);
+        if (map.get(start) !== undefined) {
+          selected = start;
+          inspect(start);
+        }
       } else if (tool !== 'pan') {
         const cells = selection(tool, start, boundedCell(x, y));
         const result = this.city.execute(isRoad(tool) ? { type: 'BUILD_ROAD', path: cells, road: tool } :
           tool === 'demolish' ? { type: 'DEMOLISH', ...start } :
           isFacility(tool) ? { type: 'BUILD_FACILITY', ...start, facility: tool } :
+          isService(tool) ? { type: 'BUILD_SERVICE', ...start, service: tool } :
+          tool === 'bus' ? { type: 'BUILD_BUS_STOP', ...start } :
           tool === 'park' ? { type: 'BUILD_PARK', tiles: cells } :
           { type: 'SET_ZONE', tiles: cells, zone: tool });
-        report(result.error ?? (result.changed.length ? `已更新地圖，花費 $${result.cost}。` : '地圖無變更。'));
+        const stranded = result.changed.length > 0 && (isFacility(tool) || isService(tool) || tool === 'bus') &&
+          !this.city.hasRoadAccess(start);
+        report(result.error ?? (stranded ? `蓋好了，花了 $${result.cost}。但是旁邊沒有路，要接上道路才會開始運作。` :
+          result.changed.length ? `完成，花了 $${result.cost}。` : '這裡已經是這樣了，沒有變動。'));
       }
       clearDrag(event);
     }, { signal });

@@ -25,12 +25,12 @@ it('charges per changed tile and refuses what the city cannot afford', () => {
   expect(funds()).toBe(economy.startingFunds - 12 * economy.cost.road - 4 * economy.cost.zone -
     economy.cost.power - economy.cost.demolish);
 
-  // Twelve plants are affordable, the thirteenth is not; a refused command changes nothing.
+  // The money runs out part-way through these; a refused command changes nothing.
   for (let x = 1; x <= 12; x++) city.execute({ type: 'BUILD_FACILITY', x, y: 2, facility: 'power' });
   const before = funds();
   expect(before).toBeLessThan(economy.cost.power);
   const refused = city.execute({ type: 'BUILD_FACILITY', x: 20, y: 2, facility: 'power' });
-  expect(refused).toMatchObject({ changed: [], cost: 0, error: expect.stringContaining('資金不足') });
+  expect(refused).toMatchObject({ changed: [], cost: 0, error: expect.stringContaining('錢不夠') });
   expect(city.map.get({ x: 20, y: 2 })).toBe('grass');
   expect(funds()).toBe(before);
   // A road too long for the balance is refused whole rather than paved part-way.
@@ -59,14 +59,17 @@ it('settles tax and upkeep once a month and keeps the balance in the save', () =
   expect(budget).toEqual({ tax, upkeep, net: tax - upkeep });
   expect(budget.net).toBeLessThan(0);
 
-  engine.advance(MONTH - 1);
+  // A thirtieth of the month's figure is paid each day, at the day's last tick.
+  engine.advance(calendar.ticksPerDay - 1);
   expect(city.getStats().funds).toBe(funds);
   engine.advance(1);
-  expect(city.getStats().funds).toBe(funds + budget.net);
+  expect(city.getStats().funds).toBeCloseTo(funds + budget.net / 30);
+  engine.advance(MONTH - calendar.ticksPerDay);
+  expect(city.getStats().funds).toBeCloseTo(funds + budget.net);
 
   const restored = start();
   restored.load(structuredClone(engine.save()));
-  expect(restored.city.getStats().funds).toBe(funds + budget.net);
+  expect(restored.city.getStats().funds).toBeCloseTo(funds + budget.net);
   // A save from before money existed starts with the opening balance.
   const old: Record<string, unknown> = { ...engine.save(), schemaVersion: 3 };
   delete old.funds;
@@ -99,8 +102,11 @@ it('pays each population milestone once', () => {
   expect(milestones[2].population).toBeGreaterThan(160);
   engine.advance(4);
   expect(city.getStats()).toMatchObject({ rank: 2, funds: paid });
+  // Nothing more is paid for the same milestones; the only change is a day's tax and upkeep.
   engine.advance(4);
-  expect(city.getStats()).toMatchObject({ rank: 2, funds: paid });
+  const after = city.getStats();
+  expect(after.rank).toBe(2);
+  expect(Math.abs(after.funds - paid)).toBeLessThan(100);
 });
 
 it('keeps avenues when a street is drawn across them, and joins both into one network', () => {

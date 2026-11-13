@@ -4,10 +4,12 @@ import { landValue, MAX_LEVEL } from './LandValue';
 import { pollution } from './Pollution';
 import { RoadGraph } from './RoadGraph';
 import type { SaveData, SavedBuilding } from './SaveData';
-import { isFacility, isRoad, isZone, MAP_SIZE, type Cell, type Facility, type GameCommand,
-  type Road, type TileMap, type Zone } from './TileMap';
+import { emergencies, services, SERVICES } from './Services';
+import { isFacility, isRoad, isService, isZone, MAP_SIZE, type Cell, type Facility, type GameCommand,
+  type Road, type Service, type TileMap, type Zone } from './TileMap';
 import { congestion, tileMinutes, traffic } from './Traffic';
 import { utilities } from './Utilities';
+import { rushShifts, shiftIndex, shifts } from './WorkShift';
 import { buildChance, growth, zoneDemand, type Demand } from './ZoneDemandSystem';
 
 const neighbors = [[0, -1], [1, 0], [0, 1], [-1, 0]];
@@ -24,15 +26,30 @@ export interface Commute {
   workers: number;
   /** Road tiles from the home's road to the workplace's road. */
   path: readonly Cell[];
-  /** Travel time over the path with everyone on the road. */
+  /** Travel time over the path with everyone on the same shift on the road. */
   minutes: number;
+  /** The workplace's shift, an index into WorkShift's `shifts`. */
+  shift: number;
+  /** How many of the workers go by bus. */
+  riders: number;
 }
 
 /** What holds a building back, most pressing first. */
 export type Issue = 'no-road' | 'no-power' | 'no-water' | 'no-jobs' | 'long-commute' | 'pollution' |
-  'vacancies';
+  'crime' | 'vacancies';
 export const ISSUES: readonly Issue[] =
-  ['no-road', 'no-power', 'no-water', 'no-jobs', 'long-commute', 'pollution', 'vacancies'];
+  ['no-road', 'no-power', 'no-water', 'no-jobs', 'long-commute', 'pollution', 'crime', 'vacancies'];
+
+/** Something that happened in the city, newest last. Not saved. */
+export interface CityEvent {
+  tick: number;
+  /** An emergency nobody came to, or the one the service in reach dealt with. */
+  kind: (typeof emergencies)[number]['trouble' | 'handled'];
+  cell: Cell;
+  /** The station that answered, when one did. */
+  station?: Cell;
+}
+const EVENT_LOG = 20;
 
 /** A deterministic 32-bit roll from the city seed, the tick and a salt. */
 function roll(seed: number, tick: number, salt: number): number {
@@ -48,19 +65,37 @@ export class BuildingSystem {
   private funds = economy.startingFunds;
   /** How many milestones the city has been paid for. */
   private rank = 0;
+  private taxRate: number = economy.taxRate.default;
 
   // Everything below is derived from the tiles and buildings, so none of it is saved.
   private readonly served: Record<Facility, Set<number>> = { power: new Set(), water: new Set() };
   /** Buildings each facility serves, by facility tile. */
   private readonly loads = new Map<number, number>();
   private readonly commutes: Commute[] = [];
-  /** Commuters crossing each road tile. */
+  /** Commuters crossing each road tile, per shift: only people on one shift travel together. */
+  private readonly shiftFlows = shifts.map(() => new Float32Array(MAP_SIZE ** 2));
+  /** The busiest shift's commuters on each road tile. Routing and pollution go by this. */
   private readonly flows = new Float32Array(MAP_SIZE ** 2);
   /** Residents with a job and their average commute, by home. */
   private readonly employed = new Map<number, number>();
   private readonly commuteMinutes = new Map<number, number>();
   /** Pollution per tile, 0 to 100. */
   private readonly smog = new Float32Array(MAP_SIZE ** 2);
+  /** Whether each tile is within reach of a station of each service. */
+  private readonly covered: Record<Service, Uint8Array> = {
+    fire: new Uint8Array(MAP_SIZE ** 2), police: new Uint8Array(MAP_SIZE ** 2),
+    school: new Uint8Array(MAP_SIZE ** 2), clinic: new Uint8Array(MAP_SIZE ** 2),
+  };
+  /** Everyone living in the city, as of the last refresh. */
+  private residents = 0;
+  /** Tiles near water, and tiles within reach of a working bus stop. */
+  private readonly shore = new Uint8Array(MAP_SIZE ** 2);
+  private readonly busCover = new Uint8Array(MAP_SIZE ** 2);
+  /** Commuters who go by bus, as of the last refresh. */
+  private riders = 0;
+  private readonly events: CityEvent[] = [];
+  /** The tick of the latest growth call, for showing how recent an event is. */
+  private clock = 0;
   /** What nearby parks add to land value, per tile. */
   private readonly green = new Float32Array(MAP_SIZE ** 2);
   readonly roadGraph: RoadGraph;
@@ -93,15 +128,56 @@ export class BuildingSystem {
     return this.served[facility].has(indexOf(cell));
   }
 
-  /** A road tile's flow as a share of its capacity; 0 off the roads. */
-  congestionAt(cell: Cell): number {
+  /**
+   * A road tile's flow as a share of its capacity; 0 off the roads. With an hour of the day it
+   * counts the shifts travelling at that hour; without, the tile's busiest shift.
+   */
+  congestionAt(cell: Cell, hour?: number): number {
     const tile = this.map.get(cell);
-    return isRoad(tile) ? congestion(this.flows[indexOf(cell)], tile) : 0;
+    if (!isRoad(tile)) return 0;
+    const id = indexOf(cell);
+    let flow = this.flows[id];
+    if (hour !== undefined) {
+      flow = 0;
+      for (const shift of rushShifts(hour)) flow += this.shiftFlows[shift][id];
+    }
+    return congestion(flow, tile);
+  }
+
+  /** Sets the tax rate in percent, kept within the allowed range, and returns it. */
+  setTaxRate(rate: number): number {
+    const { min, max } = economy.taxRate;
+    return this.taxRate = Math.max(min, Math.min(max, Math.round(rate)));
   }
 
   /** Pollution on a tile, 0 to 100; 0 off the map. */
   pollutionAt(cell: Cell): number {
     return this.map.get(cell) === undefined ? 0 : this.smog[indexOf(cell)];
+  }
+
+  /** Whether a tile is within reach of a working bus stop. */
+  hasBus(cell: Cell): boolean {
+    return this.map.get(cell) !== undefined && this.busCover[indexOf(cell)] === 1;
+  }
+
+  /** Whether a tile is within reach of a station of the service. */
+  isCovered(cell: Cell, service: Service): boolean {
+    return this.map.get(cell) !== undefined && this.covered[service][indexOf(cell)] === 1;
+  }
+
+  /** The latest events, oldest first. */
+  getEvents(): readonly CityEvent[] {
+    return this.events;
+  }
+
+  /** The tick the city last advanced to. */
+  get now(): number {
+    return this.clock;
+  }
+
+  /** Whether the city is big enough for crime and this tile has no police. */
+  private unsafe(id: number): boolean {
+    return this.residents >= services.crime.population && !this.covered.police[id];
   }
 
   /** Land value of a zoned tile, 0 to 100; 0 anywhere else. */
@@ -111,8 +187,10 @@ export class BuildingSystem {
 
   private valueOf(id: number): number {
     const zone = this.map.at(id);
-    let value = landValue.base + this.green[id];
+    let value = landValue.base + this.green[id] + (this.shore[id] ? landValue.waterfront.value : 0);
     if (this.served.power.has(id) && this.served.water.has(id)) value += landValue.utilities;
+    for (const service of SERVICES) if (this.covered[service][id]) value += services.value[service];
+    if (this.unsafe(id)) value -= services.crime.penalty;
     if (zone !== 'industrial') value -= landValue.pollution * this.smog[id];
     if (zone === 'residential') {
       value -= Math.min(landValue.commute.max,
@@ -145,7 +223,9 @@ export class BuildingSystem {
       if ((this.employed.get(id) ?? 0) < building.occupants) issues.push('no-jobs');
       if ((this.commuteMinutes.get(id) ?? 0) > traffic.longCommute) issues.push('long-commute');
       if (this.smog[id] > pollution.limit) issues.push('pollution');
-    } else if (roadAccess && building.occupants < this.capacityOf(building)) issues.push('vacancies');
+    }
+    if (this.unsafe(id)) issues.push('crime');
+    if (!home && roadAccess && building.occupants < this.capacityOf(building)) issues.push('vacancies');
     return issues;
   }
 
@@ -167,13 +247,36 @@ export class BuildingSystem {
     const tile = this.map.get(cell);
     if (!tile) return undefined;
     const id = indexOf(cell);
-    if (tile === 'grass' || tile === 'park') return { tile, pollution: Math.round(this.smog[id]) };
+    if (tile === 'grass' || tile === 'park' || tile === 'river') {
+      return { tile, pollution: Math.round(this.smog[id]) };
+    }
+    if (tile === 'bus') {
+      const radius = traffic.bus.radius;
+      let reaching = 0;
+      for (const building of this.buildings.keys()) {
+        const other = cellAt(building);
+        if (Math.abs(other.x - cell.x) + Math.abs(other.y - cell.y) <= radius) reaching++;
+      }
+      const running = this.hasRoadAccess(cell);
+      return { tile, reaching: running ? reaching : 0, radius, running };
+    }
     if (isRoad(tile)) {
       return { tile, flow: Math.round(this.flows[id]), congestion: this.congestionAt(cell),
         roadCapacity: tile === 'avenue' ? traffic.avenue.capacity : traffic.capacity };
     }
     if (isFacility(tile)) {
-      return { tile, serving: this.loads.get(id) ?? 0, capacity: utilities.capacity[tile] };
+      return { tile, serving: this.loads.get(id) ?? 0, capacity: utilities.capacity[tile],
+        running: this.hasRoadAccess(cell) };
+    }
+    if (isService(tile)) {
+      const radius = services.radius[tile];
+      let reaching = 0;
+      for (const building of this.buildings.keys()) {
+        const other = cellAt(building);
+        if (Math.abs(other.x - cell.x) + Math.abs(other.y - cell.y) <= radius) reaching++;
+      }
+      const running = this.hasRoadAccess(cell);
+      return { tile, reaching: running ? reaching : 0, radius, running };
     }
 
     const roadAccess = this.hasRoadAccess(cell);
@@ -190,6 +293,7 @@ export class BuildingSystem {
       level: record.level, power, water, employed,
       commute: home ? this.commuteMinutes.get(id) : undefined, issues,
       pollution: Math.round(this.smog[id]), value,
+      services: SERVICES.filter(service => this.covered[service][id]), bus: this.busCover[id] === 1,
       /** The land value the next level needs; undefined at the top level. */
       nextLevel: landValue.upgrade[record.level - 1] as number | undefined };
   }
@@ -197,9 +301,10 @@ export class BuildingSystem {
   /** Runs a command if the city can pay for it. `cost` is what was charged. */
   execute(command: GameCommand): { changed: Cell[]; error?: string; cost: number } {
     let cost = 0;
-    const result = { ...this.map.execute(command, (changed, tile) => {
-      const price = changed.length * tileCost(tile);
-      if (price > this.funds) return `資金不足：需要 $${price}，目前 $${Math.floor(this.funds)}。`;
+    const result = { ...this.map.execute(command, changes => {
+      let price = 0;
+      for (const { tile } of changes) price += tileCost(tile);
+      if (price > this.funds) return `錢不夠：要 $${price}，現在只有 $${Math.floor(this.funds)}。`;
       cost = price;
     }), cost };
     this.funds -= cost;
@@ -221,7 +326,9 @@ export class BuildingSystem {
    * between steps, so what is derived from the city is always up to date, also after loading.
    */
   grow(tick: number, seed: number): void {
-    if (tick % (calendar.ticksPerDay * calendar.daysPerMonth) === 0) this.funds += this.budget().net;
+    this.clock = tick;
+    // A day's share of the month's tax and upkeep.
+    if (tick % calendar.ticksPerDay === 0) this.funds += this.budget().net / calendar.daysPerMonth;
     if (tick % growth.interval !== 0) return;
     let changed = false;
     const daily = tick % calendar.ticksPerDay === 0;
@@ -275,11 +382,68 @@ export class BuildingSystem {
       changed = true;
     });
     if (changed) this.refresh();
+    if (daily) this.rollEmergencies(tick, seed);
 
     const { population } = this.supply();
     while (this.rank < milestones.length && population >= milestones[this.rank].population) {
       this.funds += milestones[this.rank++].grant;
     }
+  }
+
+  /** The road tile beside a cell, if there is one. Vehicles drive between these. */
+  roadBeside(cell: Cell): Cell | undefined {
+    return this.roadAccess(cell);
+  }
+
+  /** The nearest working station of a service that has the cell in reach. */
+  private nearestStation(cell: Cell, service: Service): Cell | undefined {
+    let best: Cell | undefined;
+    let bestDistance = services.radius[service] + 1;
+    for (let id = 0; id < MAP_SIZE ** 2; id++) {
+      if (this.map.at(id) !== service) continue;
+      const station = cellAt(id);
+      const distance = Math.abs(station.x - cell.x) + Math.abs(station.y - cell.y);
+      if (distance < bestDistance && this.hasRoadAccess(station)) {
+        best = station;
+        bestDistance = distance;
+      }
+    }
+    return best;
+  }
+
+  /**
+   * Once a day each kind of emergency may strike one building. The fire roll keeps the salts
+   * it always had, so adding the other two did not move any fire.
+   */
+  private rollEmergencies(tick: number, seed: number): void {
+    const { population, perBuilding, max } = services.fires;
+    if (this.residents < population) return;
+    const chance = Math.min(max, this.buildings.size * perBuilding);
+    const ids = [...this.buildings.keys()];
+    let changed = false;
+    emergencies.forEach(({ service, trouble, handled }, index) => {
+      if (roll(seed, tick, 7 + 2 * index) / 2 ** 32 >= chance) return;
+      const id = ids[roll(seed, tick, 8 + 2 * index) % ids.length];
+      const building = this.buildings.get(id);
+      // It may have burned down a moment ago.
+      if (!building) return;
+      const cell = cellAt(id);
+      const helped = this.covered[service][id] === 1;
+      this.events.push({ tick, kind: helped ? handled : trouble, cell,
+        station: helped ? this.nearestStation(cell, service) : undefined });
+      if (this.events.length > EVENT_LOG) this.events.shift();
+      if (helped) return;
+      if (trouble === 'fire') {
+        this.buildings.delete(id);
+        changed = true;
+      } else if (trouble === 'crime') {
+        this.funds -= services.crime.loss;
+      } else if (this.map.at(id) === 'residential' && building.occupants > 0) {
+        building.occupants--;
+        changed = true;
+      }
+    });
+    if (changed) this.refresh();
   }
 
   /** The road tiles within a commute of a vacancy, or of a home with someone to fill one. */
@@ -306,8 +470,37 @@ export class BuildingSystem {
   /** Recomputes everything derived after tiles or the set of buildings changed. */
   private refresh(): void {
     this.connectUtilities();
+    this.coverServices();
     this.assignJobs();
     this.spreadPollution();
+    this.residents = 0;
+    for (const [id, building] of this.buildings) {
+      if (this.map.at(id) === 'residential') this.residents += building.occupants;
+    }
+  }
+
+  /** Marks the tiles within reach of each fire station, police station, school and clinic. */
+  private coverServices(): void {
+    for (const service of SERVICES) this.covered[service].fill(0);
+    this.busCover.fill(0);
+    this.shore.fill(0);
+    for (let id = 0; id < MAP_SIZE ** 2; id++) {
+      const tile = this.map.at(id);
+      const water = tile === 'river' || tile === 'bridge';
+      if (!isService(tile) && tile !== 'bus' && !water) continue;
+      const { x, y } = cellAt(id);
+      if (!water && !this.hasRoadAccess({ x, y })) continue;
+      const radius = water ? landValue.waterfront.radius :
+        tile === 'bus' ? traffic.bus.radius : services.radius[tile as Service];
+      const field = water ? this.shore : tile === 'bus' ? this.busCover : this.covered[tile as Service];
+      for (let dy = -radius; dy <= radius; dy++) {
+        const span = radius - Math.abs(dy);
+        for (let dx = -span; dx <= span; dx++) {
+          const cell = { x: x + dx, y: y + dy };
+          if (this.map.get(cell) !== undefined) field[indexOf(cell)] = 1;
+        }
+      }
+    }
   }
 
   /**
@@ -335,7 +528,9 @@ export class BuildingSystem {
     }
     for (let id = 0; id < MAP_SIZE ** 2; id++) {
       const tile = this.map.at(id);
-      if (tile === 'power') spread(id, power.strength, power.radius);
+      if (tile === 'power') {
+        if (this.hasRoadAccess(cellAt(id))) spread(id, power.strength, power.radius);
+      }
       else if (tile === 'park') {
         spread(id, -park.strength, park.radius);
         spread(id, landValue.park.strength, landValue.park.radius, green);
@@ -362,6 +557,7 @@ export class BuildingSystem {
         .map(([id]) => id).sort((a, b) => a - b);
       for (const site of sites) {
         const { x, y } = cellAt(site);
+        if (!this.hasRoadAccess({ x, y })) continue;
         const inReach: { id: number; distance: number }[] = [];
         for (let dy = -radius; dy <= radius; dy++) {
           const span = radius - Math.abs(dy);
@@ -389,7 +585,9 @@ export class BuildingSystem {
    */
   private assignJobs(): void {
     this.commutes.length = 0;
+    this.riders = 0;
     this.flows.fill(0);
+    for (const flows of this.shiftFlows) flows.fill(0);
     this.employed.clear();
     this.commuteMinutes.clear();
     const homes: { building: SavedBuilding; road: Cell }[] = [];
@@ -431,8 +629,18 @@ export class BuildingSystem {
       });
       for (const { workId, workers, at } of taken) {
         const path = this.roadGraph.pathTo(at);
-        for (const cell of path) this.flows[indexOf(cell)] += workers;
-        this.commutes.push({ homeId: building.id, workId, workers, path, minutes: 0 });
+        const shift = shiftIndex(this.map.at(workId) as Zone, workId);
+        const flows = this.shiftFlows[shift];
+        // With a stop at both ends, part of them take the bus and leave the road to the rest.
+        const riders = this.busCover[building.id] && this.busCover[workId] ?
+          Math.floor(workers * traffic.bus.share) : 0;
+        this.riders += riders;
+        for (const cell of path) {
+          const tile = indexOf(cell);
+          flows[tile] += workers - riders;
+          if (flows[tile] > this.flows[tile]) this.flows[tile] = flows[tile];
+        }
+        this.commutes.push({ homeId: building.id, workId, workers, path, minutes: 0, shift, riders });
       }
       vacancies -= building.occupants - remaining;
       this.employed.set(building.id, building.occupants - remaining);
@@ -440,7 +648,11 @@ export class BuildingSystem {
 
     // Times are read once everyone is on the road, so early homes feel later traffic too.
     for (const commute of this.commutes) {
-      for (const cell of commute.path) commute.minutes += minutesAt(indexOf(cell));
+      const flows = this.shiftFlows[commute.shift];
+      for (const cell of commute.path) {
+        const tile = indexOf(cell);
+        commute.minutes += tileMinutes(flows[tile], this.map.at(tile) as Road);
+      }
       this.commuteMinutes.set(commute.homeId, (this.commuteMinutes.get(commute.homeId) ?? 0) +
         commute.minutes * commute.workers / this.employed.get(commute.homeId)!);
     }
@@ -449,12 +661,15 @@ export class BuildingSystem {
   save(): Omit<SaveData, 'schemaVersion' | 'seed' | 'tick'> {
     return { tiles: this.map.save(), zones: [...this.zones.keys()],
       buildings: [...this.buildings.values()].map(building => ({ ...building })),
-      funds: this.funds, rank: this.rank };
+      funds: this.funds, rank: this.rank, taxRate: this.taxRate };
   }
 
-  load({ tiles, zones, buildings, funds, rank }: SaveData): void {
+  load({ tiles, zones, buildings, funds, rank, taxRate, tick }: SaveData): void {
+    this.events.length = 0;
+    this.clock = tick;
     this.funds = funds;
     this.rank = rank;
+    this.taxRate = taxRate;
     this.map.load(tiles);
     this.zones.clear();
     this.buildings.clear();
@@ -489,22 +704,37 @@ export class BuildingSystem {
     return { population, housing, openings, employed, commercialJobs: jobs.commercial, industrialJobs: jobs.industrial };
   }
 
-  /** Demand per zone, -100 to 100. */
-  getDemand(): Demand {
-    return zoneDemand(this.supply());
+  /** Demand per zone, -100 to 100: what the city lacks, shifted by how heavy the tax is. */
+  getDemand(supply = this.supply()): Demand {
+    const { default: usual, above, below } = economy.taxRate;
+    const shift = this.taxRate > usual ? (usual - this.taxRate) * above : (usual - this.taxRate) * below;
+    const demand = zoneDemand(supply);
+    for (const zone of zoneOrder) demand[zone] = Math.max(-100, Math.min(100, demand[zone] + shift));
+    return demand;
   }
 
   /** What a month brings in and costs with the city as it is now. */
   budget() {
     const { population, employed } = this.supply();
-    const tax = population * economy.tax.resident + employed * economy.tax.job;
+    const tax = Math.round((population * economy.tax.resident + employed * economy.tax.job) *
+      this.taxRate / economy.taxRate.default);
     let upkeep = 0;
     for (const kind of this.facilities.values()) upkeep += economy.upkeep[kind];
     for (let id = 0; id < MAP_SIZE ** 2; id++) {
       const tile = this.map.at(id);
-      if (isRoad(tile) || tile === 'park') upkeep += economy.upkeep[tile];
+      if (isRoad(tile) || tile === 'park' || isService(tile) || tile === 'bus') upkeep += economy.upkeep[tile];
     }
     return { tax, upkeep, net: tax - upkeep };
+  }
+
+  /** How many plants, towers and stations stand idle for want of a road beside them. */
+  private idle(): number {
+    let count = 0;
+    for (let id = 0; id < MAP_SIZE ** 2; id++) {
+      const tile = this.map.at(id);
+      if ((isFacility(tile) || isService(tile) || tile === 'bus') && !this.hasRoadAccess(cellAt(id))) count++;
+    }
+    return count;
   }
 
   /** How many buildings report each issue. */
@@ -525,7 +755,7 @@ export class BuildingSystem {
       buildings: this.buildings.size,
       /** Average minutes to work over everyone with a job; 0 when nobody has one. */
       commute: supply.employed ? minutes / supply.employed : 0,
-      demand: zoneDemand(supply), funds: this.funds, budget: this.budget(), rank: this.rank,
-      complaints: this.complaints() };
+      demand: this.getDemand(supply), funds: this.funds, taxRate: this.taxRate, budget: this.budget(), rank: this.rank,
+      complaints: this.complaints(), idle: this.idle(), riders: this.riders };
   }
 }

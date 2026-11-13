@@ -8,16 +8,18 @@ export function commuterPosition(
   { homeId, workId, path }: { homeId: number; workId: number; path: readonly Cell[] },
   timeMs: number,
   mode?: 'walk' | 'drive',
+  scheduledProgress?: number,
+  scheduledReturn?: boolean,
 ): Cell | undefined {
   const steps = path.length + 1;
   const travelMs = steps * (mode === 'drive' ? 290 : travelMsPerTile);
   const halfCycle = travelMs + indoorMs;
   const phase = timeMs % (2 * halfCycle);
-  const returning = phase >= halfCycle;
+  const returning = scheduledReturn ?? (phase >= halfCycle);
   const elapsed = phase % halfCycle;
-  if (elapsed >= travelMs) return undefined;
+  if (scheduledProgress === undefined && elapsed >= travelMs) return undefined;
 
-  const progress = returning ? steps - (elapsed / travelMs) * steps : (elapsed / travelMs) * steps;
+  const progress = scheduledProgress === undefined ? (returning ? steps - (elapsed / travelMs) * steps : (elapsed / travelMs) * steps) : Math.max(0, Math.min(1, scheduledProgress)) * steps;
   const start = Math.floor(progress);
   const fraction = progress - start;
   const pointAt = (index: number) =>

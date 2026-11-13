@@ -9,6 +9,10 @@ export class SimulationClock {
 
   constructor(private readonly engine: SimulationEngine) {}
 
+  get dayProgress(): number {
+    return this.accumulated / TICK_MS;
+  }
+
   /** Drops the partial tick, e.g. after a save is loaded. */
   reset(): void {
     this.accumulated = 0;

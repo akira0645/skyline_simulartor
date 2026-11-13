@@ -6,13 +6,14 @@ import { selection, type Tool } from '../app/tools';
 import { Camera } from './Camera';
 import { TileRenderer } from './TileRenderer';
 import { commuterPosition } from './commuterPosition';
+import { shiftPhase, workShift } from '../simulation/WorkShift';
 
 import type { BuildingSystem } from '../simulation/BuildingSystem';
 
 export class CityRenderer {
   refresh?: () => void;
 
-  constructor(private readonly city: BuildingSystem, private readonly speed: () => number) {}
+  constructor(private readonly city: BuildingSystem, private readonly speed: () => number, private readonly hour: () => number, private readonly operating: (cell: Cell) => boolean, private readonly facilities: () => readonly Cell[]) {}
   private app?: Application;
   private observer?: ResizeObserver;
 
@@ -39,7 +40,8 @@ export class CityRenderer {
     const canvas = app.canvas;
     app.stage.addChild(tiles.view);
     const people = new Graphics();
-    app.stage.addChild(people);
+    const infrastructure = new Graphics();
+    app.stage.addChild(infrastructure, people);
     host.appendChild(canvas);
 
     let animationTime = 0;
@@ -53,12 +55,19 @@ export class CityRenderer {
         const driving = route.path.length >= 5;
         const time = animationTime + i * 185;
         const mode = driving ? 'drive' : 'walk';
-        const position = commuterPosition(route, time, mode);
+        const workplace = { x: route.workId % MAP_SIZE, y: Math.floor(route.workId / MAP_SIZE) };
+        const zone = this.city.map.get(workplace);
+        if (!this.operating(workplace) || (zone !== 'commercial' && zone !== 'industrial')) continue;
+        const { start, end } = workShift(zone, route.workId);
+        const travel = Math.min(3, 1 + route.path.length * (driving ? 0.08 : 0.18));
+        const { progress, returning } = shiftPhase(this.hour(), start, end, travel);
+        if (progress === undefined) continue;
+        const position = commuterPosition(route, time, mode, progress, returning);
         if (!position) continue;
         const x = Math.round(position.x * TILE_SIZE + 12);
         const y = Math.round(position.y * TILE_SIZE + 11);
         if (driving) {
-          const next = commuterPosition(route, time + 24, mode);
+          const next = commuterPosition(route, time, mode, Math.max(0, progress - 0.01), returning);
           const vertical = next && Math.abs(next.y - position.y) > Math.abs(next.x - position.x);
           const left = x + 4 - (vertical ? 5 : 8);
           const top = y + 5 - (vertical ? 8 : 5);
@@ -90,6 +99,16 @@ export class CityRenderer {
     const draw = () => {
       tiles.draw(this.city, camera, app.screen.width, app.screen.height, preview, selected);
       drawPeople();
+      infrastructure.clear();
+      infrastructure.position.set(camera.x, camera.y);
+      infrastructure.scale.set(camera.scale);
+      this.facilities().forEach(({ x, y }, index) => {
+        const left = x * TILE_SIZE;
+        const top = y * TILE_SIZE;
+        infrastructure.rect(left + 4, top + 5, 24, 23).fill(0x26353e);
+        infrastructure.rect(left + 8, top + 8, 16, 11).fill(index ? 0x74c7ed : 0xf4ca65);
+        infrastructure.rect(left + 9, top + 20, 14, 5).fill(0x83949e);
+      });
       app.render();
     };
     this.refresh = draw;

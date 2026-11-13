@@ -11,6 +11,10 @@
   --sand: #cdbe9e;
   --dirt: #b48355;
   --shadow: #101114;
+  /* Lot colours from tools/draw_tiles.py. */
+  --residential: #7cc070;
+  --commercial: #9db6cf;
+  --industrial: #cdb672;
 
   font-family: "Cascadia Mono", Consolas, "Microsoft JhengHei", monospace;
   color: var(--paper);
@@ -60,7 +64,26 @@ h1 {
 .stats dt { color: var(--steel); }
 .stats dd { margin: 0; font-variant-numeric: tabular-nums; }
 
+.board { display: flex; gap: 0.75rem; }
+.board aside {
+  width: 13rem;
+  flex: none;
+  padding: 0.6rem 0.8rem;
+  background: var(--panel);
+  border: 2px solid var(--asphalt);
+}
+.board h2 { margin: 0 0 0.5rem; font-size: 1rem; color: var(--sand); }
+.board dl { display: grid; grid-template-columns: auto 1fr; gap: 0.35rem 0.8rem; margin: 0; }
+.board dt { color: var(--steel); }
+.board dd { margin: 0; }
+@media (max-width: 48rem) {
+  .board { flex-direction: column; }
+  .board aside { width: auto; }
+}
+
 .viewport {
+  flex: 1;
+  min-width: 0;
   height: min(68vh, 44rem);
   overflow: hidden;
   background: var(--ink);
@@ -101,7 +124,7 @@ h1 {
 }
 
 /* Swatches match what each tool paints on the map. */
-.tools button[data-tool]:not([data-tool="pan"])::before {
+.tools button[data-tool]:not([data-tool="pan"], [data-tool="inspect"])::before {
   content: "";
   width: 0.75rem;
   height: 0.75rem;
@@ -109,13 +132,13 @@ h1 {
   border: 2px solid var(--shadow);
 }
 [data-tool="road"] { --swatch: var(--asphalt); }
-[data-tool="residential"] { --swatch: var(--brick); }
-[data-tool="commercial"] { --swatch: var(--steel); }
-[data-tool="industrial"] { --swatch: var(--slate); }
+[data-tool="residential"] { --swatch: var(--residential); }
+[data-tool="commercial"] { --swatch: var(--commercial); }
+[data-tool="industrial"] { --swatch: var(--industrial); }
 [data-tool="demolish"] { --swatch: var(--grass); }
 
 .clock { align-items: center; margin-top: 0; }
-.clock span { min-width: 5.5rem; color: var(--steel); font-variant-numeric: tabular-nums; }
+.clock span { min-width: 8.5rem; color: var(--steel); font-variant-numeric: tabular-nums; }
 
 .hint { color: var(--steel); font-size: 0.9rem; }
 [role="alert"] { color: var(--brick); }

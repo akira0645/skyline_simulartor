@@ -1,4 +1,5 @@
 import { MAP_SIZE, type Cell, type GameCommand, type TileMap, type Zone } from './TileMap';
+import type { SaveData } from './SaveData';
 import { growth, ZoneDemandSystem } from './ZoneDemandSystem';
 
 const neighbors = [[0, -1], [1, 0], [0, 1], [-1, 0]];
@@ -13,6 +14,19 @@ export class BuildingSystem {
 
   hasBuilding(cell: Cell): boolean {
     return this.buildings.has(indexOf(cell));
+  }
+
+  hasRoadAccess({ x, y }: Cell): boolean {
+    return neighbors.some(([dx, dy]) => this.map.get({ x: x + dx, y: y + dy }) === 'road');
+  }
+
+  /** What stands on a cell, or undefined outside the map. Capacity is 0 without a building. */
+  inspect(cell: Cell) {
+    const tile = this.map.get(cell);
+    if (!tile) return undefined;
+    if (tile === 'grass' || tile === 'road') return { tile };
+    const building = this.hasBuilding(cell);
+    return { tile, building, roadAccess: this.hasRoadAccess(cell), capacity: building ? growth.capacity[tile] : 0 };
   }
 
   execute(command: GameCommand) {
@@ -36,12 +50,24 @@ export class BuildingSystem {
       const zone = this.map.get(cell);
       if (!zone || zone === 'grass' || zone === 'road') continue;
       if (!this.demand.canBuild(zone, population, jobs)) continue;
-      if (!neighbors.some(([dx, dy]) =>
-        this.map.get({ x: cell.x + dx, y: cell.y + dy }) === 'road')) continue;
+      if (!this.hasRoadAccess(cell)) continue;
 
       this.buildings.set(id, zone);
       return;
     }
+  }
+
+  save(): Pick<SaveData, 'tiles' | 'zones' | 'buildings'> {
+    return { tiles: this.map.save(), zones: [...this.zones.keys()], buildings: [...this.buildings.keys()] };
+  }
+
+  /** Expects data that parseSave has already checked. */
+  load({ tiles, zones, buildings }: SaveData): void {
+    this.map.load(tiles);
+    this.zones.clear();
+    this.buildings.clear();
+    for (const id of zones) this.zones.set(id, { x: id % MAP_SIZE, y: Math.floor(id / MAP_SIZE) });
+    for (const id of buildings) this.buildings.set(id, this.map.get(this.zones.get(id)!) as Zone);
   }
 
   getStats() {

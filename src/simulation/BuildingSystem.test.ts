@@ -15,6 +15,10 @@ it('grows only next to roads, applies capacity, and removes demolished buildings
   engine.advance(9);
   expect(city.hasBuilding(remote)).toBe(false);
   expect(city.getStats()).toEqual({ population: 4, jobs: 3, employed: 3, buildings: 2 });
+  expect(city.inspect(home)).toEqual({ tile: 'residential', building: true, roadAccess: true, capacity: 4 });
+  expect(city.inspect(remote)).toEqual({ tile: 'residential', building: false, roadAccess: false, capacity: 0 });
+  expect(city.inspect({ x: 1, y: 1 })).toEqual({ tile: 'road' });
+  expect(city.inspect({ x: -1, y: 0 })).toBeUndefined();
   city.execute({ type: 'DEMOLISH', ...home });
   expect(city.getStats().population).toBe(0);
 });

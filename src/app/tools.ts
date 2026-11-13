@@ -1,9 +1,9 @@
 import type { Cell, Zone } from '../simulation/TileMap';
 
-export type Tool = 'pan' | 'road' | Zone | 'demolish';
+export type Tool = 'pan' | 'inspect' | 'road' | Zone | 'demolish';
 
 export function selection(tool: Tool, start: Cell, end: Cell): Cell[] {
-  if (tool === 'demolish') return [start];
+  if (tool === 'demolish' || tool === 'inspect') return [start];
 
   let { x, y } = end;
   if (tool === 'road') {

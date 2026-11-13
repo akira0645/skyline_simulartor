@@ -1,4 +1,5 @@
 import { Application, Assets, type Texture } from 'pixi.js';
+import cityUrl from '../assets/city.png';
 import tilesUrl from '../assets/tiles.png';
 import { MAP_SIZE, type Cell } from '../simulation/TileMap';
 import { selection, type Tool } from '../app/tools';
@@ -15,15 +16,16 @@ export class CityRenderer {
   private observer?: ResizeObserver;
 
   async mount(host: HTMLElement, signal: AbortSignal, getTool: () => Tool,
-    report: (message: string) => void): Promise<void> {
+    report: (message: string) => void, inspect: (cell: Cell) => void): Promise<void> {
     const app = new Application();
     await app.init({ width: host.clientWidth, height: host.clientHeight,
       background: '#1d1f24', antialias: false, autoStart: false });
-    const sheet = await Assets.load<Texture>(tilesUrl).catch((error: unknown) => {
-      app.destroy(true);
-      throw error;
-    });
-    sheet.source.scaleMode = 'nearest';
+    const sheets = await Promise.all([tilesUrl, cityUrl].map(url => Assets.load<Texture>(url)))
+      .catch((error: unknown) => {
+        app.destroy(true);
+        throw error;
+      });
+    for (const sheet of sheets) sheet.source.scaleMode = 'nearest';
     if (signal.aborted) {
       app.destroy(true);
       return;
@@ -32,15 +34,16 @@ export class CityRenderer {
     this.app = app;
     const map = this.city.map;
     const camera = new Camera();
-    const tiles = new TileRenderer(sheet.source);
+    const tiles = new TileRenderer(sheets[0].source, sheets[1].source);
     const canvas = app.canvas;
-    app.stage.addChild(tiles.graphic);
+    app.stage.addChild(tiles.view);
     host.appendChild(canvas);
 
     let preview: Cell[] = [];
+    let selected: Cell | undefined;
     let drag: { id: number; tool: Tool; start: Cell; x: number; y: number } | undefined;
     const draw = () => {
-      tiles.draw(this.city, camera, app.screen.width, app.screen.height, preview);
+      tiles.draw(this.city, camera, app.screen.width, app.screen.height, preview, selected);
       app.render();
     };
     this.refresh = draw;
@@ -87,7 +90,10 @@ export class CityRenderer {
       if (!drag || drag.id !== event.pointerId) return;
       const { tool, start } = drag;
       const { x, y } = position(event);
-      if (tool !== 'pan') {
+      if (tool === 'inspect') {
+        selected = start;
+        inspect(start);
+      } else if (tool !== 'pan') {
         const cells = selection(tool, start, boundedCell(x, y));
         const result = this.city.execute(tool === 'road' ? { type: 'BUILD_ROAD', path: cells } :
           tool === 'demolish' ? { type: 'DEMOLISH', ...start } :

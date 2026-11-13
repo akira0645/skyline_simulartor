@@ -9,6 +9,11 @@ export class SimulationClock {
 
   constructor(private readonly engine: SimulationEngine) {}
 
+  /** Drops the partial tick, e.g. after a save is loaded. */
+  reset(): void {
+    this.accumulated = 0;
+  }
+
   advance(elapsedMs: number): number {
     this.accumulated += elapsedMs * this.speed;
     const ticks = Math.floor(this.accumulated / TICK_MS);

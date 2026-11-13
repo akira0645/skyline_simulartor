@@ -4,6 +4,8 @@ export const TILE_SIZE = 32;
 export interface Cell { x: number; y: number }
 export type Zone = 'residential' | 'commercial' | 'industrial';
 export type Tile = 'grass' | 'road' | Zone;
+/** Save files store tiles as indices into this list, so only append to it. */
+export const TILES: readonly Tile[] = ['grass', 'road', 'residential', 'commercial', 'industrial'];
 export type GameCommand =
   | { type: 'BUILD_ROAD'; path: Cell[] }
   | { type: 'SET_ZONE'; tiles: Cell[]; zone: Zone }
@@ -35,5 +37,13 @@ export class TileMap {
     const changed = cells.filter(cell => this.get(cell) !== tile);
     for (const { x, y } of changed) this.tiles[y * MAP_SIZE + x] = tile;
     return { changed };
+  }
+
+  save(): Uint8Array {
+    return Uint8Array.from(this.tiles, tile => TILES.indexOf(tile));
+  }
+
+  load(codes: Uint8Array): void {
+    codes.forEach((code, index) => { this.tiles[index] = TILES[code]; });
   }
 }

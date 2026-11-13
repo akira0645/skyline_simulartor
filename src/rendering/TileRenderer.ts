@@ -93,8 +93,9 @@ export class TileRenderer {
           cityAt(mask, ROAD_ROW, x, y);
         } else {
           cityAt(zoneIndex[tile], LOT_ROW, x, y);
-          if (city.hasBuilding({ x, y })) {
-            cityAt((seed >>> 4) % BUILDING_VARIANTS, BUILDING_ROW + zoneIndex[tile], x, y);
+          const building = city.getBuilding({ x, y });
+          if (building) {
+            cityAt(((seed >>> 4) + building.level - 1) % BUILDING_VARIANTS, BUILDING_ROW + zoneIndex[tile], x, y);
           }
         }
       }

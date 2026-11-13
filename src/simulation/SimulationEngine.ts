@@ -15,7 +15,7 @@ export class SimulationEngine {
   advance(ticks: number): number {
     for (let step = 0; step < ticks; step++) {
       this.state.tick++;
-      this.city.grow(this.state.tick);
+      this.city.grow(this.state.tick, this.state.seed);
     }
     return this.state.tick;
   }

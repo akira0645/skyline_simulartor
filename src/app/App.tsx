@@ -183,7 +183,7 @@ export function App() {
                 <dt>道路接入</dt><dd>{info.roadAccess ? '有' : '無'}</dd>
                 <dt>建築</dt><dd>{info.building ? '已建成' : info.roadAccess ? '等待需求' : '需要道路'}</dd>
                 {info.building && <>
-                  <dt>{info.tile === 'residential' ? '居民' : '職缺'}</dt><dd>{info.capacity}</dd>
+                  <dt>{info.tile === 'residential' ? '居民' : '職缺'}</dt><dd>{info.occupants} / {info.capacity}（等級 {info.level}）</dd>
                 </>}
               </>}
             </dl>

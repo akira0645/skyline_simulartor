@@ -5,7 +5,7 @@ import { challenges, disasters, festivals, nextFestival, policies, POLICIES, sea
   type Challenge, type FestivalId, type Policy, type Season } from './Seasons';
 import { cycle, economy, milestones, tileCost, type Mood } from './Economy';
 import { goals } from './Goals';
-import { dilemmas, type Answer, type Boost, type Dilemma } from './Dilemmas';
+import { brands, dilemmas, type Answer, type Boost, type Brand, type Dilemma } from './Dilemmas';
 import { comboIncome, combos, comboValue, COMBOS, taskList, tasks, type Combo, type TaskId } from './Combos';
 import { goods } from './Goods';
 import { jobs } from './Jobs';
@@ -111,7 +111,7 @@ export class BuildingSystem {
   /** The decision waiting for an answer and what past answers still do to demand (both saved), and how the last one went (not saved). */
   private dilemma?: Dilemma;
   private readonly boosts: Boost[] = [];
-  private dilemmaEnd?: { id: Dilemma['id']; answer: number; lost: number; tick: number };
+  private dilemmaEnd?: { id: Dilemma['id']; answer: number; lost: number; tick: number; opened?: Cell };
   /** The policies that are on. Saved. */
   private readonly policiesOn = new Set<Policy>();
   /** The challenge under way (saved), and how the last one ended (not saved). */
@@ -507,8 +507,18 @@ export class BuildingSystem {
     }
     const lost = taken.risk && roll(this.seed, this.clock, 91) / 2 ** 32 < taken.risk.chance ? -taken.risk.funds : 0;
     this.funds -= lost;
-    this.dilemmaEnd = { id, answer, lost, tick: this.clock };
+    // A business the answer brings opens in a shop that has none yet.
+    const shops = this.freeShops();
+    const shop = taken.brand && shops.length ? shops[roll(this.seed, this.clock, 94) % shops.length] : undefined;
+    if (shop) shop.brand = taken.brand;
+    this.dilemmaEnd = { id, answer, lost, tick: this.clock, opened: shop && cellAt(shop.id) };
     this.dilemma = undefined;
+    if (shop) this.refresh();
+  }
+
+  /** The shops no business has moved into. */
+  private freeShops(): SavedBuilding[] {
+    return [...this.buildings.values()].filter(building => this.map.at(building.id) === 'commercial' && !building.brand);
   }
 
   /** Lets a decision nobody made pass, and now and then brings a new one. Once a day. */
@@ -526,7 +536,9 @@ export class BuildingSystem {
     const day = Math.floor(tick / calendar.ticksPerDay);
     if (day % dilemmas.every || this.residents < dilemmas.population ||
         roll(this.seed, tick, 92) / 2 ** 32 >= dilemmas.chance) return;
-    const pick = dilemmas.list[roll(this.seed, tick, 93) % dilemmas.list.length];
+    // What needs a shop to open in is not put to a city without one.
+    const open = this.freeShops().length ? dilemmas.list : dilemmas.list.filter(entry => !entry.answers.some(answer => answer.brand));
+    const pick = open[roll(this.seed, tick, 93) % open.length];
     this.dilemma = { id: pick.id as Dilemma['id'], until: tick + dilemmas.days * calendar.ticksPerDay };
   }
 
@@ -670,9 +682,11 @@ export class BuildingSystem {
    * the homes of people with a trait, the civic buildings without a road, or where the people
    * of one home work. For pointing things out.
    */
-  find(what: { issue: Issue } | { combo: Combo } | { trait: Trait } | { idle: true } | { worksOf: Cell }): Cell[] {
+  find(what: { issue: Issue } | { combo: Combo } | { trait: Trait } | { idle: true } | { worksOf: Cell } | { brand: Brand }): Cell[] {
     const found: number[] = [];
-    if ('combo' in what) {
+    if ('brand' in what) {
+      for (const building of this.buildings.values()) if (building.brand === what.brand) found.push(building.id);
+    } else if ('combo' in what) {
       const code = COMBOS.indexOf(what.combo) + 1;
       this.special.forEach((value, id) => { if (value === code) found.push(id); });
     } else if ('idle' in what) {
@@ -1241,7 +1255,7 @@ export class BuildingSystem {
       circle: home ? this.circleOf(id) : undefined, bond: home ? this.bondOf(id) : undefined,
       kids: home ? this.kidsAt(id) : undefined,
       /** For a workplace: business, when it is better or worse than usual, and a shop's customers. */
-      combo: this.comboAt(cell),
+      combo: this.comboAt(cell), brand: record.brand,
       /** A home by a forest is a cabin, one by a farmstead a farmhouse. */
       nick: home ? this.nickAt(cell) : undefined,
       trade: this.tradeOf(id), custom: tile === 'commercial' ? Math.round(this.custom.get(id) ?? 0) : undefined,
@@ -1637,6 +1651,7 @@ export class BuildingSystem {
     const made = Math.round(factoryHands * goods.perWorker + farmed);
     farmed = Math.round(farmed);
     for (const group of COMBOS) this.visitors += this.comboCounts[group] * this.comboIncome(group);
+    for (const building of this.buildings.values()) if (building.brand) this.visitors += brands[building.brand];
     const needed = this.residents * goods.perResident;
     this.market = { made, needed, farmed,
       served: Math.min(needed, clerks * goods.perClerk + markets * services.market.shoppers),

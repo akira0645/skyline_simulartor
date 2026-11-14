@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { dilemmas } from './Dilemmas';
+import { brands, dilemmas } from './Dilemmas';
 import { calendar } from './calendar';
 import { demoCity } from '../app/demoCity';
 import { SimulationEngine } from './SimulationEngine';
@@ -78,6 +78,13 @@ it('puts decisions to the city, which pay or cost and sway demand for a while', 
   expect(after.dilemma).toBeUndefined();
   expect(after.funds - before.funds).toBeCloseTo(first.funds ?? 0);
   expect(after.boost).toBe(first.demand?.amount ?? 0);
+  // An answer that brings a business opens it in one of the shops, where it shows and pays.
+  if (first.brand) {
+    const [shop] = city.find({ brand: first.brand });
+    expect(city.inspect(shop)).toMatchObject({ tile: 'commercial', brand: first.brand });
+    expect(city.getNotices().dilemmaEnd!.opened).toEqual(shop);
+    expect(after.budget.visitors).toBe(before.budget.visitors + brands[first.brand]);
+  }
   // Left alone, one simply passes.
   restored.advance((dilemmas.days + 1) * calendar.ticksPerDay);
   expect(restored.city.getStats().dilemma).toBeUndefined();

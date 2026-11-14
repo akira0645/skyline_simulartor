@@ -20,7 +20,7 @@ import { services } from '../simulation/Services';
 import { SimulationClock, type SimulationSpeed } from '../simulation/SimulationClock';
 import { SimulationEngine } from '../simulation/SimulationEngine';
 import { AUTO_SLOT, deleteSave, listSaves, readSave, SLOTS, writeSlot, type SaveNote } from '../storage/SaveManager';
-import type { DilemmaId } from '../simulation/Dilemmas';
+import { brands, type Brand, type DilemmaId } from '../simulation/Dilemmas';
 import { goals } from '../simulation/Goals';
 import { combos, COMBOS, taskList, type Combo, type TaskId } from '../simulation/Combos';
 import { challenges, festivals, POLICIES, seasons, visitorsToday, type ChallengeId, type FestivalId, type Policy,
@@ -399,14 +399,16 @@ const policyNames: Record<Policy, [string, string]> = {
   festive: ['節慶補助', '節日收入多五成。每月 $200。'],
 };
 const challengeNames: Record<ChallengeId, string> = { grow: '人口', riders: '搭車的人', top: '3 級建築' };
+/** The businesses a decision can bring to one of the city's shops. */
+const brandNames: Record<Brand, string> = { lottery: '彩券行', kiosk: '彩券小舖', branch: '外商分店', studio: '片場紀念店' };
 /** Decisions that come up: the question, then what each answer does and the word on its button. */
 const dilemmaNames: Record<DilemmaId, [string, [string, string], [string, string]]> = {
-  investor: ['外地企業想投資', ['收下', '+$5,000，但 90 天內比較沒人想來'], ['婉拒', '扶植本地店家，60 天內更多人想來']],
-  film: ['劇組想來拍片', ['免費借', '+$2,000，城市出名，60 天內更多人想來'], ['收場地費', '+$4,000']],
+  investor: ['外地企業想投資', ['收下', '+$5,000，開一間外商分店，但 90 天內比較沒人想來'], ['婉拒', '扶植本地店家，60 天內更多人想來']],
+  film: ['劇組想來拍片', ['免費借', '+$2,000，留下一間紀念店，60 天內更多人想來'], ['收場地費', '+$4,000']],
   volunteers: ['居民想辦掃街', ['市府出錢', '−$1,000，60 天內更多人想來'], ['發感謝狀', '−$300，小有幫助']],
   donor: ['富商想捐款', ['收進市庫', '+$3,000'], ['請他辦活動', '90 天內更多人想來']],
   fair: ['鄰鎮邀請合辦市集', ['出錢參加', '−$1,500，60 天內更多人想來'], ['只去觀摩', '拿補助 +$500']],
-  lottery: ['彩券行想進駐', ['全面開放', '+$3,500，但 60 天內比較沒人想來'], ['限量開放', '+$1,500']],
+  lottery: ['彩券行想進駐', ['全面開放', '+$3,500，開一間彩券行，但 60 天內比較沒人想來'], ['限量開放', '+$1,500，只開一間小舖']],
 };
 /** The three ready-made cities. */
 const demoList: [DemoSize, string, string, string[]][] = [
@@ -997,10 +999,14 @@ export function App() {
         </div>
 
         {panelTab === 'tile' && (personCard ? personCard : selected && info ? <section>
-          <h2>{info.nick ? nickNames[info.nick] : info.combo && PLACES_OF.includes(info.combo) ? comboNames[info.combo][0] :
+          <h2>{info.brand ? brandNames[info.brand] : info.nick ? nickNames[info.nick] : info.combo && PLACES_OF.includes(info.combo) ? comboNames[info.combo][0] :
             info.complex ? '集合住宅' : info.bigPark ? '大公園' : info.kind ? homeKindNames[info.kind][0] : tileNames[info.tile]}</h2>
           {info.kind && <p className="hint">{homeKindNames[info.kind][1]}</p>}
           <dl>
+            {info.brand && <>
+              <dt>招牌</dt>
+              <dd className="tags"><Tag label={brandNames[info.brand]} tone="good" /><Tag label="收入" value={`${money(brands[info.brand])}/月`} tone="good" /></dd>
+            </>}
             {info.combo && <>
               <dt>組合</dt>
               <dd className="tags"><Tag label={comboNames[info.combo][0]} tone="good" tip={comboNames[info.combo][1]} />
@@ -1426,7 +1432,14 @@ export function App() {
           return <button key={answer} type="button" onClick={() => {
             engine.city.decide(answer);
             setStats(engine.city.getStats());
-            setMessage(`${word}：${effect}。`);
+            const opened = engine.city.getNotices().dilemmaEnd?.opened;
+            // A business that opens is framed on the map, so it can be found.
+            if (opened) {
+              const brand = engine.city.inspect(opened)?.brand;
+              locate(`brand:${brand}`, [opened]);
+              if (brand) setMessage(`${brandNames[brand]}開在黃框那間店，每月多 ${money(brands[brand])}。`);
+            } else setMessage(`${word}：${effect}。`);
+            rendererRef.current?.refresh?.();
           }}><b>{word}</b><span>{effect}</span></button>;
         })}
       </div>}

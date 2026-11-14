@@ -10,9 +10,9 @@ import type { Line } from '../simulation/Transit';
 import { seasonAt } from '../simulation/Seasons';
 import { lineColour } from '../app/lineColours';
 
-// Both sheets hold 16px tiles, drawn at twice their size.
+// The Kenney sheet holds 16px tiles, drawn at twice their size; our own sheet holds 32px tiles, drawn as they are.
 const SOURCE_TILE = 16;
-const SCALE = TILE_SIZE / SOURCE_TILE;
+const CITY_TILE = 32;
 
 // Tile coordinates in src/assets/tiles.png (Kenney "Roguelike Modern City", CC0).
 const GRASS = [[0, 24], [1, 24]];
@@ -58,6 +58,9 @@ const WATER = [0x3f8fc4, 0x6fb4dc, 0x2f78ab];
 const SHORE = 0xd9cfa8;
 const RAIL = 0x8a5a3a;
 const CIVIC_ROW = 5;
+// The signboard of each business a decision can bring: its board and the marks on it.
+const BRAND_SIGN = { lottery: [0xf2c94c, 0xe5484d], kiosk: [0xf4f6f8, 0xe5484d], branch: [0x3f6fb0, 0xf4f6f8],
+  studio: [0x25232b, 0xf2c94c] } as const;
 const FLAGGED: readonly string[] = ['foodstreet', 'plaza', 'funcity', 'campus', 'medical'];
 // Where the two-by-two buildings start, and the column of the housing complex among them.
 const BIG_ROW = 6;
@@ -102,7 +105,7 @@ export class TileRenderer {
     let texture = frames.get(key);
     if (!texture) {
       texture = new Texture({ source: this.city, frame: new Rectangle(
-        column * 2 * SOURCE_TILE, BIG_ROW * SOURCE_TILE, 2 * SOURCE_TILE, 2 * SOURCE_TILE) });
+        column * 2 * CITY_TILE, BIG_ROW * CITY_TILE, 2 * CITY_TILE, 2 * CITY_TILE) });
       frames.set(key, texture);
     }
     return texture;
@@ -115,8 +118,8 @@ export class TileRenderer {
     const key = row * 1024 + column;
     let texture = frames.get(key);
     if (!texture) {
-      texture = new Texture({ source: sheet, frame: new Rectangle(
-        column * SOURCE_TILE, row * SOURCE_TILE, SOURCE_TILE, SOURCE_TILE) });
+      const unit = sheet === this.city ? CITY_TILE : SOURCE_TILE;
+      texture = new Texture({ source: sheet, frame: new Rectangle(column * unit, row * unit, unit, unit) });
       frames.set(key, texture);
     }
     return texture;
@@ -136,7 +139,7 @@ export class TileRenderer {
 
     const put = (sheet: TextureSource, column: number, row: number, x: number, y: number) =>
       g.texture(this.frame(sheet, column, row), 0xffffff,
-        x * TILE_SIZE, y * TILE_SIZE, SOURCE_TILE * SCALE, SOURCE_TILE * SCALE);
+        x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
     const tileAt = ([column, row]: number[], x: number, y: number) => put(this.kenney, column, row, x, y);
     const cityAt = (column: number, row: number, x: number, y: number) => put(this.city, column, row, x, y);
 
@@ -327,6 +330,12 @@ export class TileRenderer {
               for (let at = 0; at < TILE_SIZE; at += 4) {
                 g.rect(left + at, top + 29, 4, 3).fill(at % 8 ? (group === 'port' ? 0xf4f6f8 : 0x25232b) : group === 'port' ? 0x3f8fc4 : 0xf2c94c);
               }
+            }
+            if (building.brand) {
+              // A business a decision brought: a signboard over the door, in its own colours.
+              const [board, mark] = BRAND_SIGN[building.brand];
+              g.rect(left + 3, top + 14, 15, 9).fill(0x25232b).rect(left + 4, top + 15, 13, 7).fill(board);
+              g.rect(left + 6, top + 17, 3, 3).rect(left + 11, top + 17, 4, 3).fill(mark);
             }
             const nick = tile === 'residential' ? city.nickAt({ x, y }) : undefined;
             if (nick === 'cabin') {

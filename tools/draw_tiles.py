@@ -1,4 +1,9 @@
-"""Draws src/assets/city.png, the game's own 16x16 tiles.
+"""Draws src/assets/city.png, the game's own tiles.
+
+Every tile is drawn on a 16x16 grid by the functions below and then worked up to 32x32 by
+`fine()`, which doubles it and adds what the coarse grid cannot hold: a lit and a shaded edge
+to every surface, panes in the glass, and a little grain. So to change a building, change its
+function; to change how fine detail looks everywhere, change `fine()`.
 
     python tools/draw_tiles.py
 
@@ -1213,15 +1218,77 @@ ROWS = [
      metro_station(), market(), high_school(), temple(), cinema(), parking(), library(), pool(), ktv()],
 ]
 
+def shade(pixel, by):
+    """A colour made lighter (by > 0) or darker (by < 0); `by` is a share of the way to white or black."""
+    r, g, b, a = pixel
+    if by >= 0:
+        return (round(r + (255 - r) * by), round(g + (255 - g) * by), round(b + (255 - b) * by), a)
+    return (round(r * (1 + by)), round(g * (1 + by)), round(b * (1 + by)), a)
+
+
+GLASSES = {rgba(GLASS), rgba(GLASS_LIGHT)}
+
+
+def fine(image, ground=False):
+    """Doubles a tile and adds fine detail. `ground` is for roads and lots, which join their
+    neighbours and so get grain only, not edges."""
+    size = image.size[0]
+    source = image.load()
+    out = Image.new('RGBA', (2 * size, 2 * size), (0, 0, 0, 0))
+    target = out.load()
+
+    def at(x, y):
+        return source[x, y] if 0 <= x < size and 0 <= y < size else None
+
+    for Y in range(2 * size):
+        for X in range(2 * size):
+            x, y = X // 2, Y // 2
+            pixel = source[x, y]
+            if pixel[3] == 0:
+                continue
+            # Shadows painted half transparent stay as they are.
+            if pixel[3] < 255:
+                target[X, Y] = pixel
+                continue
+            same = lambda dx, dy: at(x + dx, y + dy) == pixel
+            by = 0.0
+            if pixel in GLASSES and not ground:
+                # Panes: a dark bar between every two columns and every two rows, and a glint.
+                if X % 4 == 3 and same(1, 0):
+                    by = -0.28
+                elif Y % 4 == 3 and same(0, 1):
+                    by = -0.18
+                elif (X + Y) % 8 == 1:
+                    by = 0.3
+            elif not ground:
+                # A lit edge along the top and left of every surface and a shaded one along the
+                # bottom and right, where the surface is thick enough to carry them.
+                if Y % 2 == 0 and not same(0, -1) and same(0, 1):
+                    by = 0.16
+                elif X % 2 == 0 and not same(-1, 0) and same(1, 0):
+                    by = 0.1
+                elif Y % 2 == 1 and not same(0, 1) and same(0, -1):
+                    by = -0.2
+                elif X % 2 == 1 and not same(1, 0) and same(-1, 0):
+                    by = -0.13
+            if by == 0.0 and same(1, 0) and same(-1, 0) and same(0, 1) and same(0, -1):
+                # Grain inside a flat surface, placed by a small hash so it does not line up.
+                roll = (X * 73856093 ^ Y * 19349663) % 23
+                by = -0.07 if roll == 0 else 0.05 if roll == 1 else 0.0
+            target[X, Y] = shade(pixel, by) if by else pixel
+    return out
+
+
 if __name__ == '__main__':
-    sheet = Image.new('RGBA', (16 * T, (len(ROWS) + 2 + len(HOME_ROWS)) * T), (0, 0, 0, 0))
+    F = 2 * T
+    sheet = Image.new('RGBA', (16 * F, (len(ROWS) + 2 + len(HOME_ROWS)) * F), (0, 0, 0, 0))
     for row, tiles in enumerate(ROWS):
         for column, tile in enumerate(tiles):
-            sheet.paste(tile.image, (column * T, row * T))
+            sheet.paste(fine(tile.image, ground=row < 2), (column * F, row * F))
     for column, tile in enumerate(BIG):
-        sheet.paste(tile.image, (column * 2 * T, len(ROWS) * T))
+        sheet.paste(fine(tile.image), (column * 2 * F, len(ROWS) * F))
     for row, tiles in enumerate(HOME_ROWS):
         for column, tile in enumerate(tiles):
-            sheet.paste(tile.image, (column * T, (len(ROWS) + 2 + row) * T))
+            sheet.paste(fine(tile.image), (column * F, (len(ROWS) + 2 + row) * F))
     sheet.save(OUT)
     print(f'wrote {OUT}')

@@ -8,7 +8,7 @@ import type { Zone } from './TileMap';
 import { HOME_KINDS, type HomeKind } from './Residents';
 import { vehicles } from './Wealth';
 import { challenges, type Challenge } from './Seasons';
-import { dilemmas, type Boost, type Dilemma } from './Dilemmas';
+import { brands, dilemmas, type Boost, type Brand, type Dilemma } from './Dilemmas';
 
 /**
  * 4 added funds, the milestone rank and avenue tiles; 3 added power and water facility tiles;
@@ -34,6 +34,8 @@ export interface SavedBuilding {
   nextSlot?: number;
   /** For a home: what kind it is, if it is not an ordinary one. Decided when it is built. */
   kind?: HomeKind;
+  /** For a shop: the business a decision brought to it, if any (see Dilemmas.ts). */
+  brand?: Brand;
 }
 
 export interface SavedPerson {
@@ -215,6 +217,11 @@ export function parseSave(data: unknown): SaveData {
     if (kind !== undefined) {
       if (!HOME_KINDS.includes(kind) || zone !== 'residential') throw new Error('存檔資料損壞。');
       record.kind = kind;
+    }
+    const brand = schemaVersion === 1 ? undefined : entry.brand;
+    if (brand !== undefined) {
+      if (!(brand in brands) || zone !== 'commercial') throw new Error('存檔資料損壞。');
+      record.brand = brand;
     }
     const people = schemaVersion === 1 ? undefined : entry.people;
     if (people !== undefined && zone === 'residential') {

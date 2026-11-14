@@ -431,7 +431,28 @@ export class CityRenderer {
           const seed = (Math.imul(x, 73856093) ^ Math.imul(y, 19349663)) >>> 0;
           const px = x * TILE_SIZE;
           const py = y * TILE_SIZE;
-          if (tile === 'river') {
+          if (isRoad(tile)) {
+            // Where the traffic view says a road is busy or jammed, the road shows it: the
+            // commuters drawn one by one are only a sample, so the rest of the queue is drawn here.
+            const load = this.city.congestionAt({ x, y }, hour);
+            if (load <= 0.75) continue;
+            const across = isRoad(map.get({ x: x - 1, y })) || isRoad(map.get({ x: x + 1, y }));
+            const along = isRoad(map.get({ x, y: y - 1 })) || isRoad(map.get({ x, y: y + 1 }));
+            // A junction is left clear.
+            if (across === along) continue;
+            const jammed = load > 1;
+            // A jam crawls; a busy road moves.
+            const crawl = time / (jammed ? 2600 : 900);
+            for (let lane = 0; lane < 2; lane++) {
+              for (let car = 0; car < (jammed ? 2 : 1); car++) {
+                const part = (crawl + car / 2 + (seed % 5) / 5 + lane * 0.3) % 1;
+                const run = (lane ? 1 - part : part) * TILE_SIZE;
+                const side = lane ? -6 : 6;
+                if (across) drawCar(px + run, py + TILE_SIZE / 2 + side, false, seed + car + lane * 3, 2 + (seed + car) % 2);
+                else drawCar(px + TILE_SIZE / 2 - side, py + run, true, seed + car + lane * 3, 2 + (seed + car) % 2);
+              }
+            }
+          } else if (tile === 'river') {
             // A glint that comes and goes on some of the water.
             if (seed % 2 === 0 && Math.floor(time / 500 + seed % 7) % 3 === 0) {
               effects.rect(px + 4 + seed % 20, py + 6 + (seed >>> 5) % 18, 4, 1).fill({ color: 0xdff3fb, alpha: 0.9 });

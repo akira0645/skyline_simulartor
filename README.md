@@ -11,7 +11,9 @@
 
 遊戲每 15 秒自動存一次，下次打開網頁會回到上次離開時的城市。上面的「存檔」會打開清單：有 6 格可以自己存、讀、刪，每格會寫城市規模、人口、資金、遊戲日期和存的時間；「自動」那一格只能讀。全部存在瀏覽器裡（IndexedDB），只有這台電腦的這個瀏覽器看得到。「新地圖」會開一張新的。
 
-目前的實作狀態、與規格書的差異，以及 v0.2 的設計提案，見 [`docs/v0.2-design-proposal.md`](docs/v0.2-design-proposal.md)。
+歷史提案、與早期規格的差異及歷次實作紀錄，見 [`docs/v0.2-design-proposal.md`](docs/v0.2-design-proposal.md)。其中早期描述可能已被後面的紀錄取代，不應單獨當作目前狀態。
+
+2026-11-15 的設計文件（尚未實作）：[大型建築、存檔與程式整理](docs/superpowers/specs/2026-11-15-city-foundation-design.md)、[居民人生、人際關係與雨天行為](docs/superpowers/specs/2026-11-15-resident-life-design.md)。後者包含新建築概念圖、評價與分階段驗收；先完成基礎修正，再擴充居民人生。
 
 同類遊戲（SimCity、Cities: Skylines、TheoTown 等）的機制與功能整理，以及與本專案的對照，見 [`docs/city-sim-mechanics-reference.md`](docs/city-sim-mechanics-reference.md)。這是參考資料，不是規格。
 

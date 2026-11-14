@@ -132,7 +132,13 @@ export class CityRenderer {
     /** How long and how wide each vehicle is drawn, in the order of Wealth's `vehicles`. */
     // A lane is about a third of a tile wide, and a car must fit in it with room to spare.
     const SIZES = [[7, 3], [8, 4], [10, 6], [12, 6], [13, 7]];
+    const streetOpacity = () => Math.max(0, Math.min(1, (camera.scale - 0.45) / 0.55));
     const drawCar = (cx: number, cy: number, vertical: boolean, index: number, tier: number) => {
+      if (streetOpacity() === 0) return;
+      if (camera.scale < 0.85) {
+        people.rect(Math.round(cx) - 2, Math.round(cy) - 2, vertical ? 3 : 6, vertical ? 6 : 3).fill(0xc0c5c9);
+        return;
+      }
       const [long, wide] = SIZES[tier];
       const width = vertical ? wide : long;
       const height = vertical ? long : wide;
@@ -187,6 +193,11 @@ export class CityRenderer {
       advancePedestrian(roads, origin, along, advance, returning, (entry, vertical) =>
         !junctions.has(entry.y * MAP_SIZE + entry.x) || greenUpright(entry.x, entry.y) === vertical);
     const drawWalker = (cx: number, cy: number, index: number) => {
+      if (streetOpacity() === 0) return;
+      if (camera.scale < 0.85) {
+        people.rect(Math.round(cx) - 1, Math.round(cy) - 2, 2, 4).fill(0xe8c7a0);
+        return;
+      }
       // A person is small beside a house: three pixels across and nine tall.
       const x = Math.round(cx) - 1;
       const y = Math.round(cy) - 4;
@@ -274,6 +285,7 @@ export class CityRenderer {
     let visitTick = this.city.now;
     const drawPeople = (elapsed = 0) => {
       people.clear();
+      people.alpha = streetOpacity();
       wet = rainingAt(this.city.seed, this.city.now);
       const lotCars = new Map<number, number>();
       people.position.set(camera.x, camera.y);
@@ -957,7 +969,7 @@ export class CityRenderer {
         const worldY = (y - camera.y) / camera.scale;
         let reach = 14;
         let picked: (typeof spots)[number] | undefined;
-        for (const spot of spots) {
+        for (const spot of people.alpha > 0 ? spots : []) {
           const distance = Math.hypot(spot.x - worldX, spot.y - worldY);
           if (distance < reach) [reach, picked] = [distance, spot];
         }

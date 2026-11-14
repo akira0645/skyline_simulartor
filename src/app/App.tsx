@@ -123,7 +123,7 @@ const money = (amount: number) => `${amount < 0 ? '−' : ''}$${Math.abs(Math.ro
 
 const overlays: [Overlay, string, string][] = [
   ['none', '一般', ''],
-  ['traffic', '車流', '綠色順暢，黃色車多，橘紅塞車。'],
+  ['traffic', '車流', '現在路上的車：綠色順暢，黃色車多，橘紅塞車。沒人上下班時全綠。'],
   ['pollution', '污染', '越紫越髒。太髒的住宅沒人搬來。'],
   ['value', '地價', '綠色好，紅色差。地價夠高才會升級。'],
   ['lines', '路線', '公車和捷運的路線，框起來的是站。'],

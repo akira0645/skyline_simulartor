@@ -16,7 +16,7 @@ import { selection, type Overlay, type Tool } from '../app/tools';
 import { Camera } from './Camera';
 import { DETAIL_ZOOM, TileRenderer } from './TileRenderer';
 import { commuterPosition } from './commuterPosition';
-import { shiftIndex, workShift } from '../simulation/WorkShift';
+import { shiftIndex, shifts, workShift } from '../simulation/WorkShift';
 import { weekendAt } from '../simulation/calendar';
 import { seasonAt } from '../simulation/Seasons';
 import { utilities } from '../simulation/Utilities';
@@ -175,6 +175,14 @@ export class CityRenderer {
       people.rect(x - 0.5, y + 3, 0.5, 2 + stride * 0.5).rect(x + 3, y + 3, 0.5, 2.5 - stride * 0.5).fill(0xffd1a0);
       if (index % 3 === 0) people.rect(x + 3, y + 4.5, 1, 1.5).fill(0x8a5a3a);
     };
+    /**
+     * When the map last showed someone of each shift on the road. The traffic view and the
+     * queues on busy roads go by this, so a road is only shown jammed while people are seen
+     * travelling on it, and a little after, so it does not flicker between two of them.
+     */
+    const lastMoved = shifts.map(() => -Infinity);
+    const rushNow = () => shifts.map((_, index) => index).filter(index => animationTime - lastMoved[index] < 1500);
+
     const drawPeople = (elapsed = 0) => {
       people.clear();
       people.position.set(camera.x, camera.y);
@@ -244,6 +252,8 @@ export class CityRenderer {
           if (driving) park(trip.at);
           continue;
         }
+        // This shift has people on the road, as far as the map shows.
+        lastMoved[shiftIndex(zone, route.workId)] = animationTime;
         const returning = trip.at === 'work';
         const from = trip.at;
         const to = from === 'home' ? 'work' : 'home';
@@ -425,6 +435,7 @@ export class CityRenderer {
       const time = animationTime;
       const hour = this.hour();
       const night = hour >= 19 || hour < 5;
+      const rush = rushNow();
       for (let y = top; y <= bottom; y++) {
         for (let x = left; x <= right; x++) {
           const tile = map.get({ x, y });
@@ -434,7 +445,8 @@ export class CityRenderer {
           if (isRoad(tile)) {
             // Where the traffic view says a road is busy or jammed, the road shows it: the
             // commuters drawn one by one are only a sample, so the rest of the queue is drawn here.
-            const load = this.city.congestionAt({ x, y }, hour);
+            // Like the traffic view this goes by the shifts the map shows on the road just now.
+            const load = this.city.congestionOn({ x, y }, rush);
             if (load <= 0.75) continue;
             const across = isRoad(map.get({ x: x - 1, y })) || isRoad(map.get({ x: x + 1, y }));
             const along = isRoad(map.get({ x, y: y - 1 })) || isRoad(map.get({ x, y: y + 1 }));
@@ -563,7 +575,7 @@ export class CityRenderer {
           tool : layer,
         range, this.hour(),
         // Routes show while laying out transport, and in the map view for them.
-        routesShown() ? this.city.getLines() : [], this.marks);
+        routesShown() ? this.city.getLines() : [], this.marks, rushNow());
       drawPeople();
       drawEffects();
       app.render();

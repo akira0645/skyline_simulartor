@@ -128,7 +128,7 @@ export class TileRenderer {
   draw(city: BuildingSystem, camera: Camera, width: number, height: number, preview: Cell[],
     selected?: Cell, layer: Overlay = 'none',
     range?: { centre: Cell; radius: number; kind: Facility | Service | 'bus' | 'metro' }, hour?: number,
-    lines: readonly Line[] = [], marks: readonly Cell[] = []) {
+    lines: readonly Line[] = [], marks: readonly Cell[] = [], rush: readonly number[] = []) {
     const map = city.map;
     const start = camera.cellAt(0, 0);
     const end = camera.cellAt(width, height);
@@ -439,7 +439,9 @@ export class TileRenderer {
           }
           if (layer === 'traffic') {
             if (!isRoad(map.get(cell))) continue;
-            const load = city.congestionAt(cell, hour);
+            // The shifts whose people the map shows on the road just now, not the hour on the
+            // clock: the map moves people at its own pace, and the colours must agree with it.
+            const load = city.congestionOn(cell, rush);
             colour = TRAFFIC_COLOURS.find(([limit]) => load <= limit)![1];
           } else if (city.hasBuilding(cell)) {
             colour = (layer === 'bus' || layer === 'metro' ? city.hasTransit(cell) :

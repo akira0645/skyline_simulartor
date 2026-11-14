@@ -1126,6 +1126,11 @@ export class BuildingSystem {
       thoughts: [...counts].sort((a, b) => b[1] - a[1]) };
   }
 
+  /** The level of the building on a tile, or 0 where there is none. Cheap, for drawing. */
+  levelAt(cell: Cell): number {
+    return this.map.get(cell) === undefined ? 0 : this.buildings.get(indexOf(cell))?.level ?? 0;
+  }
+
   /** What a park tile looks like: part of a big park or not, and whether the fountain stands on it. */
   parkAt(cell: Cell): { big: boolean; fountain: boolean } {
     const id = indexOf(cell);

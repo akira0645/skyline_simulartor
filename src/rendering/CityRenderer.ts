@@ -19,7 +19,7 @@ import { DETAIL_ZOOM, TileRenderer } from './TileRenderer';
 import { commuterPosition } from './commuterPosition';
 import { shiftIndex, shifts, workShift } from '../simulation/WorkShift';
 import { weekendAt } from '../simulation/calendar';
-import { seasonAt } from '../simulation/Seasons';
+import { rainingAt, seasonAt } from '../simulation/Seasons';
 import { utilities } from '../simulation/Utilities';
 import { mind, SHOP_SHIFT } from '../simulation/Mind';
 
@@ -107,7 +107,7 @@ export class CityRenderer {
      * car has stood behind another.
      */
     const trips = new Map<string, { at: 'home' | 'work'; along?: number; wait: number;
-      garage?: { home: boolean; work: boolean }; held?: number }>();
+      garage?: { home: boolean; work: boolean }; lot?: { home?: number; work?: number }; held?: number }>();
     /** The cars that were on the road in the last frame, for the ones behind to keep clear of. */
     let cars: { x: number; y: number; hx: number; hy: number; index: number }[] = [];
     /** Where each commuter in sight was last drawn, for clicking on them. */
@@ -168,10 +168,17 @@ export class CityRenderer {
     };
     /** Whether the light at a junction is green for traffic going up and down; otherwise for across. */
     const greenUpright = (x: number, y: number) => (Math.floor(animationTime / LIGHT) + x + y) % 2 === 0;
+    /** Whether it is raining just now; set once a frame. */
+    let wet = false;
     const drawWalker = (cx: number, cy: number, index: number) => {
       // A person is small beside a house: three pixels across and nine tall.
       const x = Math.round(cx) - 1;
       const y = Math.round(cy) - 4;
+      if (wet) {
+        // An umbrella, each in its owner's colour.
+        people.rect(x - 3, y - 5, 9, 3).rect(x + 1, y - 2, 1, 3).fill(0x25232b);
+        people.rect(x - 2, y - 4, 7, 1).fill([0xe5484d, 0x3f6fb0, 0xf2c94c, 0x5f9a6a, 0xf4f6f8][index % 5]);
+      }
       const stride = Math.floor(animationTime / 140 + index) % 2;
       people.rect(x - 1, y - 1, 5, 10).fill(0x25232b);
       people.rect(x, y, 3, 3).fill(0xffd1a0);
@@ -203,8 +210,19 @@ export class CityRenderer {
       return onRoad;
     };
 
+    /** The car park within two tiles of a building, if there is one. */
+    const lotBy = ({ x, y }: Cell): number | undefined => {
+      for (let dy = -2; dy <= 2; dy++) {
+        for (let dx = -2; dx <= 2; dx++) {
+          if (this.city.map.get({ x: x + dx, y: y + dy }) === 'parking') return (y + dy) * MAP_SIZE + x + dx;
+        }
+      }
+    };
+
     const drawPeople = (elapsed = 0) => {
       people.clear();
+      wet = rainingAt(this.city.seed, this.city.now);
+      const lotCars = new Map<number, number>();
       people.position.set(camera.x, camera.y);
       people.scale.set(camera.scale);
       const routes = this.city.getCommutes();
@@ -238,7 +256,10 @@ export class CityRenderer {
         if (!trip) trips.set(key, trip = { at: 'home', wait: 0 });
         // Buildings grow, so this is looked at again at each departure.
         if (!trip.garage || trip.along === undefined && trip.at !== wanted) {
-          trip.garage = { home: (this.city.getBuilding(home)?.level ?? 1) >= 2, work: (this.city.getBuilding(workplace)?.level ?? 1) >= 2 };
+          // A car park within two tiles takes the cars of a small building off the kerb.
+          trip.lot = { home: lotBy(home), work: lotBy(workplace) };
+          trip.garage = { home: this.city.levelAt(home) >= 2 || trip.lot.home !== undefined,
+            work: this.city.levelAt(workplace) >= 2 || trip.lot.work !== undefined };
         }
         const followed = key === this.follow;
         if (followed) pin = centre(trip.at === 'home' ? home : workplace);
@@ -260,7 +281,9 @@ export class CityRenderer {
           return { ...spot, vertical: next.x === road.x, key: `${road.x},${road.y},${building.x - road.x},${building.y - road.y}` };
         };
         const park = (at: 'home' | 'work') => {
-          // A car under a building is not to be seen.
+          // A car in a car park is drawn there, with the others; one under a building is not to be seen.
+          const lot = trip!.lot?.[at];
+          if (lot !== undefined && driving) lotCars.set(lot, (lotCars.get(lot) ?? 0) + 1);
           if (trip!.garage?.[at]) return;
           const spot = kerb(at);
           if (kerbs.has(spot.key)) return;
@@ -369,6 +392,14 @@ export class CityRenderer {
         if (trip.along >= steps) trips.set(key, { at: to, wait: 0 });
       }
       if (elapsed > 0) cars = moving;
+      // The cars standing in each car park: up to six, in its bays.
+      for (const [lot, count] of lotCars) {
+        const left = lot % MAP_SIZE * TILE_SIZE;
+        const top = Math.floor(lot / MAP_SIZE) * TILE_SIZE;
+        for (let bay = 0; bay < Math.min(count, 6); bay++) {
+          drawCar(left + 6 + (bay % 3) * 10, top + (bay < 3 ? 8 : 24), true, lot + bay, 2 + bay % 2);
+        }
+      }
       if (pin) {
         // A yellow arrow bobbing over the one being followed.
         const x = Math.round(pin.x);
@@ -461,6 +492,10 @@ export class CityRenderer {
      * works, light on the water, lamps on the rides, snow in winter and fireworks on the night
      * of a festival. All of it is for show.
      */
+    /** The level each building in sight had when last looked at, and when each one under scaffolding went up. */
+    const known = new Map<number, number>();
+    const building = new Map<number, number>();
+    let knownAt = 0;
     const drawLife = () => {
       const map = this.city.map;
       const left = Math.max(0, Math.floor(-camera.x / camera.scale / TILE_SIZE));
@@ -518,6 +553,48 @@ export class CityRenderer {
               effects.rect(px + at - 1, py + 1, 5, 6).fill({ color: 0xffb84d, alpha: 0.35 + 0.2 * Math.sin(time / 300 + at) });
             }
           }
+        }
+      }
+      // Scaffolding on what has just gone up or grown a level. A tile seen for the first time
+      // is only noted, so nothing is "built" by scrolling to it; and when another city is
+      // loaded, everything is seen afresh.
+      if (this.city.now < knownAt) known.clear();
+      knownAt = this.city.now;
+      for (let y = top; y <= bottom; y++) {
+        for (let x = left; x <= right; x++) {
+          const id = y * MAP_SIZE + x;
+          const level = this.city.levelAt({ x, y });
+          const before = known.get(id);
+          if (before !== level) {
+            if (before !== undefined && level > before) building.set(id, time);
+            known.set(id, level);
+          }
+          const since = building.get(id);
+          if (since === undefined) continue;
+          const age = time - since;
+          if (age > 9000 || !level) {
+            building.delete(id);
+            continue;
+          }
+          const px = x * TILE_SIZE;
+          const py = y * TILE_SIZE;
+          // Poles and planks over the front, a net that comes down as the work is finished, and a builder.
+          const done = age / 9000;
+          effects.rect(px + 2, py + 2 + Math.round(done * 24), 28, 26 - Math.round(done * 24)).fill({ color: 0x5f9a6a, alpha: 0.55 });
+          for (const pole of [2, 11, 20, 29]) effects.rect(px + pole, py + 2, 1, 28).fill(0xd6dbe6);
+          for (const plank of [8, 16, 24]) effects.rect(px + 2, py + plank, 28, 1).fill(0xb98a4a);
+          const walk = 4 + Math.floor(age / 300) % 22;
+          effects.rect(px + walk, py + 12, 2, 4).fill(0xf2c94c).rect(px + walk, py + 11, 2, 1).fill(0xffd1a0);
+        }
+      }
+      // Rain slanting down over the whole view, and the light a little dimmer for it.
+      if (wet) {
+        const width = (right - left + 1) * TILE_SIZE;
+        const height = (bottom - top + 1) * TILE_SIZE;
+        effects.rect(left * TILE_SIZE, top * TILE_SIZE, width, height).fill({ color: 0x1d2a3a, alpha: 0.12 });
+        for (let drop = 0; drop < 140; drop++) {
+          const fall = (time / (5 + drop % 4) + drop * 53) % height;
+          effects.rect(left * TILE_SIZE + (drop * 97 + fall * 0.3) % width, top * TILE_SIZE + fall, 1, 6).fill({ color: 0xbfd8ee, alpha: 0.6 });
         }
       }
       // Snow drifting down over the whole view in winter.

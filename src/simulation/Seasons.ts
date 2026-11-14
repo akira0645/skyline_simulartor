@@ -91,3 +91,16 @@ export const challenges = {
 } as const;
 export type ChallengeId = (typeof challenges.list)[number]['id'];
 export interface Challenge { id: ChallengeId; target: number; until: number }
+
+/**
+ * Rain, by the day: the share of days it rains in each season. Winter has snow instead. It is
+ * weather to look at; nothing in the city goes by it.
+ */
+export const rain = { spring: 0.25, summer: 0.3, autumn: 0.15, winter: 0 } satisfies Record<Season, number>;
+/** Whether it rains on the day of a tick in a city with this seed. */
+export function rainingAt(seed: number, tick: number): boolean {
+  const day = Math.floor(tick / calendar.ticksPerDay);
+  let hash = Math.imul(seed ^ Math.imul(day + 1, 0x9e3779b1), 0x85ebca6b);
+  hash = Math.imul(hash ^ (hash >>> 15), 0xc2b2ae35);
+  return ((hash ^ (hash >>> 13)) >>> 0) / 2 ** 32 < rain[seasonAt(tick)];
+}

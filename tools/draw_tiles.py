@@ -678,6 +678,95 @@ def parking():
     return t
 
 
+def library():
+    """A library: a brown hall with tall windows, steps and a row of books on its sign."""
+    t = Tile()
+    t.shadow(1, 1, 14, 14)
+    t.slab(1, 1, 14, 5, '#c9a36a', '#b98a4a', '#8f6832')
+    t.rect(1, 6, 14, 14, '#efe6d2')
+    t.rect(14, 6, 14, 14, '#cbbfa4')
+    t.rect(4, 2, 11, 4, '#f4f6f8')           # sign with books
+    for x, colour in ((5, '#c8322e'), (7, '#3f6fb0'), (9, '#5f9a6a')):
+        t.rect(x, 2, x, 4, colour)
+    for x in (2, 5, 10, 13):
+        t.window(x, 7, x, 11)
+    t.rect(7, 9, 8, 14, '#6b432b')
+    t.rect(5, 13, 10, 14, '#b3b6bc')         # steps
+    return t
+
+
+def pool():
+    """A swimming pool: blue water with lane ropes inside a pale deck, and a small changing hut."""
+    t = Tile()
+    t.rect(0, 0, 15, 15, '#e6dfcf')
+    t.rect(0, 15, 15, 15, '#c2baa5')
+    t.rect(2, 5, 13, 13, '#2f78ab')
+    t.rect(3, 6, 12, 12, '#5bb6ce')
+    t.rect(3, 6, 12, 6, '#a9e0ee')
+    for x in (6, 9):
+        for y in range(7, 13, 2):
+            t.rect(x, y, x, y, '#f4f6f8')
+    t.slab(2, 1, 8, 3, '#f0a55a', '#d98838', '#a9682a')
+    t.rect(11, 1, 13, 3, '#e5484d')          # parasol
+    t.rect(12, 2, 12, 2, '#f4f6f8')
+    return t
+
+
+def ktv():
+    """A karaoke box: a dark front, a pink neon sign with a note on it and lit doors."""
+    t = Tile()
+    t.shadow(1, 1, 14, 14)
+    t.slab(1, 1, 14, 4, '#5a4a7a', '#3a2c55', '#231a38')
+    t.rect(1, 5, 14, 14, '#2b2140')
+    t.rect(14, 5, 14, 14, '#1b1429')
+    t.rect(3, 5, 12, 8, '#e8799a')           # neon sign
+    t.rect(4, 6, 11, 7, '#3a1530')
+    t.rect(6, 6, 6, 7, '#f6e27a')
+    t.rect(7, 6, 8, 6, '#f6e27a')
+    t.rect(10, 6, 10, 7, '#7fd0c8')
+    for x in (2, 12):
+        t.rect(x, 10, x + 1, 11, '#f6e27a')
+    t.rect(6, 10, 9, 14, '#7fd0c8')
+    t.rect(7, 11, 8, 14, '#1b1429')
+    return t
+
+
+def amusement():
+    """An amusement park: a big wheel, a striped tent, a track of little cars and a gate."""
+    t = Tile(size=2 * T)
+    t.rect(0, 0, 31, 31, '#8fcb80')
+    t.rect(0, 28, 31, 31, '#d9cfa8')
+    # the wheel
+    for x, y in ((8, 2), (5, 3), (11, 3), (3, 5), (13, 5), (2, 8), (14, 8), (3, 11), (13, 11), (5, 13), (11, 13), (8, 14)):
+        t.rect(x, y, x + 1, y + 1, '#55575b')
+    for (x, y), colour in zip(((8, 2), (3, 5), (13, 5), (2, 8), (14, 8), (5, 13), (11, 13)),
+                              ('#e5484d', '#f2c94c', '#5bb6ce', '#5f9a6a', '#e8799a', '#f0a55a', '#3f6fb0')):
+        t.rect(x, y, x + 1, y + 1, colour)
+    t.rect(8, 8, 9, 9, '#f4f6f8')
+    t.rect(8, 10, 9, 19, '#787a7e')
+    t.rect(5, 20, 12, 21, '#55575b')
+    # the tent
+    for x in range(18, 30):
+        t.rect(x, 6, x, 16, '#e5484d' if (x // 2) % 2 else '#f4f6f8')
+    t.rect(19, 4, 28, 5, '#e5484d')
+    t.rect(21, 2, 26, 3, '#f4f6f8')
+    t.rect(23, 0, 24, 1, '#f2c94c')
+    t.rect(22, 12, 25, 16, '#3a1512')
+    t.rect(18, 17, 29, 17, (16, 17, 20, 80))
+    # the track and its cars
+    t.rect(16, 20, 29, 26, '#84878c')
+    t.rect(17, 21, 28, 25, '#404040')
+    t.rect(19, 23, 26, 23, '#8fcb80')
+    for x, y, colour in ((18, 21, '#f2c94c'), (24, 21, '#5bb6ce'), (21, 24, '#e5484d'), (27, 24, '#5f9a6a')):
+        t.rect(x, y, x + 1, y + 1, colour)
+    # the gate
+    t.rect(2, 24, 3, 30, '#b98a4a')
+    t.rect(12, 24, 13, 30, '#b98a4a')
+    t.rect(2, 23, 13, 25, '#f2c94c')
+    t.rect(4, 24, 11, 24, '#e5484d')
+    return t
+
+
 def mall():
     """A shopping mall: a long glass front under a red sign, with its own car park."""
     t = Tile(size=2 * T)
@@ -1087,7 +1176,7 @@ HOME_ROWS = [
     [tile for paint in KIND_PAINT for tile in kind_towers(*paint)],
 ]
 
-BIG = [housing_complex(), hospital(), university(), museum(), stadium(), mall(), casino()]
+BIG = [housing_complex(), hospital(), university(), museum(), stadium(), mall(), casino(), amusement()]
 
 ROWS = [
     [road(mask) for mask in range(16)],
@@ -1121,7 +1210,7 @@ ROWS = [
      heavy_plant().recolour({'#9a5b4d': '#6d7379', '#5a332b': '#3f4347', '#8d8f96': '#a8907d',
                              '#e0b23e': '#d98838', '#c4962c': '#b06a22', '#96701c': '#7f4a14'})],
     [power_plant(), water_tower(), fire_station(), police_station(), school(), clinic(), bus_stop(),
-     metro_station(), market(), high_school(), temple(), cinema(), parking()],
+     metro_station(), market(), high_school(), temple(), cinema(), parking(), library(), pool(), ktv()],
 ]
 
 if __name__ == '__main__':

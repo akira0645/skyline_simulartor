@@ -9,7 +9,7 @@ export type Road = 'road' | 'avenue' | 'bridge';
 /** Public services, which cover an area without a limit on buildings. */
 export type Service = 'fire' | 'police' | 'school' | 'clinic' |
   'market' | 'highschool' | 'hospital' | 'university' | 'museum' | 'stadium' | 'temple' |
-  'mall' | 'casino' | 'cinema' | 'parking';
+  'mall' | 'casino' | 'cinema' | 'parking' | 'library' | 'pool' | 'ktv' | 'amusement';
 /**
  * `annex` is the rest of a building that takes two tiles by two: the building's own tile is
  * its top left corner, and the three others are annexes.
@@ -24,7 +24,7 @@ export const TILES: readonly Tile[] =
   ['grass', 'road', 'residential', 'commercial', 'industrial', 'power', 'water', 'avenue', 'park',
     'fire', 'police', 'school', 'clinic', 'river', 'bridge', 'bus', 'metro',
     'annex', 'market', 'highschool', 'hospital', 'university', 'museum', 'stadium', 'temple',
-    'mall', 'casino', 'cinema', 'parking', 'farm'];
+    'mall', 'casino', 'cinema', 'parking', 'farm', 'library', 'pool', 'ktv', 'amusement'];
 export const isZone = (tile: Tile | undefined): tile is Zone =>
   tile === 'residential' || tile === 'commercial' || tile === 'industrial';
 export const isFacility = (tile: string | undefined): tile is Facility =>
@@ -32,11 +32,12 @@ export const isFacility = (tile: string | undefined): tile is Facility =>
 export const isService = (tile: string | undefined): tile is Service =>
   tile === 'fire' || tile === 'police' || tile === 'school' || tile === 'clinic' || tile === 'market' ||
   tile === 'highschool' || tile === 'hospital' || tile === 'university' || tile === 'museum' || tile === 'stadium' ||
-  tile === 'temple' || tile === 'mall' || tile === 'casino' || tile === 'cinema' || tile === 'parking';
+  tile === 'temple' || tile === 'mall' || tile === 'casino' || tile === 'cinema' || tile === 'parking' ||
+  tile === 'library' || tile === 'pool' || tile === 'ktv' || tile === 'amusement';
 /** The buildings that take two tiles by two. */
 export const isBig = (tile: string | undefined): boolean =>
   tile === 'hospital' || tile === 'university' || tile === 'museum' || tile === 'stadium' || tile === 'mall' ||
-  tile === 'casino';
+  tile === 'casino' || tile === 'amusement';
 /** The four tiles of a big building whose top left corner is `cell`. */
 export const footprint = ({ x, y }: Cell): Cell[] =>
   [{ x, y }, { x: x + 1, y }, { x, y: y + 1 }, { x: x + 1, y: y + 1 }];

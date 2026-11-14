@@ -22,6 +22,9 @@ import { SimulationEngine } from '../simulation/SimulationEngine';
 import { AUTO_SLOT, readSave, writeSave } from '../storage/SaveManager';
 import { goals } from '../simulation/Goals';
 import { combos, COMBOS, taskList, type Combo, type TaskId } from '../simulation/Combos';
+import { challenges, festivals, POLICIES, seasons, visitorsToday, type ChallengeId, type FestivalId, type Policy,
+  type Season } from '../simulation/Seasons';
+import { weekendAt } from '../simulation/calendar';
 import { TRAITS, type HomeKind, type Trait } from '../simulation/Residents';
 import { mind, thoughts as thoughtWeights, type Doing, type Thought, type Way } from '../simulation/Mind';
 import { bond, circle, PLACES, type Place } from '../simulation/Community';
@@ -38,7 +41,8 @@ const toolGroups: [string, [Tool, string][]][] = [
   ['服務', [['fire', '消防局'], ['police', '警察局'], ['clinic', '診所'], ['hospital', '醫院']]],
   ['學校', [['school', '小學'], ['highschool', '高中'], ['university', '大學']]],
   ['生活', [['park', '公園'], ['farm', '農田'], ['market', '市場'], ['temple', '廟'], ['parking', '停車場']]],
-  ['休閒', [['cinema', '電影院'], ['mall', '大型商場'], ['casino', '賭場'], ['museum', '博物館'], ['stadium', '體育場']]],
+  ['休閒', [['library', '圖書館'], ['cinema', '電影院'], ['pool', '游泳池'], ['ktv', 'KTV'], ['amusement', '遊樂園']]],
+  ['景點', [['mall', '大型商場'], ['casino', '賭場'], ['museum', '博物館'], ['stadium', '體育場']]],
   ['其他', [['demolish', '拆除']]],
 ];
 
@@ -47,10 +51,11 @@ const iconAt: Partial<Record<Tool, [number, number]>> = {
   road: [10, 0], avenue: [10, 0], residential: [0, 2], commercial: [0, 3], industrial: [0, 4],
   power: [0, 5], water: [1, 5], fire: [2, 5], police: [3, 5], school: [4, 5], clinic: [5, 5], bus: [6, 5], metro: [7, 5],
   market: [8, 5], highschool: [9, 5], temple: [10, 5], cinema: [11, 5], parking: [12, 5],
+  library: [13, 5], pool: [14, 5], ktv: [15, 5],
 };
 /** The buildings of two tiles by two, by their place in the row of them; shown at half size. */
 const bigIconAt: Partial<Record<Tool, number>> = { hospital: 1, university: 2, museum: 3, stadium: 4,
-  mall: 5, casino: 6 };
+  mall: 5, casino: 6, amusement: 7 };
 const iconStyle = (tool: Tool) => {
   const big = bigIconAt[tool];
   if (big !== undefined) {
@@ -81,7 +86,9 @@ function toolTip(tool: Tool): string {
       tool === 'university' ? '範圍很大。' :
       tool === 'parking' ? '蓋在休閒建築 4 格內，遊客多兩成五。' :
       tool === 'casino' ? '最賺，但附近地價變低、會嫌吵。' :
-      tool === 'museum' || tool === 'stadium' || tool === 'mall' || tool === 'cinema' ? '人越多賺越多。' : '';
+      tool === 'library' ? '附近地價變高，住附近的人放假會來。' :
+      tool === 'ktv' ? '會賺錢，但附近地價低一點。' :
+      services.visitors[tool] ? '人越多賺越多，假日更多。' : '';
     return `點一下蓋${tileNames[tool]}，${isBig(tool) ? '佔 2 × 2，一格貼路就行' : '要貼著路'}。框內是照顧範圍。${extra}`;
   }
   if (isFacility(tool)) return `點一下蓋${tileNames[tool]}，要貼著路。一座供 ${utilities.capacity[tool]} 棟；綠色有、紅色沒有。`;
@@ -153,7 +160,7 @@ const tileNames: Record<Tile, string> = {
   fire: '消防局', police: '警察局', school: '小學', clinic: '診所',
   river: '河流', bridge: '橋', bus: '公車站', metro: '捷運站',
   market: '市場', highschool: '高中', hospital: '醫院', university: '大學', museum: '博物館', stadium: '體育場',
-  annex: '大建築', farm: '農田', temple: '廟', mall: '大型商場', casino: '賭場', cinema: '電影院', parking: '停車場',
+  annex: '大建築', farm: '農田', library: '圖書館', pool: '游泳池', ktv: 'KTV', amusement: '遊樂園', temple: '廟', mall: '大型商場', casino: '賭場', cinema: '電影院', parking: '停車場',
 };
 
 /** What each kind of home is called, and who tends to live in it. */
@@ -176,6 +183,9 @@ const eventText: Record<CityEvent['kind'], string> = {
   'crime-stopped': '遭小偷，警車趕到抓到人了',
   sick: '有人生病，附近沒有診所，搬走了',
   'sick-helped': '有人生病，救護車送去診所了',
+  flood: '河水淹進來沒人救，附近的人會怕一個月',
+  'flood-helped': '河水淹進來，消防隊抽乾了',
+  flu: '流感，附近沒有診所，有人病倒搬走了',
 };
 
 /** What each kind of person is called, and what they do to the city. */
@@ -366,6 +376,27 @@ const taskNames: Record<TaskId, string> = {
   commute: '縮短上班路程', air: '把空氣弄乾淨', school: '讓住宅附近有小學', clinic: '讓住宅附近有診所',
   highschool: '讓住宅附近有高中', hospital: '讓住宅附近有醫院', staff: '幫店家和工廠找到人',
 };
+/** The seasons, festivals, policies and challenges: what each is called, and what it does or needs. */
+const seasonNames: Record<Season, [string, string]> = {
+  spring: ['春', '一切照常'],
+  summer: ['夏', '農田多兩成，電廠多花一成五，河邊可能淹水'],
+  autumn: ['秋', '農田多五成'],
+  winter: ['冬', '農田只剩三成，電廠多花三成，可能有流感'],
+};
+const festivalNames: Record<FestivalId, [string, string]> = {
+  newyear: ['新年煙火', '要有大公園；有森林或河濱公園更多'],
+  temple: ['廟會', '要有廟；有廟口夜市更多'],
+  games: ['運動會', '要有高中；有體育場加倍'],
+  harvest: ['豐年祭', '要有農田；有農莊更多'],
+  market: ['歲末市集', '要有市場；有商場或商圈更多'],
+};
+const policyNames: Record<Policy, [string, string]> = {
+  recycle: ['垃圾分類', '工廠污染少兩成。每人每月 $0.5。'],
+  freeride: ['免費搭車', '搭車的人變多，但沒有車票收入。'],
+  patrol: ['夜間巡邏', '遭小偷的機會減半。每人每月 $0.4。'],
+  festive: ['節慶補助', '節日收入多五成。每月 $200。'],
+};
+const challengeNames: Record<ChallengeId, string> = { grow: '人口', riders: '搭車的人', top: '3 級建築' };
 /** The three ready-made cities. */
 const demoList: [DemoSize, string, string, string[]][] = [
   ['small', '小鎮', '140 人', ['捷運', '電影院', '東岸待開發']],
@@ -379,7 +410,8 @@ const moodWord = (mood: number) => mood >= mind.glad ? '開心' : mood >= mind.l
 
 const serviceNames: Record<Service, string> = { fire: '消防', police: '警察', school: '小學', clinic: '診所',
   market: '市場', highschool: '高中', hospital: '醫院', university: '大學', museum: '博物館', stadium: '體育場',
-  temple: '廟', mall: '商場', casino: '賭場', cinema: '電影院', parking: '停車場' };
+  temple: '廟', mall: '商場', casino: '賭場', cinema: '電影院', parking: '停車場',
+  library: '圖書館', pool: '游泳池', ktv: 'KTV', amusement: '遊樂園' };
 
 /** How full a road is, in the words of the traffic view's four colours. */
 const trafficName = (load: number) =>
@@ -438,6 +470,10 @@ export function App() {
   // The special group whose recipe is shown, and the tick of the last finished task that was announced.
   const knownTask = useRef(0);
   const knownCombos = useRef(0);
+  const knownFeast = useRef(0);
+  const knownChallenge = useRef(0);
+  // The festival or policy whose explanation is shown.
+  const [about, setAbout] = useState<FestivalId | Policy>();
   const seenCombos = useRef<readonly Combo[]>([]);
   // What is framed on the map, and which of them the view is on.
   const spot = useRef({ key: '', index: 0 });
@@ -631,11 +667,24 @@ export function App() {
       if (goal) setMessage(`完成「${goal.title}」，獎金 ${money(goal.reward)}。`);
     }
     knownGoals.current = next.goals.length;
-    if (next.taskDone && next.taskDone.tick > knownTask.current) {
-      const done = taskList.find(task => task.id === next.taskDone!.id)!;
+    const { taskDone, challengeEnd } = engine.city.getNotices();
+    if (taskDone && taskDone.tick > knownTask.current) {
+      const done = taskList.find(task => task.id === taskDone.id)!;
       setMessage(`完成任務「${taskNames[done.id]}」，獎金 ${money(done.reward)}。`);
     }
-    knownTask.current = Math.max(knownTask.current, next.taskDone?.tick ?? 0);
+    knownTask.current = Math.max(knownTask.current, taskDone?.tick ?? 0);
+    if (challengeEnd && challengeEnd.tick > knownChallenge.current) {
+      setMessage(challengeEnd.won ?
+        `限時挑戰「${challengeNames[challengeEnd.id]}」達成，獎金 ${money(challenges.list.find(entry => entry.id === challengeEnd.id)!.reward)}。` :
+        `限時挑戰「${challengeNames[challengeEnd.id]}」沒趕上。`);
+    }
+    knownChallenge.current = Math.max(knownChallenge.current, challengeEnd?.tick ?? 0);
+    const feast = engine.city.getFeasts().at(-1);
+    if (feast && feast.tick > knownFeast.current) {
+      setMessage(feast.income ? `今天是${festivalNames[feast.id][0]}，收入 ${money(feast.income)}。` :
+        `今天是${festivalNames[feast.id][0]}，可惜城裡沒地方辦（${festivalNames[feast.id][1]}）。`);
+    }
+    knownFeast.current = Math.max(knownFeast.current, feast?.tick ?? 0);
     if (next.combosSeen.length > knownCombos.current) {
       setMessage(`湊出「${comboNames[next.combosSeen.find(combo => !seenCombos.current.includes(combo)) ?? next.combosSeen[0]][0]}」，記進手冊了。`);
     }
@@ -699,6 +748,8 @@ export function App() {
     knownRank.current = opening.rank;
     knownEvent.current = engine.getSnapshot().tick;
     knownTask.current = engine.getSnapshot().tick;
+    knownFeast.current = engine.getSnapshot().tick;
+    knownChallenge.current = engine.getSnapshot().tick;
     knownGoals.current = opening.goals.length;
     seenCombos.current = opening.combosSeen;
     knownCombos.current = opening.combosSeen.length;
@@ -754,6 +805,8 @@ export function App() {
       {seen.trait && <Tag label={traitNames[seen.trait][0]} tip={traitNames[seen.trait][1]} />}
       <Tag label={moodWord(seen.mood)} tone={seen.mood >= mind.glad ? 'good' : seen.mood < mind.low ? 'bad' : undefined} tip="心情" />
       {seen.kids > 0 && <Tag label="小孩" value={seen.kids} />}
+      {seen.school && <Tag label={seen.school === 'university' ? '讀過大學' : '讀過高中'} tone="good"
+        tip={seen.school === 'university' ? '家在大學範圍內，薪水多兩成五' : '家在高中範圍內，薪水多一成'} />}
     </div>
     <dl>
       <dt>現在</dt><dd>{doingText(doing, seen.shift, seen.way)}</dd>
@@ -782,6 +835,8 @@ export function App() {
   const happenings = [
     ...engine.city.getEvents().map(event => ({ tick: event.tick, text: eventText[event.kind] })),
     ...engine.city.getNews().map(item => ({ tick: item.tick, text: newsText(item) })),
+    ...engine.city.getFeasts().map(item => ({ tick: item.tick,
+      text: item.income ? `${festivalNames[item.id][0]}，收入 ${money(item.income)}` : `${festivalNames[item.id][0]}沒辦成` })),
   ].sort((a, b) => b.tick - a.tick).slice(0, 14);
   const rush = rushShifts(hour).map(index => shifts[index].title);
   const setTax = (rate: number) => {
@@ -870,7 +925,7 @@ export function App() {
         <div className="clock">
           <div className="when">
             <b>{date.year} 年 {date.month} 月 {date.day} 日</b>
-            <small>星期{'一二三四五六日'[weekdayAt(tick)]} {String(Math.floor(hour)).padStart(2, '0')}:{String(Math.floor(hour % 1 * 60)).padStart(2, '0')}</small>
+            <small>{seasonNames[stats.season][0]}・星期{'一二三四五六日'[weekdayAt(tick)]} {String(Math.floor(hour)).padStart(2, '0')}:{String(Math.floor(hour % 1 * 60)).padStart(2, '0')}</small>
           </div>
           <span role="group" aria-label="時間快慢">
             {speeds.map(value => (
@@ -900,7 +955,7 @@ export function App() {
           {panelTabs.map(([value, label]) => (
             <button key={value} type="button" role="tab" aria-selected={panelTab === value}
               onClick={() => setPanelTab(value)}>
-              {label}{value === 'city' && trouble > 0 && <i>{trouble}</i>}{value === 'tasks' && stats.tasks.length > 0 && <i>{stats.tasks.length}</i>}
+              {label}{value === 'city' && trouble > 0 && <i>{trouble}</i>}{value === 'tasks' && stats.tasks.length + (stats.challenge ? 1 : 0) > 0 && <i>{stats.tasks.length + (stats.challenge ? 1 : 0)}</i>}
             </button>
           ))}
         </div>
@@ -1093,6 +1148,30 @@ export function App() {
             </dl>
           </section>
           <section>
+            <h2>今天</h2>
+            <div className="tags">
+              <Tag label={seasonNames[stats.season][0]} tip={seasonNames[stats.season][1]} />
+              <Tag label={weekendAt(tick) ? '假日' : '平日'} value={`遊客 ×${visitorsToday(tick)}`}
+                tone={weekendAt(tick) ? 'good' : undefined} tip={`假日遊客收入 ×${seasons.weekend}，平日 ×${seasons.weekday}`} />
+              <Tag label={festivalNames[stats.festival.id][0]} value={stats.festival.days ? `${stats.festival.days} 天後` : '今天'}
+                tone={stats.festival.ready ? 'good' : 'bad'} picked={about === stats.festival.id}
+                onPick={() => setAbout(stats.festival.id)} />
+            </div>
+            <h2 className="sub">政策</h2>
+            <div className="tags">
+              {POLICIES.map(policy => <Tag key={policy} label={policyNames[policy][0]} picked={stats.policies.includes(policy)}
+                onPick={() => {
+                  engine.city.setPolicy(policy, !stats.policies.includes(policy));
+                  setStats(engine.city.getStats());
+                  setAbout(policy);
+                  rendererRef.current?.refresh?.();
+                }} />)}
+            </div>
+            <p className="said">{!about ? `${seasonNames[stats.season][1]}。點政策開關。` :
+              about in policyNames ? policyNames[about as Policy][1] :
+              `${festivals.find(entry => entry.id === about)!.month} 月 ${festivals.find(entry => entry.id === about)!.day} 日。${festivalNames[about as FestivalId][1]}。${stats.festival.ready || about !== stats.festival.id ? '' : '現在還辦不成。'}`}</p>
+          </section>
+          <section>
             <h2>目前的問題</h2>
             <div className="tags two">
               {stats.idle > 0 && <Tag label="設施沒貼路" value={stats.idle} tone="bad" tip="旁邊沒有路，沒有在運作"
@@ -1198,6 +1277,14 @@ export function App() {
           </div>}
         </>}
 
+        {panelTab === 'tasks' && stats.challenge && <section className="timed">
+          <h2>限時：{challengeNames[stats.challenge.id]}到 {stats.challenge.target}</h2>
+          <div className="tags">
+            <Tag label="現在" value={stats.challenge.now} />
+            <Tag label="剩" value={`${Math.max(0, Math.ceil((stats.challenge.until - tick) / 8))} 天`} tone="bad" />
+            <Tag label="獎金" value={money(challenges.list.find(entry => entry.id === stats.challenge!.id)!.reward)} tone="good" />
+          </div>
+        </section>}
         {panelTab === 'tasks' && (stats.tasks.length ? stats.tasks.map(({ id, left }) => {
           const task = taskList.find(entry => entry.id === id)!;
           return <section key={id}>
@@ -1206,11 +1293,11 @@ export function App() {
               <Tag label={issueNames[task.issue]} value={`${left} 棟`} tone="bad" />
               <Tag label="降到" value={`${task.to} 棟`} />
               <Tag label="獎金" value={money(task.reward)} tone="good" />
-              <Tag label="看在哪" onPick={() => locate(`issue:${task.issue}`, engine.city.find({ issue: task.issue }))} />
             </div>
+            <button type="button" className="go" onClick={() => locate(`issue:${task.issue}`, engine.city.find({ issue: task.issue }))}>◎ 定位</button>
             <p className="said">{issueHelp[task.issue]}</p>
           </section>;
-        }) : <p className="hint">現在沒有任務。城市出問題時，居民會來拜託。</p>)}
+        }) : !stats.challenge && <p className="hint">現在沒有任務。城市出問題時，居民會來拜託。</p>)}
 
         {panelTab === 'goals' && <ul className="goals">
           {[...goals].sort((a, b) => Number(stats.goals.includes(a.id)) - Number(stats.goals.includes(b.id))).map(goal => {

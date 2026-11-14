@@ -366,3 +366,11 @@ button.tag[aria-pressed="true"] b { color: var(--ink); }
 .side .goals li { padding-bottom: 0.5rem; border-bottom: 1px solid var(--asphalt); }
 .side .tabs button { font-size: 0.78rem; }
 .side .hint.count { margin-bottom: 0.6rem; }
+
+/* A button that moves the map, set apart from the tags beside it. */
+.side .go { display: block; margin-top: 0.4rem; padding: 0.1rem 0.6rem; font-size: 0.85rem; color: var(--ink); background: #ffe14d;
+  border: 2px solid var(--ink); box-shadow: 2px 2px 0 var(--shadow); }
+.side .go:hover { background: #fff0a0; }
+.side .timed { border-color: var(--loss); }
+.side .timed > h2:first-child { background: #55302d; }
+.build .tabs button { width: 4.2rem; }

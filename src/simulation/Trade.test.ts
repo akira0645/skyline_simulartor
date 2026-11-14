@@ -5,7 +5,7 @@ import { goods } from './Goods';
 import { scare } from './Services';
 import { SimulationEngine } from './SimulationEngine';
 import { MAP_SIZE, TILES } from './TileMap';
-import { dayPay, trade } from './Wealth';
+import { dayPay, schooling, trade } from './Wealth';
 
 const town = () => {
   const engine = new SimulationEngine({ version: 1, seed: 42, tick: 0 });
@@ -27,7 +27,9 @@ it('pays the staff of a shop more when business is good and less when it is quie
     seen.add(shop.trade ?? 'usual');
     const times = shop.trade ? trade.times[shop.trade] : 1;
     for (const person of shop.staff) {
-      expect(person.pay).toBe(Math.round(dayPay('commercial', shop.level, person.trait === 'rich') * times));
+      // Pay also follows schooling: the best school in reach of the home.
+      expect(person.pay).toBe(Math.round(dayPay('commercial', shop.level, person.trait === 'rich') * times *
+        (person.school ? schooling[person.school] : 1)));
     }
     // Business follows customers per member of staff.
     const share = shop.custom! / (shop.occupants * goods.perClerk);

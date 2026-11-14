@@ -7,6 +7,7 @@ import { growth } from './ZoneDemandSystem';
 import type { Zone } from './TileMap';
 import { HOME_KINDS, type HomeKind } from './Residents';
 import { vehicles } from './Wealth';
+import { challenges, type Challenge } from './Seasons';
 
 /**
  * 4 added funds, the milestone rank and avenue tiles; 3 added power and water facility tiles;
@@ -75,6 +76,9 @@ export interface SaveData {
   tasks: string[];
   /** The special groups (see Combos.ts) the city has ever had, for the handbook. */
   combos: string[];
+  /** The policies that are on, and the challenge under way if there is one. */
+  policies: string[];
+  challenge?: Challenge;
 }
 
 const zonedCode = (code: number) => isZone(TILES[code]);
@@ -105,6 +109,13 @@ function parseLines(lines: unknown, tiles: Uint8Array, metros: ReadonlySet<numbe
     ids.add(id);
     return { id, kind, stops: [...stops] as number[], vehicles };
   });
+}
+
+function parseChallenge(value: unknown): { challenge?: Challenge } {
+  if (value === undefined) return {};
+  const { id, target, until } = (value ?? {}) as Record<string, unknown>;
+  if (!challenges.list.some(entry => entry.id === id) || !isCount(target) || !isCount(until)) throw new Error('存檔資料損壞。');
+  return { challenge: { id: id as Challenge['id'], target, until } };
 }
 
 /** Checks everything before anything is applied, so a bad save cannot half-load. */
@@ -213,5 +224,7 @@ export function parseSave(data: unknown): SaveData {
     goals: parseList((data as Record<string, unknown>).goals, value => typeof value === 'string') as string[],
     loans: parseList((data as Record<string, unknown>).loans, isCount) as number[],
     tasks: parseList((data as Record<string, unknown>).tasks, value => typeof value === 'string') as string[],
-    combos: parseList((data as Record<string, unknown>).combos, value => typeof value === 'string') as string[] };
+    combos: parseList((data as Record<string, unknown>).combos, value => typeof value === 'string') as string[],
+    policies: parseList((data as Record<string, unknown>).policies, value => typeof value === 'string') as string[],
+    ...parseChallenge((data as Record<string, unknown>).challenge) };
 }

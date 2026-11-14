@@ -1,6 +1,8 @@
 import { calendar, weekendAt } from './calendar';
 import { bond, circle, PLACES, type Place } from './Community';
-import { dayPay, pay, trade, vehicles, type Trade } from './Wealth';
+import { dayPay, pay, schooling, trade, vehicles, type Trade } from './Wealth';
+import { challenges, disasters, festivals, nextFestival, policies, POLICIES, seasonAt, seasons, visitorsToday,
+  type Challenge, type FestivalId, type Policy, type Season } from './Seasons';
 import { cycle, economy, milestones, tileCost, type Mood } from './Economy';
 import { goals } from './Goals';
 import { comboIncome, combos, comboValue, COMBOS, taskList, tasks, type Combo, type TaskId } from './Combos';
@@ -56,7 +58,7 @@ export const ISSUES: readonly Issue[] = ['no-road', 'no-power', 'no-water', 'no-
 export interface CityEvent {
   tick: number;
   /** An emergency nobody came to, or the one the service in reach dealt with. */
-  kind: (typeof emergencies)[number]['trouble' | 'handled'];
+  kind: (typeof emergencies)[number]['trouble' | 'handled'] | 'flood' | 'flood-helped' | 'flu';
   cell: Cell;
   /** The station that answered, when one did. */
   station?: Cell;
@@ -105,6 +107,17 @@ export class BuildingSystem {
   private readonly tasksOn: TaskId[] = [];
   private readonly tasksRest = new Map<TaskId, number>();
   private taskDone?: { id: TaskId; tick: number };
+  /** The policies that are on. Saved. */
+  private readonly policiesOn = new Set<Policy>();
+  /** The challenge under way (saved), and how the last one ended (not saved). */
+  private challenge?: Challenge;
+  private challengeEnd?: { id: Challenge['id']; won: boolean; tick: number };
+  /** The festivals held lately, newest last. Not saved. */
+  private readonly feasts: { id: FestivalId; tick: number; income: number }[] = [];
+  /** The season the city was last worked out in, to notice when it turns. */
+  private lastSeason: Season = 'spring';
+  /** How many tiles of each kind the map has, as of the last refresh. */
+  private readonly tileCounts = new Map<string, number>();
   /** Which special group each tile belongs to, as its place in `COMBOS` plus one; how many of each there are. */
   private readonly special = new Uint8Array(MAP_SIZE ** 2);
   private readonly comboCounts = Object.fromEntries(COMBOS.map(combo => [combo, 0])) as Record<Combo, number>;
@@ -448,7 +461,7 @@ export class BuildingSystem {
       home: cellAt(home), work: zone ? cellAt(person.job) : undefined, homeId: home, slot: person.slot,
       /** What they own, what they have saved and what they earn a day. */
       car: person.car ?? 0, money: person.money ?? 0,
-      pay: zone ? this.payAt(person.job, who.trait === 'rich') : 0 };
+      pay: zone ? this.payAt(person.job, who.trait === 'rich', home) : 0, school: this.schoolOf(home) };
   }
 
   /** How business is at a workplace, when it is better or worse than usual (see `trade` in Wealth.ts). */
@@ -463,10 +476,84 @@ export class BuildingSystem {
   }
 
   /** A day's pay at a workplace as business there is now. */
-  private payAt(job: number, rich: boolean): number {
+  private payAt(job: number, rich: boolean, home: number): number {
     const state = this.tradeOf(job);
+    const school = this.schoolOf(home);
     return Math.round(dayPay(this.map.at(job) as 'commercial' | 'industrial', this.buildings.get(job)?.level ?? 1, rich) *
-      (state ? trade.times[state] : 1));
+      (state ? trade.times[state] : 1) * (school ? schooling[school] : 1));
+  }
+
+  /** The schooling the people of a home are taken to have: the best school in whose reach it lies. */
+  private schoolOf(home: number): 'university' | 'highschool' | undefined {
+    return this.covered.university[home] ? 'university' : this.covered.highschool[home] ? 'highschool' : undefined;
+  }
+
+  /** Turns a policy on or off. */
+  setPolicy(policy: Policy, on: boolean): void {
+    if (on) this.policiesOn.add(policy);
+    else this.policiesOn.delete(policy);
+    this.refresh();
+  }
+
+  /** The last task done and how the last challenge ended, for telling the player. Not saved. */
+  getNotices() {
+    return { taskDone: this.taskDone, challengeEnd: this.challengeEnd };
+  }
+
+  /** The festivals held lately, newest last. Not saved. */
+  getFeasts(): readonly { id: FestivalId; tick: number; income: number }[] {
+    return this.feasts;
+  }
+
+  /** How good a place the city has for a festival: 0 for none, more for a better one. */
+  private venueOf(id: FestivalId): number {
+    const has = (tile: string) => (this.tileCounts.get(tile) ?? 0) > 0;
+    const { comboCounts: groups } = this;
+    switch (id) {
+      case 'newyear': return this.bigParks ? (groups.forest || groups.riverpark ? 1.5 : 1) : 0;
+      case 'temple': return has('temple') ? (groups.fair ? 1.5 : 1) : 0;
+      case 'games': return has('stadium') ? 2 : has('highschool') ? 1 : 0;
+      case 'harvest': return this.market.farmed ? (groups.farmstead ? 1.5 : 1) : 0;
+      case 'market': return has('mall') || groups.arcade || groups.plaza || groups.foodstreet ? 1.5 : has('market') ? 1 : 0;
+    }
+  }
+
+  /** Holds today's festival, if it is the day of one and the city has somewhere for it. */
+  private holdFestival(tick: number): void {
+    const next = nextFestival(tick);
+    if (next.days !== 0 || !this.residents) return;
+    const festival = festivals.find(entry => entry.id === next.id)!;
+    const venue = this.venueOf(festival.id);
+    const income = Math.round((festival.perResident * this.residents + festival.perGood * this.market.farmed) * venue *
+      (this.policiesOn.has('festive') ? policies.festive.times : 1));
+    this.funds += income;
+    this.feasts.push({ id: festival.id, tick, income });
+    if (this.feasts.length > 10) this.feasts.shift();
+  }
+
+  /** What a challenge measures. */
+  private challengeFigure(id: Challenge['id']): number {
+    return id === 'grow' ? this.residents : id === 'riders' ? this.riders : this.levelCounts()[2] + this.levelCounts()[3];
+  }
+
+  /** Pays for a challenge met, drops one that ran out, and now and then sets a new one. Once a day. */
+  private reviewChallenge(tick: number): void {
+    const day = Math.floor(tick / calendar.ticksPerDay);
+    if (this.challenge) {
+      const { id, target, until } = this.challenge;
+      const won = this.challengeFigure(id) >= target;
+      if (!won && tick < until) return;
+      if (won) this.funds += challenges.list.find(entry => entry.id === id)!.reward;
+      this.challengeEnd = { id, won, tick };
+      this.challenge = undefined;
+      return;
+    }
+    if (day % challenges.every || this.residents < challenges.population) return;
+    const open = challenges.list.filter(entry => entry.id !== 'riders' || this.plans.some(plan => plan.active));
+    const pick = open[roll(this.seed, tick, 81) % open.length];
+    const now = this.challengeFigure(pick.id);
+    this.challenge = { id: pick.id, target: Math.max(Math.ceil(now * pick.by), now + pick.least),
+      until: tick + challenges.days * calendar.ticksPerDay };
   }
 
   /** Works out every shop's customers. */
@@ -683,7 +770,8 @@ export class BuildingSystem {
   /** What a tile of farmland grows in a month. */
   private farmYield(id: number): number {
     return this.smog[id] > pollution.limit ? 0 :
-      (this.shore[id] ? goods.farm.watered : goods.farm.dry) * (this.special[id] ? combos.farmstead.times : 1);
+      (this.shore[id] ? goods.farm.watered : goods.farm.dry) * (this.special[id] ? combos.farmstead.times : 1) *
+      seasons.farm[seasonAt(this.clock)];
   }
 
   /** Whether a sight has a car park near enough to bring it more visitors. */
@@ -737,8 +825,8 @@ export class BuildingSystem {
         else if (tile === 'park' || tile === 'temple') seen.add(tile);
         else if (tile === 'school' || tile === 'highschool') seen.add('school');
         else if (tile === 'clinic' || tile === 'hospital') seen.add('clinic');
-        else if (tile === 'cinema' || tile === 'mall' || tile === 'casino' || tile === 'museum' ||
-          tile === 'stadium') seen.add('fun');
+        else if (tile === 'cinema' || tile === 'mall' || tile === 'casino' || tile === 'museum' || tile === 'stadium' ||
+          tile === 'library' || tile === 'pool' || tile === 'ktv' || tile === 'amusement') seen.add('fun');
       }
     }
     found = PLACES.filter(place => seen.has(place));
@@ -777,7 +865,7 @@ export class BuildingSystem {
         const zone = person.job >= 0 ? this.map.at(person.job) : undefined;
         let money = person.money ?? 0;
         if (zone === 'commercial' || zone === 'industrial') {
-          money += this.payAt(person.job, traitOf(this.seed, id, person.slot, building.kind) === 'rich') - pay.living;
+          money += this.payAt(person.job, traitOf(this.seed, id, person.slot, building.kind) === 'rich', id) - pay.living;
         } else {
           money = Math.max(0, money - pay.living / 2);
         }
@@ -1207,7 +1295,12 @@ export class BuildingSystem {
     this.clock = tick;
     this.bonds.clear();
     // A day's share of the month's tax and upkeep.
-    if (tick % calendar.ticksPerDay === 0) this.funds += this.budget().net / calendar.daysPerMonth;
+    if (tick % calendar.ticksPerDay === 0) {
+      this.funds += this.budget().net / calendar.daysPerMonth;
+      // The sights' month is an average: weekends bring more than a day's share of it, weekdays less.
+      this.funds += this.visitors / calendar.daysPerMonth * (visitorsToday(tick) - 1);
+      this.holdFestival(tick);
+    }
     // At the end of a month every loan has one payment fewer to go.
     if (tick % (calendar.ticksPerDay * calendar.daysPerMonth) === 0 && this.loans.length) {
       const left = this.loans.map(months => months - 1).filter(months => months > 0);
@@ -1293,12 +1386,14 @@ export class BuildingSystem {
     });
     // Business turning changes how many jobs there are, so everything is worked out again.
     if (daily && this.mood() !== this.lastMood) changed = true;
+    if (daily && seasonAt(tick) !== this.lastSeason) changed = true;
     // A neighbourhood gets over its fright.
     if (daily && this.scares.some(({ until }) => until <= tick)) changed = true;
     if (changed) this.refresh();
     if (daily) this.rollEmergencies(tick, seed);
 
     if (daily) this.reviewTasks(tick);
+    if (daily) this.reviewChallenge(tick);
     if (daily && this.goalsDone.size < goals.length) {
       const view = this.getStats();
       for (const goal of goals) {
@@ -1348,7 +1443,8 @@ export class BuildingSystem {
     const ids = [...this.buildings.keys()];
     let changed = false;
     emergencies.forEach(({ service, trouble, handled }, index) => {
-      if (roll(seed, tick, 7 + 2 * index) / 2 ** 32 >= chance) return;
+      const odds = trouble === 'crime' && this.policiesOn.has('patrol') ? chance * policies.patrol.crime : chance;
+      if (roll(seed, tick, 7 + 2 * index) / 2 ** 32 >= odds) return;
       const id = ids[roll(seed, tick, 8 + 2 * index) % ids.length];
       const building = this.buildings.get(id);
       // It may have burned down a moment ago.
@@ -1373,6 +1469,37 @@ export class BuildingSystem {
         changed = true;
       }
     });
+    const season = seasonAt(tick);
+    const struck = (salt: number, most: number, suits: (id: number) => boolean) => {
+      const open = ids.filter(id => this.buildings.has(id) && suits(id));
+      const picked: number[] = [];
+      for (let count = 0; count < most && open.length; count++) {
+        picked.push(...open.splice(roll(seed, tick, salt + count) % open.length, 1));
+      }
+      return picked;
+    };
+    const note = (kind: CityEvent['kind'], id: number, service?: Service) => {
+      this.events.push({ tick, kind, cell: cellAt(id), station: service && this.nearestStation(cellAt(id), service) });
+      if (this.events.length > EVENT_LOG) this.events.shift();
+    };
+    const { flood, flu } = disasters;
+    if (season === flood.season && this.residents >= flood.population && roll(seed, tick, 61) / 2 ** 32 < flood.chance) {
+      for (const id of struck(62, flood.most, id => this.shore[id] === 1)) {
+        const helped = this.covered.fire[id] === 1;
+        note(helped ? 'flood-helped' : 'flood', id, helped ? 'fire' : undefined);
+        if (helped) continue;
+        this.scares.push({ id, until: tick + scare.days * calendar.ticksPerDay });
+        changed = true;
+      }
+    }
+    if (season === flu.season && this.residents >= flu.population && roll(seed, tick, 71) / 2 ** 32 < flu.chance) {
+      for (const id of struck(72, flu.most, id => this.map.at(id) === 'residential' && !this.covered.clinic[id] &&
+          this.buildings.get(id)!.occupants > 0)) {
+        note('flu', id);
+        this.moveOut(this.buildings.get(id)!);
+        changed = true;
+      }
+    }
     if (changed) this.refresh();
   }
 
@@ -1408,6 +1535,7 @@ export class BuildingSystem {
       if (this.map.at(id) === 'residential') this.residents += building.occupants;
     }
     this.lastMood = this.mood();
+    this.lastSeason = seasonAt(this.clock);
     this.markScares();
     this.connectUtilities();
     this.coverServices();
@@ -1434,6 +1562,7 @@ export class BuildingSystem {
       }
     }
     this.tileUpkeep = this.map.stationTiles().length * economy.upkeep.metro;
+    this.tileCounts.clear();
     this.idleCount = 0;
     this.visitors = 0;
     let markets = 0;
@@ -1441,7 +1570,9 @@ export class BuildingSystem {
     for (let id = 0; id < MAP_SIZE ** 2; id++) {
       const tile = this.map.at(id);
       if (tile === 'grass' || tile === 'river' || isZone(tile)) continue;
-      this.tileUpkeep += economy.upkeep[tile];
+      // Plants burn more in the cold and in the heat.
+      this.tileUpkeep += economy.upkeep[tile] * (tile === 'power' ? seasons.heating[this.lastSeason] : 1);
+      this.tileCounts.set(tile, (this.tileCounts.get(tile) ?? 0) + 1);
       if (tile === 'farm') farmed += this.farmYield(id);
       if (!(isFacility(tile) || isService(tile) || tile === 'bus')) continue;
       if (!this.doorOf(cellAt(id))) {
@@ -1632,7 +1763,8 @@ export class BuildingSystem {
     const { industry, power, road, park } = pollution;
     for (const id of this.buildings.keys()) {
       if (this.map.at(id) !== 'industrial') continue;
-      spread(id, industry.strength * (this.special[id] ? combos.estate.smog : 1), industry.radius);
+      spread(id, industry.strength * (this.special[id] ? combos.estate.smog : 1) *
+        (this.policiesOn.has('recycle') ? policies.recycle.smog : 1), industry.radius);
     }
     for (let id = 0; id < MAP_SIZE ** 2; id++) {
       const tile = this.map.at(id);
@@ -1908,8 +2040,8 @@ export class BuildingSystem {
         if (ride) {
           let drive = 0;
           for (const cell of path) drive += minutesAt(indexOf(cell));
-          const share = ride.minutes <= drive ? transit.share.faster :
-            ride.minutes <= drive * transit.closeFactor ? transit.share.close : 0;
+          const shares = this.policiesOn.has('freeride') ? policies.freeride.share : transit.share;
+          const share = ride.minutes <= drive ? shares.faster : ride.minutes <= drive * transit.closeFactor ? shares.close : 0;
           // Some never ride and some always do; the share applies to everyone else.
           const having = (trait: Trait) =>
             staff.filter(person => traitOf(this.seed, building.id, person.slot, building.kind) === trait).length;
@@ -1959,10 +2091,10 @@ export class BuildingSystem {
       funds: this.funds, rank: this.rank, taxRate: this.taxRate,
       lines: this.lines.map(line => ({ ...line, stops: [...line.stops] })),
       goals: [...this.goalsDone], loans: [...this.loans], tasks: [...this.tasksOn],
-      combos: [...this.combosSeen] };
+      combos: [...this.combosSeen], policies: [...this.policiesOn], challenge: this.challenge && { ...this.challenge } };
   }
 
-  load({ tiles, zones, buildings, funds, rank, taxRate, tick, lines, goals: done, loans, seed, metros, tasks: saved, combos: known }: SaveData): void {
+  load({ tiles, zones, buildings, funds, rank, taxRate, tick, lines, goals: done, loans, seed, metros, tasks: saved, combos: known, policies: chosen, challenge }: SaveData): void {
     this.seed = seed;
     this.goalsDone.clear();
     for (const goal of done) this.goalsDone.add(goal);
@@ -1972,6 +2104,11 @@ export class BuildingSystem {
     this.tasksOn.splice(0, this.tasksOn.length, ...taskList.map(task => task.id).filter(id => saved.includes(id)));
     this.tasksRest.clear();
     this.combosSeen.clear();
+    this.policiesOn.clear();
+    for (const policy of POLICIES) if (chosen.includes(policy)) this.policiesOn.add(policy);
+    this.challenge = challenge && { ...challenge };
+    this.challengeEnd = undefined;
+    this.feasts.length = 0;
     for (const combo of COMBOS) if (known.includes(combo)) this.combosSeen.add(combo);
     this.taskDone = undefined;
     this.events.length = 0;
@@ -2048,9 +2185,10 @@ export class BuildingSystem {
     let fares = 0;
     for (const plan of this.plans) {
       upkeep += plan.vehicles * transit[plan.kind].vehicleUpkeep;
-      fares += plan.riders * transit[plan.kind].fare;
+      if (!this.policiesOn.has('freeride')) fares += plan.riders * transit[plan.kind].fare;
     }
     const { trade } = this.market;
+    for (const policy of this.policiesOn) upkeep += Math.round(policies[policy].fixed + policies[policy].perResident * population);
     const loans = this.loans.length * economy.loan.payment;
     const { visitors, licence } = this;
     return { tax, fares, trade, visitors, licence, loans, upkeep,
@@ -2101,9 +2239,14 @@ export class BuildingSystem {
       cars: [...this.carCounts],
       bigParks: this.bigParks, complexes: this.complexes(), goals: [...this.goalsDone],
       combos: { ...this.comboCounts }, combosSeen: COMBOS.filter(combo => this.combosSeen.has(combo)),
-      /** The tasks being worked on with how many buildings still have the trouble, and the last one done. */
+      /** The tasks being worked on with how many buildings still have the trouble. */
       tasks: this.tasksOn.map(id => ({ id, left: complaints[taskList.find(task => task.id === id)!.issue] })),
-      taskDone: this.taskDone,
+      season: seasonAt(this.clock), policies: POLICIES.filter(policy => this.policiesOn.has(policy)),
+      /** The next festival, how many days off it is, and whether the city has somewhere to hold it. */
+      festival: { ...nextFestival(this.clock), ready: this.venueOf(nextFestival(this.clock).id) > 0 },
+      /** The challenge under way with where its figure stands. */
+      challenge: this.challenge && { ...this.challenge, now: this.challengeFigure(this.challenge.id) },
+
       loans: [...this.loans], bankrupt: this.funds < economy.bankrupt, mood: this.mood() };
   }
 }

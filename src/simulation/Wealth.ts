@@ -25,6 +25,12 @@ export const trade = { reach: 6, good: 1, busy: 2, quiet: 0.4, times: { busy: 1.
 export type Trade = 'busy' | 'good' | 'quiet';
 
 /**
+ * Schooling pays. Someone whose home is in reach of a university earns `university` times the
+ * wage, of a high school `highschool` times: they are taken to have been through it.
+ */
+export const schooling = { highschool: 1.1, university: 1.25 };
+
+/**
  * Vehicles, cheapest first: the index is what a resident owns (`SavedPerson.car`). Everyone
  * starts on a bicycle. `licence` is what the city collects per month.
  */

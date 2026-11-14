@@ -66,9 +66,10 @@ it('has a temple fair in the demo town, and gives out tasks that pay when they a
   const before = city.getStats().funds;
   engine.advance(calendar.ticksPerDay);
   const after = city.getStats();
-  expect(after.taskDone).toBeDefined();
-  expect(after.tasks.map(task => task.id)).not.toContain(after.taskDone!.id);
-  expect(after.funds).toBeGreaterThan(before + taskList.find(task => task.id === after.taskDone!.id)!.reward - 200);
+  const { taskDone } = city.getNotices();
+  expect(taskDone).toBeDefined();
+  expect(after.tasks.map(task => task.id)).not.toContain(taskDone!.id);
+  expect(after.funds).toBeGreaterThan(before + taskList.find(task => task.id === taskDone!.id)!.reward - 200);
   // What is being worked on is saved.
   const restored = new SimulationEngine({ version: 1, seed: 0, tick: 0 });
   restored.load(structuredClone(engine.save()));

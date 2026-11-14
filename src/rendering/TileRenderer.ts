@@ -7,6 +7,7 @@ import { Camera } from './Camera';
 
 import type { BuildingSystem } from '../simulation/BuildingSystem';
 import type { Line } from '../simulation/Transit';
+import { seasonAt } from '../simulation/Seasons';
 import { lineColour } from '../app/lineColours';
 
 // Both sheets hold 16px tiles, drawn at twice their size.
@@ -51,6 +52,7 @@ const FACILITY_ROOF: Record<Facility | Service | 'bus' | 'metro', number> = {
   bus: 0xf2c94c, metro: 0xe5484d, market: 0xd9423a, highschool: 0x7f8fb8, hospital: 0xe04a3c,
   university: 0xc9735a, museum: 0xe6dfcf, stadium: 0x6fb565, temple: 0xe0782f,
   mall: 0xd9423a, casino: 0x8a5fd0, cinema: 0xc8322e, parking: 0x3f6fb0,
+  library: 0xb98a4a, pool: 0x5bb6ce, ktv: 0xe8799a, amusement: 0xf2c94c,
 };
 const WATER = [0x3f8fc4, 0x6fb4dc, 0x2f78ab];
 const SHORE = 0xd9cfa8;
@@ -63,10 +65,10 @@ const COMPLEX_ART = 0;
 const FOUNTAIN = [0x8f97a1, 0x74c7ed, 0xdff3fb];
 const CIVIC_ART: Partial<Record<Facility | Service | 'bus' | 'metro', number>> =
   { power: 0, water: 1, fire: 2, police: 3, school: 4, clinic: 5, bus: 6, metro: 7, market: 8, highschool: 9, temple: 10, cinema: 11,
-    parking: 12 };
+    parking: 12, library: 13, pool: 14, ktv: 15 };
 // The buildings of two tiles by two, by their place in the row of them.
 const BIG_ART: Partial<Record<Service, number>> = { hospital: 1, university: 2, museum: 3, stadium: 4,
-  mall: 5, casino: 6 };
+  mall: 5, casino: 6, amusement: 7 };
 // Homes of a kind have their own pictures, so a street tells you who lives on it: three rows
 // from HOME_ROW, one per level, with two looks of each kind side by side. Ordinary homes take
 // any of the level's pictures in the residential row.
@@ -355,6 +357,18 @@ export class TileRenderer {
         Math.floor(anchor / MAP_SIZE) * TILE_SIZE, 2 * TILE_SIZE, 2 * TILE_SIZE);
     }
 
+    // The season shows on open ground: snow in winter, a warm cast in autumn.
+    const season = seasonAt(city.now);
+    if (season === 'winter' || season === 'autumn') {
+      for (let y = Math.max(0, start.y); y <= Math.min(MAP_SIZE - 1, end.y); y++) {
+        for (let x = Math.max(0, start.x); x <= Math.min(MAP_SIZE - 1, end.x); x++) {
+          const tile = map.get({ x, y });
+          if (tile !== 'grass' && tile !== 'park' && tile !== 'farm') continue;
+          g.rect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE)
+            .fill(season === 'winter' ? { color: 0xf4f8ff, alpha: 0.5 } : { color: 0xd98838, alpha: 0.16 });
+        }
+      }
+    }
     for (const { x, y } of flags) {
       const left = x * TILE_SIZE + 24;
       const top = y * TILE_SIZE;
@@ -445,8 +459,8 @@ export class TileRenderer {
     }
     // What the panel is pointing out: a yellow frame with a dark edge so it shows on anything.
     for (const { x, y } of marks) {
-      overlay.rect(x * TILE_SIZE - 1, y * TILE_SIZE - 1, TILE_SIZE + 2, TILE_SIZE + 2).stroke({ color: 0x25232b, width: 6 });
-      overlay.rect(x * TILE_SIZE - 1, y * TILE_SIZE - 1, TILE_SIZE + 2, TILE_SIZE + 2).stroke({ color: 0xffe14d, width: 3 });
+      overlay.rect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE).stroke({ color: 0x25232b, width: 3 });
+      overlay.rect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE).stroke({ color: 0xffe14d, width: 1.5 });
     }
     if (selected) {
       overlay.rect(selected.x * TILE_SIZE + 1, selected.y * TILE_SIZE + 1, TILE_SIZE - 2, TILE_SIZE - 2)

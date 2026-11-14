@@ -100,7 +100,14 @@ export class CityRenderer {
     };
     // Where each commuter is, by home and workplace: settled at one end, or how far along the
     // way to the other, counted in tiles from the end they left.
-    const trips = new Map<string, { at: 'home' | 'work'; along?: number; wait: number }>();
+    /**
+     * Where each commuter is. `garage` says which ends of the trip are a building big enough to
+     * have parking under it: there the car is out of sight, and drives in and out of the
+     * building itself; at a house or a small shop it waits by the kerb. `held` is how long the
+     * car has stood behind another.
+     */
+    const trips = new Map<string, { at: 'home' | 'work'; along?: number; wait: number;
+      garage?: { home: boolean; work: boolean }; held?: number }>();
     /** The cars that were on the road in the last frame, for the ones behind to keep clear of. */
     let cars: { x: number; y: number; hx: number; hy: number; index: number }[] = [];
     /** Where each commuter in sight was last drawn, for clicking on them. */
@@ -112,7 +119,8 @@ export class CityRenderer {
     };
     const cellOf = (id: number): Cell => ({ x: id % MAP_SIZE, y: Math.floor(id / MAP_SIZE) });
     /** How long and how wide each vehicle is drawn, in the order of Wealth's `vehicles`. */
-    const SIZES = [[8, 3], [9, 5], [13, 9], [16, 10], [18, 10]];
+    // A lane is about a third of a tile wide, and a car must fit in it with room to spare.
+    const SIZES = [[7, 3], [8, 4], [10, 6], [12, 6], [13, 7]];
     const drawCar = (cx: number, cy: number, vertical: boolean, index: number, tier: number) => {
       const [long, wide] = SIZES[tier];
       const width = vertical ? wide : long;
@@ -228,6 +236,10 @@ export class CityRenderer {
         const key = `${route.homeId}:${route.workId}`;
         let trip = trips.get(key);
         if (!trip) trips.set(key, trip = { at: 'home', wait: 0 });
+        // Buildings grow, so this is looked at again at each departure.
+        if (!trip.garage || trip.along === undefined && trip.at !== wanted) {
+          trip.garage = { home: (this.city.getBuilding(home)?.level ?? 1) >= 2, work: (this.city.getBuilding(workplace)?.level ?? 1) >= 2 };
+        }
         const followed = key === this.follow;
         if (followed) pin = centre(trip.at === 'home' ? home : workplace);
         /** Notes where this commuter is drawn. */
@@ -242,10 +254,14 @@ export class CityRenderer {
           const road = at === 'home' ? route.path[0] : route.path[tiles - 1];
           const next = at === 'home' ? route.path[1] : route.path[tiles - 2];
           const building = at === 'home' ? home : workplace;
-          const spot = centre({ x: road.x + (building.x - road.x) * 0.3, y: road.y + (building.y - road.y) * 0.3 });
+          // Under a big building the car is at its door; otherwise on the very edge of the road, clear of the lane.
+          const reach = trip!.garage?.[at] ? 0.56 : 0.41;
+          const spot = centre({ x: road.x + (building.x - road.x) * reach, y: road.y + (building.y - road.y) * reach });
           return { ...spot, vertical: next.x === road.x, key: `${road.x},${road.y},${building.x - road.x},${building.y - road.y}` };
         };
         const park = (at: 'home' | 'work') => {
+          // A car under a building is not to be seen.
+          if (trip!.garage?.[at]) return;
           const spot = kerb(at);
           if (kerbs.has(spot.key)) return;
           kerbs.add(spot.key);
@@ -285,22 +301,24 @@ export class CityRenderer {
           drawWalker(spot.x, spot.y, i);
           seenAt(spot);
         } else if (along < 1) {
-          // Out of the door and over to the car.
+          // Out of the door and over to the car; from a garage they are not seen until the car comes out.
           const door = centre(from === 'home' ? home : workplace);
           const car = kerb(from);
           park(from);
           const spot = { x: door.x + (car.x - door.x) * along, y: door.y + (car.y - door.y) * along };
-          drawWalker(spot.x, spot.y, i);
-          seenAt(spot);
+          if (!trip.garage?.[from]) drawWalker(spot.x, spot.y, i);
+          seenAt(trip.garage?.[from] ? car : spot);
+          if (trip.garage?.[from]) speed *= 3;
         } else if (along > steps - 1) {
-          // Parked; the last few steps are on foot.
+          // Parked; the last few steps are on foot, unless the car went under the building.
           const door = centre(to === 'home' ? home : workplace);
           const car = kerb(to);
           const part = along - (steps - 1);
           park(to);
           const spot = { x: car.x + (door.x - car.x) * part, y: car.y + (door.y - car.y) * part };
-          drawWalker(spot.x, spot.y, i);
-          seenAt(spot);
+          if (!trip.garage?.[to]) drawWalker(spot.x, spot.y, i);
+          seenAt(trip.garage?.[to] ? car : spot);
+          if (trip.garage?.[to]) speed *= 3;
         } else {
           // On the road: pulling out from the kerb, driving in lane, pulling in at the other end.
           let spot = onRoad(along);
@@ -327,16 +345,19 @@ export class CityRenderer {
             if (other.index === i || other.hx !== hx || other.hy !== hy) return false;
             const offX = other.x - tileX;
             const offY = other.y - tileY;
-            if (Math.abs(offX * hy - offY * hx) > 0.2) return false;
+            if (Math.abs(offX * hy - offY * hx) > 0.14) return false;
             const forward = offX * hx + offY * hy;
-            return (forward > 0.03 && forward < 0.68) || (Math.abs(forward) <= 0.03 && other.index < i);
+            return (forward > 0.03 && forward < 0.48) || (Math.abs(forward) <= 0.03 && other.index < i);
           });
           // A red light ahead: wait at the edge of the junction. Whoever is in it already goes on.
           const aheadX = Math.floor(tileX + hx * 0.55);
           const aheadY = Math.floor(tileY + hy * 0.55);
           const red = (aheadX !== Math.floor(tileX) || aheadY !== Math.floor(tileY)) &&
             junctions.has(aheadY * MAP_SIZE + aheadX) && greenUpright(aheadX, aheadY) !== vertical;
-          speed = blocked || red ? 0 : 1 / VEHICLE_PACE[tier];
+          // Nobody waits behind another for ever: after a few seconds the car edges past, which
+          // undoes any knot that cars from several ways have tied.
+          trip.held = blocked && !red ? (trip.held ?? 0) + elapsed : 0;
+          speed = red || (blocked && trip.held < 3500) ? 0 : 1 / VEHICLE_PACE[tier];
           drawCar(spot.x, spot.y, vertical, i, tier);
           seenAt(spot);
           if (inLane) moving.push({ x: tileX, y: tileY, hx, hy, index: i });

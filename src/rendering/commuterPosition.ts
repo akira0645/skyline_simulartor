@@ -29,7 +29,7 @@ export function commuterPosition(
     if (!mode || index === 0 || index === steps) return point;
     const before = pointAt(index - 1);
     const after = pointAt(index + 1);
-    const offset = (mode === 'walk' ? 0.36 : 0.15) * (returning ? -1 : 1);
+    const offset = (mode === 'walk' ? 0.4 : 0.19) * (returning ? -1 : 1);
     return {
       x: point.x - Math.sign(after.y - before.y) * offset,
       y: point.y + Math.sign(after.x - before.x) * offset,

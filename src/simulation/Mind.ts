@@ -27,7 +27,7 @@ export const thoughts = {
   'no-clinic': -8, 'no-hospital': -8, 'no-shops': -8, 'want-other-job': -8, 'slump-worry': -8,
   'tax-high': -8, jam: -6, 'no-school': -6, 'nothing-near': -6, 'no-highschool': -5, 'want-ride': -5,
   strangers: -4, 'want-car': -3, online: -2,
-  'kids-nowhere': -4, 'casino-near': -3, scared: -10, 'good-pay': 6,
+  'kids-nowhere': -4, 'casino-near': -3, scared: -10, 'good-pay': 6, 'forest-near': 6,
   'temple-near': 4, 'proud-car': 4, 'fun-near': 4, 'kids-happy': 4, handy: 5, 'close-knit': 6,
   'new-here': 2, 'love-car': 3, 'garden-proud': 4, neighbours: 4, 'tax-low': 5, 'ride-glad': 5,
   'old-timer': 5, 'nice-home': 5, 'near-commute': 6, 'boom-glad': 6, 'water-near': 6, 'park-near': 8,
@@ -95,6 +95,8 @@ export interface Facts {
   car: number;
   /** Business is good where they work, and they are paid more for it. */
   raise: boolean;
+  /** The home stands by a forest. */
+  forest: boolean;
   /** Somewhere to go for fun within a walk, a casino in whose reach the home lies, a school within a walk. */
   fun: boolean;
   casino: boolean;
@@ -152,7 +154,8 @@ export function thoughtsOf(facts: Facts): Thought[] {
   if (facts.bond >= bond.close) list.push('close-knit');
   else if (facts.bond < bond.distant && facts.days >= bond.settled) list.push('strangers');
   if (facts.car >= FINE_CAR) list.push('proud-car');
-  if (facts.park) list.push('park-near');
+  if (facts.forest) list.push('forest-near');
+  else if (facts.park) list.push('park-near');
   if (facts.water) list.push('water-near');
   if (facts.trait === 'gardener') list.push('garden-proud');
   if (facts.trait === 'helper') list.push('neighbours');

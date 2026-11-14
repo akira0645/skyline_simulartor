@@ -359,3 +359,10 @@ button.tag[aria-pressed="true"] b { color: var(--ink); }
 /* Wide enough for three tags in a row. */
 .side .person > .tags { margin-bottom: 0.45rem; }
 .side { width: 21.5rem; }
+
+/* Six tabs; achievements already won fade and sink to the bottom. */
+.side .tabs button { font-size: 0.8rem; }
+.side .goals .done { opacity: 0.55; }
+.side .goals li { padding-bottom: 0.5rem; border-bottom: 1px solid var(--asphalt); }
+.side .tabs button { font-size: 0.78rem; }
+.side .hint.count { margin-bottom: 0.6rem; }

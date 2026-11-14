@@ -71,6 +71,10 @@ export interface SaveData {
   goals: string[];
   /** Months left to pay on each loan. */
   loans: number[];
+  /** The ids of the tasks the city is working on. Saves from before there were any have none. */
+  tasks: string[];
+  /** The special groups (see Combos.ts) the city has ever had, for the handbook. */
+  combos: string[];
 }
 
 const zonedCode = (code: number) => isZone(TILES[code]);
@@ -207,5 +211,7 @@ export function parseSave(data: unknown): SaveData {
     funds: funds as number, rank, taxRate, metros: [...metros].sort((a, b) => a - b),
     lines: parseLines((data as Record<string, unknown>).lines, tiles, metros),
     goals: parseList((data as Record<string, unknown>).goals, value => typeof value === 'string') as string[],
-    loans: parseList((data as Record<string, unknown>).loans, isCount) as number[] };
+    loans: parseList((data as Record<string, unknown>).loans, isCount) as number[],
+    tasks: parseList((data as Record<string, unknown>).tasks, value => typeof value === 'string') as string[],
+    combos: parseList((data as Record<string, unknown>).combos, value => typeof value === 'string') as string[] };
 }

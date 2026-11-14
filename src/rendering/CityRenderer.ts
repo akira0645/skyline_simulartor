@@ -44,6 +44,9 @@ export class CityRenderer {
   deselect?: () => void;
   /** Called when a commuter on the map is clicked, with their home and workplace. */
   onPerson?: (homeId: number, workId: number) => void;
+  /** Tiles to frame on the map, and a way to bring one of them to the middle of the view. */
+  marks: Cell[] = [];
+  lookAt?: (cell: Cell) => void;
   /** The commuter to point out on the map, as `home:workplace`. */
   follow?: string;
   /** Where the map shows a commuter: settled at home or at work, or on the way to either. */
@@ -436,12 +439,18 @@ export class CityRenderer {
           tool : layer,
         range, this.hour(),
         // Routes show while laying out transport, and in the map view for them.
-        routesShown() ? this.city.getLines() : []);
+        routesShown() ? this.city.getLines() : [], this.marks);
       drawPeople();
       drawEffects();
       app.render();
     };
     this.refresh = draw;
+    this.lookAt = cell => {
+      camera.x = app.screen.width / 2 - (cell.x + 0.5) * TILE_SIZE * camera.scale;
+      camera.y = app.screen.height / 2 - (cell.y + 0.5) * TILE_SIZE * camera.scale;
+      camera.pan(0, 0, app.screen.width, app.screen.height);
+      draw();
+    };
     this.deselect = () => {
       selected = undefined;
       draw();

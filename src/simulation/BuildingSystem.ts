@@ -3,6 +3,7 @@ import { bond, circle, PLACES, type Place } from './Community';
 import { dayPay, pay, trade, vehicles, type Trade } from './Wealth';
 import { cycle, economy, milestones, tileCost, type Mood } from './Economy';
 import { goals } from './Goals';
+import { comboIncome, combos, comboValue, COMBOS, taskList, tasks, type Combo, type TaskId } from './Combos';
 import { goods } from './Goods';
 import { jobs } from './Jobs';
 import { COMPLEX_LEVEL, landValue, MAX_LEVEL } from './LandValue';
@@ -100,6 +101,21 @@ export class BuildingSystem {
   /** The ids of the goals already rewarded, and the months left on each loan. */
   private readonly goalsDone = new Set<string>();
   private readonly loans: number[] = [];
+  /** The tasks being worked on, the day each finished one may come back, and the last one done. */
+  private readonly tasksOn: TaskId[] = [];
+  private readonly tasksRest = new Map<TaskId, number>();
+  private taskDone?: { id: TaskId; tick: number };
+  /** Which special group each tile belongs to, as its place in `COMBOS` plus one; how many of each there are. */
+  private readonly special = new Uint8Array(MAP_SIZE ** 2);
+  private readonly comboCounts = Object.fromEntries(COMBOS.map(combo => [combo, 0])) as Record<Combo, number>;
+  /** The groups the city has ever had, for the handbook. Saved. */
+  private readonly combosSeen = new Set<Combo>();
+  /** Tiles in reach of each group that raises land value; tiles by a farmstead; the tile each farmstead's barn stands on. */
+  private readonly near = Object.fromEntries(COMBOS.filter(comboValue).map(combo => [combo, new Uint8Array(MAP_SIZE ** 2)])) as
+    Partial<Record<Combo, Uint8Array>>;
+  private readonly wild = this.near.forest!;
+  private readonly rural = new Uint8Array(MAP_SIZE ** 2);
+  private readonly barns = new Set<number>();
   /** How many residents have each trait, and how many gardeners each home has. */
   private readonly traitCounts = Object.fromEntries(TRAITS.map(trait => [trait, 0])) as Record<Trait, number>;
   private readonly gardeners = new Map<number, number>();
@@ -402,6 +418,7 @@ export class BuildingSystem {
     for (const service of SERVICES) if (this.covered[service][id]) value += services.value[service];
     if (this.unsafe(id)) value -= services.crime.penalty;
     if (this.scared[id]) value -= scare.value;
+    for (const combo of COMBOS) if (this.near[combo]?.[id]) value += comboValue(combo)!.amount;
     if (zone !== 'industrial') value -= landValue.pollution * this.smog[id];
     if (zone === 'residential') {
       value -= Math.min(landValue.commute.max,
@@ -496,9 +513,177 @@ export class BuildingSystem {
     }
   }
 
+  /** The special group a tile belongs to, if any. */
+  comboAt(cell: Cell): Combo | undefined {
+    const code = this.map.get(cell) === undefined ? 0 : this.special[indexOf(cell)];
+    return code ? COMBOS[code - 1] : undefined;
+  }
+
+  /** What a home on this tile is called for what it stands by: a forest cabin or a farmhouse. */
+  nickAt(cell: Cell): 'cabin' | 'farmhouse' | undefined {
+    const id = indexOf(cell);
+    return this.wild[id] ? 'cabin' : this.rural[id] ? 'farmhouse' : undefined;
+  }
+
+  /** Whether a farmstead's barn stands on a tile. */
+  barnAt(cell: Cell): boolean {
+    return this.barns.has(indexOf(cell));
+  }
+
+  /** What one group of a kind brings in a month; nothing for the kinds that bring none. */
+  private comboIncome(group: Combo): number {
+    const income = comboIncome(group);
+    return income ? Math.round(Math.min(income.most, this.residents * income.perResident)) : 0;
+  }
+
+  /**
+   * Where on the map something is: the buildings with a problem, the tiles of a special group,
+   * the homes of people with a trait, the civic buildings without a road, or where the people
+   * of one home work. For pointing things out.
+   */
+  find(what: { issue: Issue } | { combo: Combo } | { trait: Trait } | { idle: true } | { worksOf: Cell }): Cell[] {
+    const found: number[] = [];
+    if ('combo' in what) {
+      const code = COMBOS.indexOf(what.combo) + 1;
+      this.special.forEach((value, id) => { if (value === code) found.push(id); });
+    } else if ('idle' in what) {
+      for (let id = 0; id < MAP_SIZE ** 2; id++) {
+        const tile = this.map.at(id);
+        if ((isFacility(tile) || isService(tile) || tile === 'bus') && !this.doorOf(cellAt(id))) found.push(id);
+      }
+    } else if ('worksOf' in what) {
+      for (const person of this.buildings.get(indexOf(what.worksOf))?.people ?? []) {
+        if (person.job >= 0 && !found.includes(person.job)) found.push(person.job);
+      }
+    } else {
+      for (const [id, building] of this.buildings) {
+        if ('issue' in what ? this.issuesOf(id, building).includes(what.issue) :
+          building.people?.some(person => traitOf(this.seed, id, person.slot, building.kind) === what.trait)) found.push(id);
+      }
+    }
+    return found.sort((a, b) => a - b).map(cellAt);
+  }
+
+  /** Finds the special groups (see Combos.ts). Parks must have been grouped first. */
+  private findCombos(): void {
+    const { special, rural } = this;
+    special.fill(0);
+    rural.fill(0);
+    for (const field of Object.values(this.near)) field.fill(0);
+    this.barns.clear();
+    for (const combo of COMBOS) this.comboCounts[combo] = 0;
+    const around = (id: number, reach: number, visit: (id: number) => void) => {
+      const { x, y } = cellAt(id);
+      for (let dy = -reach; dy <= reach; dy++) {
+        const span = reach - Math.abs(dy);
+        for (let dx = -span; dx <= span; dx++) {
+          const cell = { x: x + dx, y: y + dy };
+          if (this.map.get(cell) !== undefined) visit(indexOf(cell));
+        }
+      }
+    };
+    /** Marks the tiles of a group, and those its land value reaches. */
+    const mark = (combo: Combo, group: readonly number[]) => {
+      this.comboCounts[combo]++;
+      this.combosSeen.add(combo);
+      const value = comboValue(combo);
+      for (const part of group) {
+        special[part] = COMBOS.indexOf(combo) + 1;
+        if (value) around(part, value.reach, near => { this.near[combo]![near] = 1; });
+      }
+    };
+    /** The tiles that touch `start` and pass `member`, `start` among them. */
+    const seen = new Uint8Array(MAP_SIZE ** 2);
+    const groupFrom = (start: number, member: (id: number) => boolean) => {
+      const group = [start];
+      seen[start] = 1;
+      for (let next = 0; next < group.length; next++) {
+        const { x, y } = cellAt(group[next]);
+        for (const [dx, dy] of neighbors) {
+          const cell = { x: x + dx, y: y + dy };
+          if (this.map.get(cell) === undefined || seen[indexOf(cell)] || !member(indexOf(cell))) continue;
+          seen[indexOf(cell)] = 1;
+          group.push(indexOf(cell));
+        }
+      }
+      return group;
+    };
+    /** Whether each of these tiles is within reach of a tile, and how many shop buildings are. */
+    const has = (id: number, reach: number, ...tiles: string[]) => {
+      const met = new Set<string>();
+      around(id, reach, near => { met.add(this.map.at(near)); });
+      return tiles.every(tile => met.has(tile));
+    };
+    const shopsBy = (id: number, reach: number) => {
+      let count = 0;
+      around(id, reach, near => { if (this.map.at(near) === 'commercial' && this.buildings.has(near)) count++; });
+      return count;
+    };
+    const factory = (id: number) => this.map.at(id) === 'industrial' && this.buildings.has(id);
+    const topShop = (id: number) => this.map.at(id) === 'commercial' && this.buildings.get(id)?.level === MAX_LEVEL &&
+      !special[id];
+    for (let id = 0; id < MAP_SIZE ** 2; id++) {
+      const tile = this.map.at(id);
+      const works = () => this.doorOf(cellAt(id)) !== undefined;
+      if (tile === 'park' && !seen[id]) {
+        const group = groupFrom(id, other => this.map.at(other) === 'park');
+        if (group.length >= combos.forest.tiles) mark('forest', group);
+        else if (group.length >= combos.riverpark.tiles && group.some(part => this.shore[part])) mark('riverpark', group);
+      } else if (tile === 'farm' && !seen[id]) {
+        const group = groupFrom(id, other => this.map.at(other) === 'farm');
+        if (group.length < combos.farmstead.tiles || !group.some(part => this.shore[part])) continue;
+        mark('farmstead', group);
+        this.barns.add(group[group.length >> 1]);
+        for (const part of group) around(part, combos.farmstead.reach, near => { rural[near] = 1; });
+      } else if (tile === 'industrial' && !seen[id] && factory(id)) {
+        const group = groupFrom(id, factory);
+        if (group.length >= combos.estate.buildings) mark(group.some(part => this.shore[part]) ? 'port' : 'estate', group);
+      } else if (tile === 'temple') {
+        if (works() && has(id, combos.fair.reach, 'market', 'park')) mark('fair', [id]);
+      } else if (tile === 'market') {
+        if (works() && shopsBy(id, combos.foodstreet.reach) >= combos.foodstreet.shops) mark('foodstreet', [id]);
+      } else if (tile === 'casino') {
+        if (works() && has(id, combos.funcity.reach, 'cinema', 'mall')) mark('funcity', [id]);
+      } else if (tile === 'highschool') {
+        if (works() && has(id, combos.campus.reach, 'school', 'park')) mark('campus', [id]);
+      } else if (tile === 'hospital') {
+        if (works() && has(id, combos.medical.reach, 'clinic')) mark('medical', [id]);
+      } else if (isRoad(tile) && this.map.hasStation(cellAt(id))) {
+        if (shopsBy(id, combos.plaza.reach) >= combos.plaza.shops) mark('plaza', [id]);
+      } else if (tile === 'commercial') {
+        const { x, y } = cellAt(id);
+        const { side } = combos.arcade;
+        if (x + side > MAP_SIZE || y + side > MAP_SIZE) continue;
+        const square: number[] = [];
+        for (let dy = 0; dy < side; dy++) for (let dx = 0; dx < side; dx++) square.push(id + dy * MAP_SIZE + dx);
+        if (square.every(topShop)) mark('arcade', square);
+      }
+    }
+  }
+
+  /** Takes up the tasks the city's troubles call for, and pays for the ones that are done. Once a day. */
+  private reviewTasks(tick: number): void {
+    const counts = this.complaints();
+    const day = Math.floor(tick / calendar.ticksPerDay);
+    for (let index = this.tasksOn.length - 1; index >= 0; index--) {
+      const task = taskList.find(entry => entry.id === this.tasksOn[index])!;
+      if (counts[task.issue] > task.to) continue;
+      this.tasksOn.splice(index, 1);
+      this.tasksRest.set(task.id, day + tasks.rest);
+      this.funds += task.reward;
+      this.taskDone = { id: task.id, tick };
+    }
+    for (const task of taskList) {
+      if (this.tasksOn.length >= tasks.most) break;
+      if (this.tasksOn.includes(task.id) || counts[task.issue] < task.from || (this.tasksRest.get(task.id) ?? 0) > day) continue;
+      this.tasksOn.push(task.id);
+    }
+  }
+
   /** What a tile of farmland grows in a month. */
   private farmYield(id: number): number {
-    return this.smog[id] > pollution.limit ? 0 : this.shore[id] ? goods.farm.watered : goods.farm.dry;
+    return this.smog[id] > pollution.limit ? 0 :
+      (this.shore[id] ? goods.farm.watered : goods.farm.dry) * (this.special[id] ? combos.farmstead.times : 1);
   }
 
   /** Whether a sight has a car park near enough to bring it more visitors. */
@@ -699,6 +884,7 @@ export class BuildingSystem {
         way: !trip ? undefined : rides ? trip.ride : trip.route.path.length < mind.driveFrom ? 'walk' :
           !person.car ? 'bike' : person.car === 1 ? 'scooter' : 'drive',
         car: person.car ?? 0, jam: trip?.jam ?? false,
+        forest: this.wild[home] === 1,
         raise: zone !== undefined && ['busy', 'good'].includes(this.tradeOf(person.job) ?? '') };
     };
   }
@@ -850,11 +1036,12 @@ export class BuildingSystem {
     if (!tile) return undefined;
     const id = indexOf(cell);
     if (tile === 'farm') {
-      return { tile, pollution: Math.round(this.smog[id]), grows: this.farmYield(id), watered: this.shore[id] === 1 };
+      return { tile, pollution: Math.round(this.smog[id]), grows: this.farmYield(id), watered: this.shore[id] === 1,
+        combo: this.comboAt(cell) };
     }
     if (tile === 'park') {
       return { tile, pollution: Math.round(this.smog[id]), parkTiles: this.parkSize[id],
-        bigPark: this.parkSize[id] >= landValue.bigPark.tiles };
+        bigPark: this.parkSize[id] >= landValue.bigPark.tiles, combo: this.comboAt(cell) };
     }
     if (tile === 'grass' || tile === 'river' || tile === 'annex') return { tile, pollution: Math.round(this.smog[id]) };
     const stop = this.stopAt(cell);
@@ -891,7 +1078,8 @@ export class BuildingSystem {
         /** What a sight brings in a month, and how many a market lets do their shopping. */
         earns: sight && running ? this.sightIncome(id, tile) : undefined,
         parked: sight ? this.parkingBy(id, tile) : undefined,
-        shoppers: tile === 'market' ? services.market.shoppers : undefined };
+        shoppers: tile === 'market' ? services.market.shoppers : undefined,
+        combo: this.comboAt(cell), comboEarns: this.special[id] ? this.comboIncome(this.comboAt(cell)!) : undefined };
     }
 
     const roadAccess = this.hasRoadAccess(cell);
@@ -916,6 +1104,9 @@ export class BuildingSystem {
       circle: home ? this.circleOf(id) : undefined, bond: home ? this.bondOf(id) : undefined,
       kids: home ? this.kidsAt(id) : undefined,
       /** For a workplace: business, when it is better or worse than usual, and a shop's customers. */
+      combo: this.comboAt(cell),
+      /** A home by a forest is a cabin, one by a farmstead a farmhouse. */
+      nick: home ? this.nickAt(cell) : undefined,
       trade: this.tradeOf(id), custom: tile === 'commercial' ? Math.round(this.custom.get(id) ?? 0) : undefined,
       /** Who lives here, and who works here. */
       residents: home ? record.people!.map(person => this.describe(id, person)) : [],
@@ -1107,6 +1298,7 @@ export class BuildingSystem {
     if (changed) this.refresh();
     if (daily) this.rollEmergencies(tick, seed);
 
+    if (daily) this.reviewTasks(tick);
     if (daily && this.goalsDone.size < goals.length) {
       const view = this.getStats();
       for (const goal of goals) {
@@ -1230,7 +1422,7 @@ export class BuildingSystem {
     let clerks = 0;
     for (const [id, building] of this.buildings) {
       const zone = this.map.at(id);
-      if (zone === 'industrial') factoryHands += building.occupants;
+      if (zone === 'industrial') factoryHands += building.occupants * (this.special[id] ? combos.estate.goods : 1);
       else if (zone === 'commercial') clerks += building.occupants;
       if (zone !== 'residential') continue;
       this.residents += building.occupants;
@@ -1260,7 +1452,9 @@ export class BuildingSystem {
       const sight = services.visitors[tile as Service];
       if (sight) this.visitors += this.sightIncome(id, tile as Service);
     }
-    const made = factoryHands * goods.perWorker + farmed;
+    const made = Math.round(factoryHands * goods.perWorker + farmed);
+    farmed = Math.round(farmed);
+    for (const group of COMBOS) this.visitors += this.comboCounts[group] * this.comboIncome(group);
     const needed = this.residents * goods.perResident;
     this.market = { made, needed, farmed,
       served: Math.min(needed, clerks * goods.perClerk + markets * services.market.shoppers),
@@ -1434,9 +1628,11 @@ export class BuildingSystem {
       }
     };
     this.findParks();
+    this.findCombos();
     const { industry, power, road, park } = pollution;
     for (const id of this.buildings.keys()) {
-      if (this.map.at(id) === 'industrial') spread(id, industry.strength, industry.radius);
+      if (this.map.at(id) !== 'industrial') continue;
+      spread(id, industry.strength * (this.special[id] ? combos.estate.smog : 1), industry.radius);
     }
     for (let id = 0; id < MAP_SIZE ** 2; id++) {
       const tile = this.map.at(id);
@@ -1762,16 +1958,22 @@ export class BuildingSystem {
         { ...building, people: building.people.map(person => ({ ...person })) } : { ...building }),
       funds: this.funds, rank: this.rank, taxRate: this.taxRate,
       lines: this.lines.map(line => ({ ...line, stops: [...line.stops] })),
-      goals: [...this.goalsDone], loans: [...this.loans] };
+      goals: [...this.goalsDone], loans: [...this.loans], tasks: [...this.tasksOn],
+      combos: [...this.combosSeen] };
   }
 
-  load({ tiles, zones, buildings, funds, rank, taxRate, tick, lines, goals: done, loans, seed, metros }: SaveData): void {
+  load({ tiles, zones, buildings, funds, rank, taxRate, tick, lines, goals: done, loans, seed, metros, tasks: saved, combos: known }: SaveData): void {
     this.seed = seed;
     this.goalsDone.clear();
     for (const goal of done) this.goalsDone.add(goal);
     this.loans.splice(0, this.loans.length, ...loans);
     this.lines.length = 0;
     for (const line of lines) this.lines.push({ ...line, stops: [...line.stops] });
+    this.tasksOn.splice(0, this.tasksOn.length, ...taskList.map(task => task.id).filter(id => saved.includes(id)));
+    this.tasksRest.clear();
+    this.combosSeen.clear();
+    for (const combo of COMBOS) if (known.includes(combo)) this.combosSeen.add(combo);
+    this.taskDone = undefined;
     this.events.length = 0;
     this.scares.length = 0;
     this.clock = tick;
@@ -1884,6 +2086,7 @@ export class BuildingSystem {
 
   getStats() {
     const supply = this.supply();
+    const complaints = this.complaints();
     let minutes = 0;
     for (const commute of this.commutes) minutes += commute.minutes * commute.workers;
     return { population: supply.population, housing: supply.housing,
@@ -1892,11 +2095,15 @@ export class BuildingSystem {
       /** Average minutes to work over everyone with a job; 0 when nobody has one. */
       commute: supply.employed ? minutes / supply.employed : 0,
       demand: this.getDemand(supply), funds: this.funds, taxRate: this.taxRate, budget: this.budget(), rank: this.rank,
-      complaints: this.complaints(), idle: this.idle(), riders: this.riders,
+      complaints, idle: this.idle(), riders: this.riders,
       goods: this.market, traits: { ...this.traitCounts }, levels: this.levelCounts(),
       /** How many residents own each vehicle, by its index in Wealth's `vehicles`. */
       cars: [...this.carCounts],
       bigParks: this.bigParks, complexes: this.complexes(), goals: [...this.goalsDone],
+      combos: { ...this.comboCounts }, combosSeen: COMBOS.filter(combo => this.combosSeen.has(combo)),
+      /** The tasks being worked on with how many buildings still have the trouble, and the last one done. */
+      tasks: this.tasksOn.map(id => ({ id, left: complaints[taskList.find(task => task.id === id)!.issue] })),
+      taskDone: this.taskDone,
       loans: [...this.loans], bankrupt: this.funds < economy.bankrupt, mood: this.mood() };
   }
 }

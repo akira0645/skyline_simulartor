@@ -56,6 +56,7 @@ const WATER = [0x3f8fc4, 0x6fb4dc, 0x2f78ab];
 const SHORE = 0xd9cfa8;
 const RAIL = 0x8a5a3a;
 const CIVIC_ROW = 5;
+const FLAGGED: readonly string[] = ['foodstreet', 'plaza', 'funcity', 'campus', 'medical'];
 // Where the two-by-two buildings start, and the column of the housing complex among them.
 const BIG_ROW = 6;
 const COMPLEX_ART = 0;
@@ -122,7 +123,7 @@ export class TileRenderer {
   draw(city: BuildingSystem, camera: Camera, width: number, height: number, preview: Cell[],
     selected?: Cell, layer: Overlay = 'none',
     range?: { centre: Cell; radius: number; kind: Facility | Service | 'bus' | 'metro' }, hour?: number,
-    lines: readonly Line[] = []) {
+    lines: readonly Line[] = [], marks: readonly Cell[] = []) {
     const map = city.map;
     const start = camera.cellAt(0, 0);
     const end = camera.cellAt(width, height);
@@ -141,12 +142,16 @@ export class TileRenderer {
     const complexes = new Set<number>();
     // Big civic buildings in view, by their top left tile, with their picture.
     const bigs = new Map<number, number>();
+    const flags: Cell[] = [];
 
     // One extra row below so trees rooted just off-screen still show their tops.
     for (let y = Math.max(0, start.y); y <= Math.min(MAP_SIZE - 1, end.y + 1); y++) {
       for (let x = Math.max(0, start.x); x <= Math.min(MAP_SIZE - 1, end.x); x++) {
         const tile = map.get({ x, y })!;
         const seed = hash(x, y);
+        const combo = city.comboAt({ x, y });
+        // A group that is one building or one station flies a pennant.
+        if (combo && FLAGGED.includes(combo)) flags.push({ x, y });
 
         if (tile === 'grass') {
           tileAt(GRASS[seed % 7 === 0 ? 1 : 0], x, y);
@@ -226,12 +231,27 @@ export class TileRenderer {
             g.rect(left, top + row, TILE_SIZE, 3).fill(crop);
             g.rect(left, top + row + 3, TILE_SIZE, 1).fill(0x6e5234);
           }
+          if (city.barnAt({ x, y })) {
+            // The farmstead's barn: red walls, a pale roof and a dark door.
+            g.rect(left + 6, top + 9, 20, 17).fill(0x25232b).rect(left + 7, top + 13, 18, 12).fill(0xb23a32);
+            g.rect(left + 7, top + 10, 18, 3).fill(0xe6dfcf).rect(left + 13, top + 18, 6, 7).fill(0x4a2a22)
+              .rect(left + 15, top + 18, 2, 7).fill(0xe6dfcf);
+          }
         } else if (tile === 'park') {
           tileAt(GRASS[1], x, y);
           const left = x * TILE_SIZE;
           const top = y * TILE_SIZE;
           const park = city.parkAt({ x, y });
-          if (park.big) {
+          if (combo === 'forest') {
+            // A forest: dark ground and close-set pines, no paths.
+            g.rect(left, top, TILE_SIZE, TILE_SIZE).fill(0x2f7a4a);
+            for (const [dx, dy] of [[4 + seed % 5, 2], [18 + (seed >>> 3) % 5, 6 + (seed >>> 6) % 4], [9 + (seed >>> 9) % 6, 16]]) {
+              g.rect(left + dx + 3, top + dy + 11, 2, 3).fill(0x5a3d26);
+              g.rect(left + dx + 3, top + dy, 2, 3).rect(left + dx + 2, top + dy + 3, 4, 3).rect(left + dx + 1, top + dy + 6, 6, 3)
+                .rect(left + dx, top + dy + 9, 8, 2).fill(0x1f5a36);
+              g.rect(left + dx + 3, top + dy + 1, 1, 2).rect(left + dx + 2, top + dy + 4, 1, 2).rect(left + dx + 1, top + dy + 7, 1, 2).fill(0x3f9460);
+            }
+          } else if (park.big) {
             // One lawn: the pale path runs only along the outside of the whole park.
             roadSides.forEach(([dx, dy], side) => {
               if (map.get({ x: x + dx, y: y + dy }) === 'park') return;
@@ -265,6 +285,13 @@ export class TileRenderer {
         } else if (isFacility(tile) || isService(tile) || tile === 'bus' || tile === 'metro') {
           tileAt(GRASS[0], x, y);
           cityAt(CIVIC_ART[tile]!, CIVIC_ROW, x, y);
+          if (combo === 'fair') {
+            // A temple fair: a string of red lanterns across the front.
+            const left = x * TILE_SIZE;
+            const top = y * TILE_SIZE;
+            g.rect(left, top + 1, TILE_SIZE, 1).fill(0x25232b);
+            for (let at = 2; at < TILE_SIZE; at += 6) g.rect(left + at, top + 2, 3, 4).fill(0xe5484d).rect(left + at + 1, top + 6, 1, 1).fill(0xf2c94c);
+          }
         } else {
           cityAt(zoneIndex[tile], LOT_ROW, x, y);
           const building = city.getBuilding({ x, y });
@@ -286,6 +313,28 @@ export class TileRenderer {
                 g.rect(left + 21, top + 28, 4, 3).fill(0xb98a4a).rect(left + 21.5, top + 28.5, 3, 2).fill(0xf0dc9a);
               }
             }
+            const left = x * TILE_SIZE;
+            const top = y * TILE_SIZE;
+            const group = combo;
+            if (group === 'arcade') {
+              // A shopping street: striped awnings along the foot of every shop.
+              for (let at = 0; at < TILE_SIZE; at += 4) g.rect(left + at, top + 27, 4, 4).fill(at % 8 ? 0xf4f6f8 : 0xe5484d);
+              g.rect(left, top + 31, TILE_SIZE, 1).fill(0x25232b);
+            } else if (group === 'estate' || group === 'port') {
+              // An industrial estate: a hazard-striped kerb round the works; a port's is blue and white.
+              for (let at = 0; at < TILE_SIZE; at += 4) {
+                g.rect(left + at, top + 29, 4, 3).fill(at % 8 ? (group === 'port' ? 0xf4f6f8 : 0x25232b) : group === 'port' ? 0x3f8fc4 : 0xf2c94c);
+              }
+            }
+            const nick = tile === 'residential' ? city.nickAt({ x, y }) : undefined;
+            if (nick === 'cabin') {
+              // A forest cabin: a pine by the door.
+              g.rect(left + 3, top + 28, 2, 3).fill(0x5a3d26);
+              g.rect(left + 3, top + 18, 2, 3).rect(left + 2, top + 21, 4, 3).rect(left + 1, top + 24, 6, 4).fill(0x1f5a36);
+            } else if (nick === 'farmhouse') {
+              // A farmhouse: a bale of hay by the door.
+              g.rect(left + 1, top + 25, 7, 6).fill(0x25232b).rect(left + 2, top + 26, 5, 4).fill(0xe2c65a).rect(left + 2, top + 28, 5, 1).fill(0xb9973a);
+            }
             // One gold pip per level above the first, in the top right corner of the lot.
             for (let pip = 1; pip < building.level; pip++) {
               const left = x * TILE_SIZE + TILE_SIZE - 7 * pip;
@@ -304,6 +353,13 @@ export class TileRenderer {
     for (const anchor of complexes) {
       g.texture(this.bigFrame(COMPLEX_ART), 0xffffff, anchor % MAP_SIZE * TILE_SIZE,
         Math.floor(anchor / MAP_SIZE) * TILE_SIZE, 2 * TILE_SIZE, 2 * TILE_SIZE);
+    }
+
+    for (const { x, y } of flags) {
+      const left = x * TILE_SIZE + 24;
+      const top = y * TILE_SIZE;
+      g.rect(left, top, 2, 12).fill(0x25232b);
+      g.rect(left + 2, top + 1, 6, 5).fill(0x25232b).rect(left + 2, top + 2, 5, 3).fill(0xf2c94c).rect(left + 2, top + 3, 3, 1).fill(0xe5484d);
     }
 
     if (layer !== 'none') {
@@ -386,6 +442,11 @@ export class TileRenderer {
       if (map.get({ x, y }) === undefined) continue;
       overlay.rect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE)
         .fill({ color: 0xffffff, alpha: 0.35 });
+    }
+    // What the panel is pointing out: a yellow frame with a dark edge so it shows on anything.
+    for (const { x, y } of marks) {
+      overlay.rect(x * TILE_SIZE - 1, y * TILE_SIZE - 1, TILE_SIZE + 2, TILE_SIZE + 2).stroke({ color: 0x25232b, width: 6 });
+      overlay.rect(x * TILE_SIZE - 1, y * TILE_SIZE - 1, TILE_SIZE + 2, TILE_SIZE + 2).stroke({ color: 0xffe14d, width: 3 });
     }
     if (selected) {
       overlay.rect(selected.x * TILE_SIZE + 1, selected.y * TILE_SIZE + 1, TILE_SIZE - 2, TILE_SIZE - 2)

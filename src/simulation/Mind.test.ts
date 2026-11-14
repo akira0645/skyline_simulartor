@@ -8,7 +8,7 @@ const id = ({ x, y }: Cell) => y * MAP_SIZE + x;
 const row = (y: number, from: number, to: number): Cell[] =>
   Array.from({ length: to - from + 1 }, (_, index) => ({ x: from + index, y }));
 
-const plain: Facts = { slot: 0, days: 100, jam: false, raise: false, troubles: [], park: false, water: false, shops: false,
+const plain: Facts = { slot: 0, days: 100, jam: false, raise: false, forest: false, troubles: [], park: false, water: false, shops: false,
   transit: false, shortOfShops: false, value: 50, business: 'normal', tax: 0, temple: false, places: 3, bond: 40,
   town: false, car: 2, fun: false, casino: false, school: false, kids: 0 };
 /** Someone with an office job (09:00 to 17:00) a short drive away. */

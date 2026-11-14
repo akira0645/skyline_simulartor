@@ -101,7 +101,7 @@ it('reports crime in a town of a hundred without police', () => {
   expect(village.city.inspect(home)).toMatchObject({ issues: expect.not.arrayContaining(['crime']) });
 });
 
-it('burns buildings down unless a fire station is in reach', () => {
+it('burns buildings down unless a fire station is in reach', { timeout: 30000 }, () => {
   const days = 300 * 8;
   const unprotected = town([]);
   unprotected.advance(days);

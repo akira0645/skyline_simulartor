@@ -21,6 +21,7 @@ import { SimulationClock, type SimulationSpeed } from '../simulation/SimulationC
 import { SimulationEngine } from '../simulation/SimulationEngine';
 import { AUTO_SLOT, readSave, writeSave } from '../storage/SaveManager';
 import { goals } from '../simulation/Goals';
+import { combos, COMBOS, taskList, type Combo, type TaskId } from '../simulation/Combos';
 import { TRAITS, type HomeKind, type Trait } from '../simulation/Residents';
 import { mind, thoughts as thoughtWeights, type Doing, type Thought, type Way } from '../simulation/Mind';
 import { bond, circle, PLACES, type Place } from '../simulation/Community';
@@ -60,7 +61,7 @@ const iconStyle = (tool: Tool) => {
   return at && { backgroundImage: `url(${cityUrl})`, backgroundPosition: `-${at[0] * 32}px -${at[1] * 32}px` };
 };
 
-const panelTabs = [['tile', '這一格'], ['city', '城市'], ['goals', '目標'], ['lines', '路線'], ['log', '紀錄']] as const;
+const panelTabs = [['tile', '這格'], ['city', '城市'], ['tasks', '任務'], ['goals', '成就'], ['book', '手冊'], ['lines', '路線'], ['log', '紀錄']] as const;
 type PanelTab = (typeof panelTabs)[number][0];
 
 /** What one tile of a tool costs; nothing for the tool that only looks. */
@@ -310,6 +311,7 @@ const thoughtNames: Record<Thought, string> = {
   'fun-near': '附近有好玩的地方，放假不無聊',
   'kids-happy': '小孩上學近，放學還能去公園玩',
   scared: '附近才剛出事，都沒人來處理，住得心驚膽跳',
+  'forest-near': '住在森林邊，空氣好又安靜',
   'good-pay': '最近生意好，老闆加薪了',
 };
 
@@ -324,7 +326,7 @@ const thoughtTags: Record<Thought, string> = {
   'love-job': '喜歡工作', 'all-good': '沒煩惱', 'nothing-near': '附近空空', strangers: '不認識鄰居', 'want-car': '想買車',
   online: '靠網購', 'temple-near': '有廟', 'proud-car': '有好車', handy: '生活方便', 'close-knit': '鄰居感情好',
   'kids-nowhere': '小孩沒處玩', 'casino-near': '賭場吵', 'fun-near': '有得玩', 'kids-happy': '小孩開心',
-  scared: '怕怕的', 'good-pay': '加薪了',
+  scared: '怕怕的', 'good-pay': '加薪了', 'forest-near': '森林邊',
 };
 
 /**
@@ -340,6 +342,30 @@ function Tag({ label, value, tone, tip, onPick, picked }: { label: string; value
 }
 /** How business is at a workplace, and what that does to pay. */
 const tradeNames = { busy: ['很好', '客人很多，薪水多五成'], good: ['好', '薪水多兩成五'], quiet: ['冷清', '客人少，薪水照常'] } as const;
+/** The special groups: what each is called, how to make one and what it does, and a clue for one not yet found. */
+const comboNames: Record<Combo, [string, string, string]> = {
+  forest: ['森林', `公園連 ${combos.forest.tiles} 格。旁邊地價 +${combos.forest.value.amount}，住宅變森林小屋。`, '公園夠大的話…'],
+  riverpark: ['河濱公園', `大公園（${combos.riverpark.tiles} 格以上）靠著水。旁邊地價 +${combos.riverpark.value.amount}。`, '公園和水…'],
+  farmstead: ['農莊', `農田連 ${combos.farmstead.tiles} 格且有一格靠水。收成多五成，旁邊住宅變農家。`, '農田夠大又有水…'],
+  arcade: ['商圈', `${combos.arcade.side} × ${combos.arcade.side} 的商店全部 3 級。有遊客收入。`, '一整塊最高級的商店…'],
+  fair: ['廟口夜市', `廟的 ${combos.fair.reach} 格內有市場和公園。有遊客收入。`, '廟的旁邊熱鬧起來…'],
+  foodstreet: ['美食街', `市場 ${combos.foodstreet.reach} 格內有 ${combos.foodstreet.shops} 間店。有遊客收入。`, '市場被店家圍起來…'],
+  plaza: ['車站商圈', `捷運站 ${combos.plaza.reach} 格內有 ${combos.plaza.shops} 間店。有遊客收入。`, '捷運站出口都是店…'],
+  funcity: ['娛樂城', `賭場 ${combos.funcity.reach} 格內有電影院和商場。有大筆遊客收入。`, '好玩的地方蓋在一起…'],
+  campus: ['文教區', `高中 ${combos.campus.reach} 格內有小學和公園。旁邊地價 +${combos.campus.value.amount}。`, '學校聚在一起…'],
+  medical: ['醫療園區', `醫院 ${combos.medical.reach} 格內有診所。旁邊地價 +${combos.medical.value.amount}。`, '看病的地方聚在一起…'],
+  estate: ['工業園區', `工廠連 ${combos.estate.buildings} 棟。產量多兩成五，污染也多三成。`, '工廠連成一片…'],
+  port: ['港口', '工業園區靠著水。產量和污染同工業園區，另有出口收入。', '工廠連成一片，又在水邊…'],
+};
+/** The groups that are a place in themselves, and so name the tile. */
+const PLACES_OF: readonly Combo[] = ['forest', 'riverpark', 'farmstead'];
+const nickNames = { cabin: '森林小屋', farmhouse: '農家' };
+/** What each task asks for. */
+const taskNames: Record<TaskId, string> = {
+  power: '把電送到每一棟', water: '把水送到每一棟', police: '讓每一棟都有警察照顧', jobs: '讓大家找得到工作',
+  commute: '縮短上班路程', air: '把空氣弄乾淨', school: '讓住宅附近有小學', clinic: '讓住宅附近有診所',
+  highschool: '讓住宅附近有高中', hospital: '讓住宅附近有醫院', staff: '幫店家和工廠找到人',
+};
 /** The three ready-made cities. */
 const demoList: [DemoSize, string, string, string[]][] = [
   ['small', '小鎮', '140 人', ['捷運', '電影院', '東岸待開發']],
@@ -409,6 +435,12 @@ export function App() {
   // The problem whose explanation is shown, and whether the list of ready-made cities is open.
   const [asked, setAsked] = useState<Issue>();
   const [choosing, setChoosing] = useState(false);
+  // The special group whose recipe is shown, and the tick of the last finished task that was announced.
+  const knownTask = useRef(0);
+  const knownCombos = useRef(0);
+  const seenCombos = useRef<readonly Combo[]>([]);
+  // What is framed on the map, and which of them the view is on.
+  const spot = useRef({ key: '', index: 0 });
   const [debug, setDebug] = useState(false);
   const [fps, setFps] = useState(0);
   const [hour, setHour] = useState(() => hourAt(0));
@@ -467,6 +499,8 @@ export function App() {
     setStats(engine.city.getStats());
     knownRank.current = engine.city.getStats().rank;
     knownGoals.current = engine.city.getStats().goals.length;
+    seenCombos.current = engine.city.getStats().combosSeen;
+    knownCombos.current = seenCombos.current.length;
     knownMood.current = engine.city.getStats().mood;
     rendererRef.current?.refresh?.();
     setDemo(false);
@@ -517,6 +551,8 @@ export function App() {
       const now = engine.city.getStats();
       knownRank.current = now.rank;
       knownGoals.current = now.goals.length;
+      seenCombos.current = now.combosSeen;
+      knownCombos.current = now.combosSeen.length;
       knownMood.current = now.mood;
       setTick(engine.getSnapshot().tick);
       setStats(now);
@@ -538,6 +574,7 @@ export function App() {
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
+      if (rendererRef.current) rendererRef.current.marks = [];
       activeTool.current = 'inspect';
       editingRef.current = undefined;
       setEditing(undefined);
@@ -594,6 +631,16 @@ export function App() {
       if (goal) setMessage(`完成「${goal.title}」，獎金 ${money(goal.reward)}。`);
     }
     knownGoals.current = next.goals.length;
+    if (next.taskDone && next.taskDone.tick > knownTask.current) {
+      const done = taskList.find(task => task.id === next.taskDone!.id)!;
+      setMessage(`完成任務「${taskNames[done.id]}」，獎金 ${money(done.reward)}。`);
+    }
+    knownTask.current = Math.max(knownTask.current, next.taskDone?.tick ?? 0);
+    if (next.combosSeen.length > knownCombos.current) {
+      setMessage(`湊出「${comboNames[next.combosSeen.find(combo => !seenCombos.current.includes(combo)) ?? next.combosSeen[0]][0]}」，記進手冊了。`);
+    }
+    knownCombos.current = next.combosSeen.length;
+    seenCombos.current = next.combosSeen;
     if (next.mood !== knownMood.current) {
       setMessage(next.mood === 'boom' ? '景氣變好：想來的人變多，稅收多一成。' :
         next.mood === 'slump' ? '景氣變差：店和工廠少請人，有人會丟工作。' : '景氣回到普通。');
@@ -609,6 +656,22 @@ export function App() {
     }
     rendererRef.current?.refresh?.();
   }, [engine, tick]);
+
+  /** Frames these tiles on the map and brings one into view; asking again for the same thing moves to the next. */
+  function locate(key: string, cells: Cell[]) {
+    const renderer = rendererRef.current;
+    if (!renderer) return;
+    renderer.marks = cells;
+    if (!cells.length) {
+      renderer.refresh?.();
+      setMessage('地圖上現在沒有。');
+      return;
+    }
+    const index = spot.current.key === key ? (spot.current.index + 1) % cells.length : 0;
+    spot.current = { key, index };
+    renderer.lookAt?.(cells[index]);
+    setMessage(`黃框是它，第 ${index + 1} / ${cells.length} 處。再點看下一處，Esc 取消。`);
+  }
 
   /** Runs a command from a button rather than the map, then shows the result. */
   function command(action: Parameters<typeof engine.city.execute>[0], done: string) {
@@ -635,7 +698,11 @@ export function App() {
     rendererRef.current?.deselect?.();
     knownRank.current = opening.rank;
     knownEvent.current = engine.getSnapshot().tick;
+    knownTask.current = engine.getSnapshot().tick;
     knownGoals.current = opening.goals.length;
+    seenCombos.current = opening.combosSeen;
+    knownCombos.current = opening.combosSeen.length;
+    if (rendererRef.current) rendererRef.current.marks = [];
     knownMood.current = opening.mood;
     void writeSave(engine.save(), AUTO_SLOT).catch(() => undefined);
     setStats(engine.city.getStats());
@@ -833,15 +900,21 @@ export function App() {
           {panelTabs.map(([value, label]) => (
             <button key={value} type="button" role="tab" aria-selected={panelTab === value}
               onClick={() => setPanelTab(value)}>
-              {label}{value === 'city' && trouble > 0 && <i>{trouble}</i>}
+              {label}{value === 'city' && trouble > 0 && <i>{trouble}</i>}{value === 'tasks' && stats.tasks.length > 0 && <i>{stats.tasks.length}</i>}
             </button>
           ))}
         </div>
 
         {panelTab === 'tile' && (personCard ? personCard : selected && info ? <section>
-          <h2>{info.complex ? '集合住宅' : info.bigPark ? '大公園' : info.kind ? homeKindNames[info.kind][0] : tileNames[info.tile]}</h2>
+          <h2>{info.nick ? nickNames[info.nick] : info.combo && PLACES_OF.includes(info.combo) ? comboNames[info.combo][0] :
+            info.complex ? '集合住宅' : info.bigPark ? '大公園' : info.kind ? homeKindNames[info.kind][0] : tileNames[info.tile]}</h2>
           {info.kind && <p className="hint">{homeKindNames[info.kind][1]}</p>}
           <dl>
+            {info.combo && <>
+              <dt>組合</dt>
+              <dd className="tags"><Tag label={comboNames[info.combo][0]} tone="good" tip={comboNames[info.combo][1]} />
+                {info.comboEarns ? <Tag label="收入" value={`${money(info.comboEarns)}/月`} tone="good" /> : null}</dd>
+            </>}
             {info.building === false && <>
               <dt>狀況</dt>
               <dd className="tags">{info.roadAccess ? <Tag label="空地" tip="有人需要就會蓋" /> :
@@ -852,8 +925,9 @@ export function App() {
               <dd className="tags">
                 <Tag label="人" value={`${info.occupants}/${info.capacity}`} />
                 <Tag label="等級" value={info.complex ? '集合' : info.level} tone={info.nextLevel === undefined ? 'good' : undefined} />
-                {info.tile === 'residential' && <Tag label="有工作" value={info.employed}
-                  tone={info.employed < info.occupants ? 'bad' : undefined} />}
+                {info.tile === 'residential' && <Tag label="有工作" value={info.employed} tip="點一下，在地圖上框出他們上班的地方"
+                  tone={info.employed < info.occupants ? 'bad' : undefined}
+                  onPick={() => locate(`works:${selected.x},${selected.y}`, engine.city.find({ worksOf: selected }))} />}
               </dd>
               {info.tile === 'residential' && <>
                 <dt>上班</dt>
@@ -978,8 +1052,9 @@ export function App() {
               <dd className="tags">
                 <Tag label="平均" value={stats.employed ? `${Math.round(stats.commute)} 分` : '—'} />
                 <Tag label="搭車" value={stats.riders} tip="搭公車或捷運上班的人" />
-                <Tag label="路上" value={rush[0] ?? '—'} tone={rush.length ? undefined : 'dim'} tip="現在哪一班的人在上下班" />
               </dd>
+              <dt>路上</dt>
+              <dd className="tags"><Tag label={rush[0] ?? '沒有人'} tone={rush.length ? undefined : 'dim'} tip="現在哪一班的人在上下班" /></dd>
               <dt>車子</dt>
               <dd className="tags" title="存夠錢就買車，每台每月繳牌照稅">
                 {stats.cars.slice(1).map((count, index) => <Tag key={index} label={vehicleNames[index + 1]} value={count}
@@ -1020,12 +1095,16 @@ export function App() {
           <section>
             <h2>目前的問題</h2>
             <div className="tags two">
-              {stats.idle > 0 && <Tag label="設施沒貼路" value={stats.idle} tone="bad" tip="旁邊沒有路，沒有在運作" />}
+              {stats.idle > 0 && <Tag label="設施沒貼路" value={stats.idle} tone="bad" tip="旁邊沒有路，沒有在運作"
+                onPick={() => locate('idle', engine.city.find({ idle: true }))} />}
               {problems.map(issue => <Tag key={issue} label={issueNames[issue]} value={`${stats.complaints[issue]} 棟`} tone="bad"
-                picked={issue === asked} onPick={() => setAsked(issue)} />)}
+                picked={issue === asked} onPick={() => {
+                  setAsked(issue);
+                  locate(`issue:${issue}`, engine.city.find({ issue }));
+                }} />)}
               {!trouble && <Tag label="沒有問題" tone="good" />}
             </div>
-            <p className="said">{asked && problems.includes(asked) ? issueHelp[asked] : problems.length ? '點問題看怎麼解決。' : ''}</p>
+            <p className="said">{asked && problems.includes(asked) ? issueHelp[asked] : problems.length ? '點問題：看怎麼解決，地圖也會框出來。' : ''}</p>
           </section>
           <section>
             <h2>居民心聲</h2>
@@ -1044,7 +1123,8 @@ export function App() {
             <h2>城裡的人</h2>
             <div className="tags">
               {TRAITS.filter(trait => stats.traits[trait] > 0).map(trait =>
-                <Tag key={trait} label={traitNames[trait][0]} value={stats.traits[trait]} tip={traitNames[trait][1]} />)}
+                <Tag key={trait} label={traitNames[trait][0]} value={stats.traits[trait]} tip={traitNames[trait][1]}
+                  onPick={() => locate(`trait:${trait}`, engine.city.find({ trait }))} />)}
               {!TRAITS.some(trait => stats.traits[trait] > 0) && <Tag label="都很普通" tone="dim" />}
             </div>
           </section>
@@ -1118,15 +1198,46 @@ export function App() {
           </div>}
         </>}
 
+        {panelTab === 'tasks' && (stats.tasks.length ? stats.tasks.map(({ id, left }) => {
+          const task = taskList.find(entry => entry.id === id)!;
+          return <section key={id}>
+            <h2>{taskNames[id]}</h2>
+            <div className="tags">
+              <Tag label={issueNames[task.issue]} value={`${left} 棟`} tone="bad" />
+              <Tag label="降到" value={`${task.to} 棟`} />
+              <Tag label="獎金" value={money(task.reward)} tone="good" />
+              <Tag label="看在哪" onPick={() => locate(`issue:${task.issue}`, engine.city.find({ issue: task.issue }))} />
+            </div>
+            <p className="said">{issueHelp[task.issue]}</p>
+          </section>;
+        }) : <p className="hint">現在沒有任務。城市出問題時，居民會來拜託。</p>)}
+
         {panelTab === 'goals' && <ul className="goals">
-          {goals.map(goal => {
+          {[...goals].sort((a, b) => Number(stats.goals.includes(a.id)) - Number(stats.goals.includes(b.id))).map(goal => {
             const done = stats.goals.includes(goal.id);
             return <li key={goal.id} className={done ? 'done' : undefined}>
               <b>{done ? '✓' : '□'} {goal.title}</b>
-              <span>{done ? '' : `${goal.hint} `}獎金 {money(goal.reward)}</span>
+              {!done && <span>{goal.hint}</span>}
+              <span className="tags"><Tag label="獎金" value={money(goal.reward)} tone={done ? 'dim' : 'good'} /></span>
             </li>;
           })}
         </ul>}
+
+        {panelTab === 'book' && <>
+          <p className="hint count">湊出來過 {stats.combosSeen.length} / {COMBOS.length} 種</p>
+          <ul className="goals">
+            {[...COMBOS].sort((a, b) => Number(stats.combosSeen.includes(b)) - Number(stats.combosSeen.includes(a))).map(combo => {
+              const known = stats.combosSeen.includes(combo);
+              const count = stats.combos[combo];
+              return <li key={combo} className={known ? undefined : 'done'}>
+                <b>{known ? comboNames[combo][0] : '？？？'}</b>
+                <span>{comboNames[combo][known ? 1 : 2]}</span>
+                {known && <span className="tags"><Tag label="現在有" value={count} tone={count ? 'good' : 'dim'}
+                  onPick={count ? () => locate(`combo:${combo}`, engine.city.find({ combo })) : undefined} /></span>}
+              </li>;
+            })}
+          </ul>
+        </>}
 
         {panelTab === 'log' && (happenings.length ? <ul>{happenings.map((item, index) => {
           const day = dateAt(item.tick);

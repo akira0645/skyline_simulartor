@@ -13,6 +13,8 @@ export interface GoalView {
   levels: number[];
   bigParks: number;
   complexes: number;
+  /** How many of each special group the city has (see Combos.ts). */
+  combos: Record<string, number>;
 }
 
 /**
@@ -47,6 +49,8 @@ export const goals: readonly { id: string; title: string; hint: string; reward: 
     done: city => city.population >= 1500 },
   { id: 'smooth', title: '1,000 人以上，平均上班不到 20 分鐘', hint: '大道、公車和捷運，還有讓住的地方離工作近一點。', reward: 8000,
     done: city => city.population >= 1000 && city.commute < 20 },
+  { id: 'combos', title: '湊出三種特殊組合', hint: '森林、農莊、商圈、廟口夜市、工業園區，點「城市」看怎麼湊。', reward: 6000,
+    done: city => Object.values(city.combos).filter(count => count > 0).length >= 3 },
   { id: 'metropolis', title: '人口達到 3,000 人', hint: '大城市要更多醫院、高中和過河的路。', reward: 20000,
     done: city => city.population >= 3000 },
 ];

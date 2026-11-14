@@ -95,7 +95,9 @@ function oldTown(city: City, avenueEnd: number): Cell[] {
   city.execute({ type: 'SET_ZONE', tiles: homes, zone: 'residential' });
   city.execute({ type: 'SET_ZONE', tiles: shops, zone: 'commercial' });
   city.execute({ type: 'SET_ZONE', tiles: factories, zone: 'industrial' });
-  city.execute({ type: 'BUILD_PARK', tiles: [...block(1, 12, 1, 1), { x: 14, y: 4 }, { x: 14, y: 6 }] });
+  // The small park behind the temple, with the market down the street, makes a temple fair of it.
+  city.execute({ type: 'BUILD_PARK', tiles: [...block(1, 12, 1, 1).filter(({ x }) => ![4, 7, 10].includes(x)),
+    { x: 14, y: 4 }, { x: 14, y: 6 }, { x: 12, y: 10 }] });
   fit(city, [
     ['power', powerPlant.x, powerPlant.y], ['water', waterTower.x, waterTower.y], ['power', 15, 9], ['water', 14, 9],
     // Fire and police cover for both halves.

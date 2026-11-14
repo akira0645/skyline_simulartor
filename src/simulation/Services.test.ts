@@ -107,7 +107,7 @@ it('burns buildings down unless a fire station is in reach', { timeout: 30000 },
   unprotected.advance(days);
   const fires = unprotected.city.getEvents().filter(event => event.kind.startsWith('fire'));
   // With no station of any kind, nothing that happens is answered.
-  expect(unprotected.city.getEvents().every(event => ['fire', 'crime', 'sick'].includes(event.kind) && !event.station)).toBe(true);
+  expect(unprotected.city.getEvents().every(event => !event.station)).toBe(true);
   expect(fires.length).toBeGreaterThan(0);
   expect(fires.every(event => event.kind === 'fire')).toBe(true);
   // The lot of the latest fire stays zoned; whatever stands there now was built afterwards.

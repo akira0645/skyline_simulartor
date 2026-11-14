@@ -423,9 +423,9 @@ const dilemmaNames: Record<DilemmaId, [string, [string, string], [string, string
 const themeNames: Record<Theme, string> = { classic: '原本', sf: '舊金山', california: '加州', newyork: '紐約' };
 /** The three ready-made cities. */
 const demoList: [DemoSize, string, string, string[]][] = [
-  ['small', '小鎮', '140 人', ['捷運', '電影院', '東岸待開發']],
-  ['medium', '城鎮', '800 人', ['醫院', '博物館', '捷運 2 條']],
-  ['large', '大城市', '2,100 人', ['大學', '商場', '賭場', '三座橋']],
+  ['small', '小鎮', '140 人', ['加州風', '棕櫚和海灘', '東岸待開發']],
+  ['medium', '城鎮', '800 人', ['紐約風', '兩條河中間的島', '中央公園']],
+  ['large', '大城市', '2,100 人', ['舊金山風', '海灣和紅色大橋', '金門公園', '纜車']],
 ];
 const thoughtTone = (thought: Thought) => thoughtWeights[thought] < 0 ? 'bad' as const : 'good' as const;
 
@@ -825,7 +825,8 @@ export function App() {
       demoCity(sample, size);
       replaceCity(sample, '會蓋掉現在的地圖，確定嗎？', true,
         size === 'small' ? '交給你了。先過橋，把東岸的水電、警察、消防補上。' :
-          '交給你了。大道最東邊的新街區還沒有水電、警察、消防。');
+          size === 'medium' ? '交給你了。過東邊那條河，對岸的新街區還沒有水電、警察、消防。' :
+          '交給你了。往南過紅色大橋，海灣對岸的新街區還沒有水電、警察、消防。');
     }, 30);
   }
 

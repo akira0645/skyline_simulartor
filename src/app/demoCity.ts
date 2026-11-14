@@ -27,7 +27,7 @@ const YEAR = 12 * calendar.daysPerMonth * calendar.ticksPerDay;
 export const demoSizes: Record<DemoSize, { years: number; rank: number; funds: number; fresh: Cell }> = {
   small: { years: 0, rank: 2, funds: economy.startingFunds, fresh: eastBank },
   medium: { years: 3, rank: 3, funds: 30000, fresh: { x: 49, y: 5 } },
-  large: { years: 8, rank: 4, funds: 80000, fresh: { x: 61, y: 5 } },
+  large: { years: 8, rank: 4, funds: 80000, fresh: { x: 8, y: 41 } },
 };
 
 type City = SimulationEngine['city'];
@@ -69,12 +69,16 @@ function line(city: City, kind: 'bus' | 'metro', stops: readonly (readonly [numb
 }
 
 /** The river every ready-made city has: top to bottom, three tiles wide, a little east of the first factories. */
-function river(city: City) {
+function river(city: City, size: DemoSize) {
   const water: Cell[] = [];
   for (let y = 0; y < MAP_SIZE; y++) {
     const west = 21 + Math.round(1.4 * Math.sin(y / 5));
     water.push({ x: west, y }, { x: west + 1, y }, { x: west + 2, y });
+    // New York: a second river further east, so the east bank is an island between the two.
+    if (size === 'medium') water.push({ x: 40, y }, { x: 41, y }, { x: 42, y });
   }
+  // San Francisco: the bay along the whole south side, nine tiles across.
+  if (size === 'large') for (const cell of block(0, MAP_SIZE - 1, 28, 36)) water.push(cell);
   city.map.flood(water);
 }
 
@@ -120,10 +124,14 @@ function oldTown(city: City, avenueEnd: number): Cell[] {
  *
  * - small: the old town alone, and the new district just over the bridge. It grows by itself
  *   for four months before it is handed over.
- * - medium: more homes and shops to the south, a factory estate beside them and a finished
- *   district on the east bank, with a hospital, a museum and a second metro line.
- * - large: all of that twice as deep, a second district on the east bank with a university, a
- *   mall, a casino and a large factory estate, a second bridge, avenues and a bus line.
+ * - small, in California's colours: the old town alone, and the new district just over the bridge.
+ * - medium, laid out like New York: more homes and shops to the south, a factory estate beside
+ *   them, and a finished district on an island between two rivers with a Central Park in it; the
+ *   new district is over the east river.
+ * - large, laid out like San Francisco: all of that twice as deep, a second district further east
+ *   with a university, a mall, a casino and a large factory estate, a Golden Gate Park among the
+ *   western homes, a cable car line, and the bay along the south with the new district across it
+ *   at the end of a long red bridge.
  *
  * The two larger ones are too big to grow in a moment, so their buildings are put up at once
  * (`BuildingSystem.found`) in a year well after the first, and then lived in for two months. Each
@@ -133,12 +141,12 @@ function oldTown(city: City, avenueEnd: number): Cell[] {
 export function demoCity(engine: SimulationEngine, size: DemoSize = 'small') {
   const city = engine.city;
   const { years, rank, funds } = demoSizes[size];
-  river(city);
+  river(city, size);
   // The city is laid out with money to spare, then handed over with its opening balance. It
   // starts at the rank a city of its size has reached, which is what lets it have its buildings.
   // Each size wears another city's colours, so the three do not look alike.
   engine.load({ ...engine.save(), tick: years * YEAR, funds: 10_000_000, rank,
-    theme: size === 'small' ? 'california' : size === 'medium' ? 'sf' : 'newyork' });
+    theme: size === 'small' ? 'california' : size === 'medium' ? 'newyork' : 'sf' });
   if (size === 'small') {
     oldTown(city, 32);
     // The far bank: a cross street and lots for homes and shops, and nothing else yet.
@@ -162,7 +170,7 @@ export function demoCity(engine: SimulationEngine, size: DemoSize = 'small') {
 
   const large = size === 'large';
   const R = 'residential', C = 'commercial', I = 'industrial';
-  const lots = oldTown(city, large ? 66 : 54);
+  const lots = oldTown(city, large ? 50 : 54);
   // Three streets lead south from the old town's south street, between its stations.
   for (const x of [1, 8, 18]) city.execute({ type: 'BUILD_ROAD', path: block(x, x, 9, 11) });
   // South of the old town: homes with shops among them, and a factory estate towards the river.
@@ -180,14 +188,17 @@ export function demoCity(engine: SimulationEngine, size: DemoSize = 'small') {
     // The east bank's shopping rows, with a museum at the far end.
     ['police', 32, 6], ['fire', 33, 6], ['museum', 36, 6], ['power', 27, 7], ['water', 28, 7], ['power', 30, 7],
     ['water', 31, 7], ['clinic', 32, 7], ['school', 33, 7], ['highschool', 34, 7], ['market', 35, 7],
-    ...block(31, 33, 9, 10).map(({ x, y }) => ['park', x, y] as const),
+    // New York's has a Central Park: big enough to be a forest, with homes all round it.
+    ...block(large ? 31 : 29, large ? 33 : 35, 9, 10).map(({ x, y }) => ['park', x, y] as const),
   ]);
   line(city, 'metro', [[7, 14], [16, 14], [32, 8]], 2);
   if (large) {
     // A second district further east: shops and a university on the avenue, then homes and factories by turns.
     lots.push(...district(city, 38, 50, 2, [C, R, I, I, R, I, I]));
     fit(city, [
-      ['school', 7, 22], ['bus', 5, 25], ['bus', 17, 25],
+      // Golden Gate Park: a long strip of green in the western homes.
+      ...block(2, 9, 21, 22).map(({ x, y }) => ['park', x, y] as const),
+      ['school', 10, 22], ['bus', 5, 25], ['bus', 17, 25],
       ['power', 28, 15], ['water', 29, 15], ['hospital', 30, 15], ['police', 32, 15], ['fire', 33, 15], ['power', 35, 15],
       ['water', 36, 15], ['school', 32, 16], ['highschool', 33, 16], ['cinema', 34, 16], ['parking', 35, 16],
       ['mall', 39, 3], ['parking', 41, 4], ['power', 42, 4], ['water', 43, 4], ['police', 43, 3], ['fire', 44, 3],
@@ -205,9 +216,17 @@ export function demoCity(engine: SimulationEngine, size: DemoSize = 'small') {
     line(city, 'metro', [[7, 20], [16, 20], [32, 20]], 3);
     line(city, 'bus', [[5, 25], [17, 25]], 2);
   }
-  // The new district at the end of the avenue: streets and lots, and nothing else yet.
+  // The new district: streets and lots, and nothing else yet. New York's is over the east
+  // river at the end of the avenue; San Francisco's is across the bay, at the far end of a long
+  // red bridge from the western avenue.
   const { fresh } = demoSizes[size];
-  district(city, fresh.x - 5, fresh.x + 5, 2, [R, C]);
+  if (large) {
+    city.execute({ type: 'BUILD_ROAD', path: block(13, 13, 26, 38), road: 'avenue' });
+    district(city, fresh.x - 5, fresh.x + 5, fresh.y - 3, [R, C]);
+    city.execute({ type: 'BUILD_ROAD', path: block(fresh.x - 5, fresh.x + 5, fresh.y, fresh.y), road: 'avenue' });
+  } else {
+    district(city, fresh.x - 5, fresh.x + 5, 2, [R, C]);
+  }
   city.found(lots);
   engine.advance(2 * calendar.daysPerMonth * calendar.ticksPerDay);
   engine.load({ ...engine.save(), funds });

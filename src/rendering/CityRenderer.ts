@@ -107,7 +107,9 @@ export class CityRenderer {
      * car has stood behind another.
      */
     const trips = new Map<string, { at: 'home' | 'work'; along?: number; wait: number;
-      garage?: { home: boolean; work: boolean }; lot?: { home?: number; work?: number }; held?: number }>();
+      garage?: { home: boolean; work: boolean }; lot?: { home?: number; work?: number }; held?: number;
+      /** How many times they have set out, and the way by the filling station when this trip goes that way. */
+      count?: number; detour?: { path: Cell[]; stop: number; wait: number } }>();
     /** The cars that were on the road in the last frame, for the ones behind to keep clear of. */
     let cars: { x: number; y: number; hx: number; hy: number; index: number }[] = [];
     /** Where each commuter in sight was last drawn, for clicking on them. */
@@ -210,6 +212,28 @@ export class CityRenderer {
       return onRoad;
     };
 
+    /**
+     * The way from home to work by the nearest filling station to home, if there is one near
+     * enough and the detour is not out of all proportion. `stop` is how far along the pump is.
+     */
+    const viaStation = (route: { homeId: number; path: readonly Cell[] }): { path: Cell[]; stop: number; wait: number } | undefined => {
+      const home = cellOf(route.homeId);
+      let best: { road: Cell; far: number } | undefined;
+      for (let dy = -10; dy <= 10; dy++) {
+        for (let dx = -10 + Math.abs(dy); dx <= 10 - Math.abs(dy); dx++) {
+          const cell = { x: home.x + dx, y: home.y + dy };
+          if (this.city.map.get(cell) !== 'gas') continue;
+          const road = this.city.roadBeside(cell);
+          if (road && (!best || Math.abs(dx) + Math.abs(dy) < best.far)) best = { road, far: Math.abs(dx) + Math.abs(dy) };
+        }
+      }
+      if (!best) return undefined;
+      const there = this.city.roadGraph.shortestPath(route.path[0], best.road)?.path;
+      const on = this.city.roadGraph.shortestPath(best.road, route.path[route.path.length - 1])?.path;
+      if (!there || !on || there.length + on.length > route.path.length + 20) return undefined;
+      return { path: [...there, ...on.slice(1)], stop: there.length, wait: 1800 };
+    };
+
     /** The car park within two tiles of a building, if there is one. */
     const lotBy = ({ x, y }: Cell): number | undefined => {
       for (let dy = -2; dy <= 2; dy++) {
@@ -237,10 +261,15 @@ export class CityRenderer {
       // Every car on the map is someone's, driven out from their door. A very large city shows
       // only its first routes, to keep each frame quick.
       for (let i = 0; i < Math.min(routes.length, CARS_SHOWN); i++) {
-        const route = routes[i];
+        const real = routes[i];
+        const key = `${real.homeId}:${real.workId}`;
+        let trip = trips.get(key);
+        if (!trip) trips.set(key, trip = { at: 'home', wait: 0 });
+        // On a trip by way of the filling station the car follows that way instead of the straight one.
+        const route = trip.detour ? { ...real, path: trip.detour.path } : real;
         const tiles = route.path.length;
         const steps = tiles + 1;
-        const driving = tiles >= mind.driveFrom;
+        const driving = real.path.length >= mind.driveFrom;
         const home = cellOf(route.homeId);
         const workplace = cellOf(route.workId);
         const zone = this.city.map.get(workplace);
@@ -251,9 +280,6 @@ export class CityRenderer {
         // At the weekend only the shops are open, so only their people go to work.
         const dayOff = weekendAt(this.city.now) && shiftIndex(zone, route.workId) !== SHOP_SHIFT;
         const wanted = !dayOff && (sinceStart < end - start || sinceStart >= 24 - HEAD_START) ? 'work' : 'home';
-        const key = `${route.homeId}:${route.workId}`;
-        let trip = trips.get(key);
-        if (!trip) trips.set(key, trip = { at: 'home', wait: 0 });
         // Buildings grow, so this is looked at again at each departure.
         if (!trip.garage || trip.along === undefined && trip.at !== wanted) {
           // A car park within two tiles takes the cars of a small building off the kerb.
@@ -296,6 +322,9 @@ export class CityRenderer {
             if (driving) park(trip.at);
             continue;
           }
+          // Every fourth morning the tank is low, and the car goes by the filling station.
+          trip.count = (trip.count ?? i % 4) + 1;
+          trip.detour = driving && tier >= 1 && trip.at === 'home' && trip.count % 4 === 0 ? viaStation(real) : undefined;
           // Stagger departures a little so a household does not leave as one.
           trip.along = 0;
           trip.wait = (i % 7) * 260;
@@ -381,15 +410,23 @@ export class CityRenderer {
           // undoes any knot that cars from several ways have tied.
           // The same goes for a light: one that has not let the car through in two full turns is
           // taken to be stuck, whatever the reason, and the car goes.
+          // At the pump: stand a moment while the tank fills.
+          let filling = false;
+          if (trip.detour && trip.detour.wait > 0 && along >= trip.detour.stop) {
+            trip.detour.wait -= elapsed;
+            filling = true;
+            people.rect(Math.round(spot.x) - 2, Math.round(spot.y) - 12, 5, 6).fill(0x25232b)
+              .rect(Math.round(spot.x) - 1, Math.round(spot.y) - 11, 3, 4).fill(0xf2c94c);
+          }
           trip.held = blocked || red ? (trip.held ?? 0) + elapsed : 0;
-          speed = trip.held > 0 && trip.held < (red ? 2 * LIGHT + 600 : 3500) ? 0 : 1 / VEHICLE_PACE[tier];
+          speed = filling || (trip.held > 0 && trip.held < (red ? 2 * LIGHT + 600 : 3500)) ? 0 : 1 / VEHICLE_PACE[tier];
           drawCar(spot.x, spot.y, vertical, i, tier);
           seenAt(spot);
           if (inLane) moving.push({ x: tileX, y: tileY, hx, hy, index: i });
         }
 
         trip.along = along + elapsed * speed;
-        if (trip.along >= steps) trips.set(key, { at: to, wait: 0 });
+        if (trip.along >= steps) trips.set(key, { at: to, wait: 0, count: trip.count });
       }
       if (elapsed > 0) cars = moving;
       // The cars standing in each car park: up to six, in its bays.
@@ -645,6 +682,8 @@ export class CityRenderer {
 
     let preview: Cell[] = [];
     let hover: Cell | undefined;
+    /** The tile under the pointer while a building tool is in hand and no button is down. */
+    let aim: Cell | undefined;
     let selected: Cell | undefined;
     // `fromX` and `fromY` are where the pointer went down; `x` and `y` follow it.
     let drag: { id: number; tool: Tool; start: Cell; x: number; y: number; fromX: number; fromY: number } |
@@ -667,10 +706,23 @@ export class CityRenderer {
           tool : layer,
         range, this.hour(),
         // Routes show while laying out transport, and in the map view for them.
-        routesShown() ? this.city.getLines() : [], this.marks, rushNow());
+        routesShown() ? this.city.getLines() : [], this.marks, rushNow(),
+        aim && !drag && tool !== 'inspect' && tool !== 'pan' && tool !== 'line' ?
+          { cells: isBig(tool) ? footprint(aim) : [aim], ok: (isBig(tool) ? footprint(aim) : [aim]).every(cell => fits(tool, cell)) } : undefined);
       drawPeople();
       drawEffects();
       app.render();
+    };
+    /** Whether a tool could be used on a tile, as far as what stands there goes; money is not looked at. */
+    const fits = (tool: Tool, cell: Cell): boolean => {
+      const tile = map.get(cell);
+      if (tile === undefined) return false;
+      if (tool === 'viaduct') return true;
+      if (tool === 'demolish') return (tile !== 'grass' && tile !== 'river') || map.hasSpan(cell);
+      if (tool === 'metro') return (tile === 'road' || tile === 'avenue') && !map.hasStation(cell);
+      if (isRoad(tool)) return true;
+      if (tile === 'river' || isRoad(tile)) return false;
+      return !isBig(tool) || !(tile === 'annex' || isBig(tile));
     };
     this.refresh = draw;
     this.lookAt = cell => {
@@ -715,8 +767,10 @@ export class CityRenderer {
         const next = (isFacility(tool) || isService(tool) || tool === 'bus' || tool === 'metro') &&
           map.get(cell) !== undefined ?
           cell : undefined;
-        if (next?.x !== hover?.x || next?.y !== hover?.y) {
+        const aimed = map.get(cell) !== undefined ? cell : undefined;
+        if (next?.x !== hover?.x || next?.y !== hover?.y || aimed?.x !== aim?.x || aimed?.y !== aim?.y) {
           hover = next;
+          aim = aimed;
           draw();
         }
         return;
@@ -778,8 +832,9 @@ export class CityRenderer {
       clearDrag(event);
     }, { signal });
     canvas.addEventListener('pointerleave', () => {
-      if (!hover) return;
+      if (!hover && !aim) return;
       hover = undefined;
+      aim = undefined;
       draw();
     }, { signal });
     canvas.addEventListener('pointercancel', clearDrag, { signal });

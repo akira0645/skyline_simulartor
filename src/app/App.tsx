@@ -85,7 +85,7 @@ function toolTip(tool: Tool): string {
       tool === 'temple' ? '附近鄰居感情變好。' :
       tool === 'hospital' ? '也算診所。滿 1,200 人後大家會要。' :
       tool === 'university' ? '範圍很大。' :
-      tool === 'parking' ? '蓋在休閒建築 4 格內，遊客多兩成五。' :
+      tool === 'parking' ? '住家 2 格內有它，車主的停車月費歸城市。蓋在休閒建築 4 格內，遊客多兩成五。' :
       tool === 'casino' ? '最賺，但附近地價變低、會嫌吵。' :
       tool === 'gas' ? '範圍內有車的人在這裡加油，城市抽三成；沒有加油站的人要多花五成去外地加。' :
       tool === 'library' ? '附近地價變高，住附近的人放假會來。' :
@@ -217,6 +217,7 @@ function newsText({ kind, name, shift, car }: PersonNews): string {
     case 'left-no-room': return `${name}家裡住不下，搬走了`;
     case 'left-unhappy': return `${name}住得很不開心，搬走了`;
     case 'new-car': return `${name}存夠了錢，買了一台${vehicleNames[car ?? 1]}`;
+    case 'sold-car': return `${name}養不起車，賣掉了`;
   }
 }
 
@@ -328,6 +329,7 @@ const thoughtNames: Record<Thought, string> = {
   scared: '附近才剛出事，都沒人來處理，住得心驚膽跳',
   'forest-near': '住在森林邊，空氣好又安靜',
   late: '路上塞住又遲到，被扣了薪水',
+  'car-dear': '油錢、停車費、牌照稅，養一台車好花錢',
   'no-gas': '附近沒有加油站，加個油要跑好遠',
   'fuel-dear': '油價好貴，開車上班快開不起了',
   'good-pay': '最近生意好，老闆加薪了',
@@ -344,7 +346,7 @@ const thoughtTags: Record<Thought, string> = {
   'love-job': '喜歡工作', 'all-good': '沒煩惱', 'nothing-near': '附近空空', strangers: '不認識鄰居', 'want-car': '想買車',
   online: '靠網購', 'temple-near': '有廟', 'proud-car': '有好車', handy: '生活方便', 'close-knit': '鄰居感情好',
   'kids-nowhere': '小孩沒處玩', 'casino-near': '賭場吵', 'fun-near': '有得玩', 'kids-happy': '小孩開心',
-  scared: '怕怕的', 'good-pay': '加薪了', 'forest-near': '森林邊', late: '遲到', 'no-gas': '沒加油站', 'fuel-dear': '油太貴',
+  scared: '怕怕的', 'good-pay': '加薪了', 'forest-near': '森林邊', late: '遲到', 'no-gas': '沒加油站', 'fuel-dear': '油太貴', 'car-dear': '養車貴',
 };
 
 /**
@@ -866,6 +868,8 @@ export function App() {
       <dd className="tags"><Tag label="日薪" value={money(seen.pay)} /><Tag label="存款" value={money(seen.money)} /></dd>
       <dt>車子</dt>
       <dd className="tags"><Tag label={vehicleNames[seen.car]} />
+        {seen.car > 0 && <Tag label="養車" value={`${money(seen.keep)}/天`}
+          tip={`牌照稅、油錢${seen.car >= 2 ? `、停車費（${{ lot: '停車場，歸城市', garage: '大樓地下室', kerb: '門口路邊，免費' }[seen.parking]}）` : ''}。付不起就會賣掉`} />}
         {vehicles[seen.car + 1] && <Tag label={`${vehicleNames[seen.car + 1]}`} value={money(vehicles[seen.car + 1].price)}
           tone="dim" tip="存到這麼多就會換車" />}</dd>
     </dl>
@@ -949,7 +953,7 @@ export function App() {
       <div className="viewport" ref={viewport} data-tool={tool} role="region" aria-label="城市地圖" />
 
       <header className="hud top">
-        <div className="stat" title={`每月：稅收 ${money(stats.budget.tax)}，車票 ${money(stats.budget.fares)}，牌照稅 ${money(stats.budget.licence)}，油稅 ${money(stats.budget.fuel)}，景點 ${money(stats.budget.visitors)}，民生用品買賣 ${money(stats.budget.trade)}，維護費 ${money(stats.budget.upkeep)}，還款 ${money(stats.budget.loans)}。每天進帳一點。`}>
+        <div className="stat" title={`每月：稅收 ${money(stats.budget.tax)}，車票 ${money(stats.budget.fares)}，牌照稅 ${money(stats.budget.licence)}，油稅 ${money(stats.budget.fuel)}，停車費 ${money(stats.budget.parking)}，景點 ${money(stats.budget.visitors)}，民生用品買賣 ${money(stats.budget.trade)}，維護費 ${money(stats.budget.upkeep)}，還款 ${money(stats.budget.loans)}。每天進帳一點。`}>
           <span>資金</span>
           <b>{money(stats.funds)}</b>
           <small className={stats.budget.net < 0 ? 'loss' : undefined}>每月 {stats.budget.net >= 0 ? '+' : ''}{money(stats.budget.net)}</small>
@@ -1175,6 +1179,8 @@ export function App() {
                   tone={count ? undefined : 'dim'} />)}
                 <Tag label="牌照稅" value={`${money(stats.budget.licence)}/月`} tone={stats.budget.licence ? 'good' : 'dim'} />
                 <Tag label="油稅" value={`${money(stats.budget.fuel)}/月`} tone={stats.budget.fuel ? 'good' : 'dim'} tip="要有加油站才收得到" />
+                <Tag label="停車費" value={`${money(stats.budget.parking)}/月`} tone={stats.budget.parking ? 'good' : 'dim'}
+                  tip="住家 2 格內有停車場，車主的月費就歸城市" />
               </dd>
               <dt>景氣</dt>
               <dd className="tags">{stats.rank < cycle.rank ?

@@ -75,7 +75,7 @@ export interface PersonNews {
    * its workplace; or leaving town for want of work or of room at home.
    */
   kind: 'job-nearer' | 'job-liking' | 'job-change' | 'job-lost' | 'left-no-work' | 'left-no-room' |
-    'left-unhappy' | 'new-car';
+    'left-unhappy' | 'new-car' | 'sold-car';
   name: string;
   home: Cell;
   /** For a move to another job: the shift of the new workplace, an index into `shifts`. */
@@ -116,6 +116,8 @@ export class BuildingSystem {
   /** The price level (saved), and what the city's share of the fuel its people buy comes to in a month. */
   private level = 1;
   private fuelTax = 0;
+  /** What the cars kept in the city's car parks pay it in a month. */
+  private parkingFees = 0;
   /** The policies that are on. Saved. */
   private readonly policiesOn = new Set<Policy>();
   /** The challenge under way (saved), and how the last one ended (not saved). */
@@ -482,7 +484,11 @@ export class BuildingSystem {
       home: cellAt(home), work: zone ? cellAt(person.job) : undefined, homeId: home, slot: person.slot,
       /** What they own, what they have saved and what they earn a day. */
       car: person.car ?? 0, money: person.money ?? 0,
-      pay: zone ? this.payAt(person.job, who.trait === 'rich', home) : 0, school: this.schoolOf(home) };
+      pay: zone ? this.payAt(person.job, who.trait === 'rich', home) : 0, school: this.schoolOf(home),
+      /** What the vehicle costs a day to keep, and where it is kept. */
+      keep: Math.round(this.keepCost(home, person.car ?? 0,
+        this.commutes.find(route => route.homeId === home && route.workId === person.job)?.path.length ?? 0).cost),
+      parking: this.parkingOf(home) };
   }
 
   /** How business is at a workplace, when it is better or worse than usual (see `trade` in Wealth.ts). */
@@ -572,6 +578,28 @@ export class BuildingSystem {
   private fuelFor(home: number, tiles: number): { cost: number; local: boolean } {
     const local = this.covered.gas[home] === 1;
     return { local, cost: prices.fuel.perTile * 2 * tiles * fuelPrice(this.clock) * this.level * (local ? 1 : prices.fuel.away) };
+  }
+
+  /** Where a home's cars are kept: in a city car park near by, under the building, or at the kerb. */
+  private parkingOf(home: number): 'lot' | 'garage' | 'kerb' {
+    const { x, y } = cellAt(home);
+    const reach = prices.keep.lotReach;
+    for (let dy = -reach; dy <= reach; dy++) {
+      for (let dx = -reach; dx <= reach; dx++) if (this.map.get({ x: x + dx, y: y + dy }) === 'parking') return 'lot';
+    }
+    return (this.buildings.get(home)?.level ?? 1) >= 2 ? 'garage' : 'kerb';
+  }
+
+  /**
+   * What keeping a vehicle of a tier costs a day for someone of this home with this far to
+   * drive: licence, parking and fuel. `toCity` is the part of the parking that goes to the city.
+   */
+  private keepCost(home: number, tier: number, tiles: number): { cost: number; toCity: number } {
+    if (!tier || tier >= vehicles.length) return { cost: 0, toCity: 0 };
+    const where = this.parkingOf(home);
+    const parking = where === 'kerb' ? 0 : prices.keep.parking[tier] * this.level / calendar.daysPerMonth;
+    return { cost: vehicles[tier].licence * this.level / calendar.daysPerMonth + parking + this.fuelFor(home, tiles).cost,
+      toCity: where === 'lot' ? parking : 0 };
   }
 
   /** Turns a policy on or off. */
@@ -953,19 +981,30 @@ export class BuildingSystem {
       for (const person of building.people!) {
         const zone = person.job >= 0 ? this.map.at(person.job) : undefined;
         let money = person.money ?? 0;
+        let spare = 0;
         if (zone === 'commercial' || zone === 'industrial') {
           const route = routes.get(id * MAP_SIZE ** 2 + person.job);
           // Held up on the road, they are late and docked for it.
           const share = route && this.heldUp(route) ? 1 - prices.late.dock : 1;
-          money += (this.payAt(person.job, traitOf(this.seed, id, person.slot, building.kind) === 'rich', id) * share -
-            pay.living) * this.level;
-          if (person.car && route) money = Math.max(0, money - this.fuelFor(id, route.path.length).cost);
-          money = Math.round(money);
+          const earned = this.payAt(person.job, traitOf(this.seed, id, person.slot, building.kind) === 'rich', id) * share * this.level;
+          money += earned - pay.living * this.level;
+          const tiles = route?.path.length ?? 0;
+          money -= this.keepCost(id, person.car ?? 0, tiles).cost;
+          // A vehicle they cannot pay for is sold, and they go down to the next one.
+          if (money < 0 && person.car) {
+            money = Math.max(0, money) + prices.keep.resale * vehicles[person.car].price;
+            person.car--;
+            if (!person.car) delete person.car;
+            this.tell('sold-car', id, person);
+          }
+          // What is left of a day's pay once the next vehicle up is paid for: nobody buys one they could not keep.
+          spare = earned - pay.living * this.level - this.keepCost(id, (person.car ?? 0) + 1, tiles).cost;
+          money = Math.round(Math.max(0, money));
         } else {
           money = Math.max(0, Math.round(money - pay.living / 2 * this.level));
         }
         const next = vehicles[(person.car ?? 0) + 1];
-        if (next && money >= next.price) {
+        if (next && money >= next.price && spare > 0) {
           money -= next.price;
           person.car = (person.car ?? 0) + 1;
           // A scooter is no news; a car is.
@@ -982,6 +1021,7 @@ export class BuildingSystem {
     this.carCounts.fill(0);
     this.licence = 0;
     this.fuelTax = 0;
+    this.parkingFees = 0;
     const routes = new Map(this.commutes.map(route => [route.homeId * MAP_SIZE ** 2 + route.workId, route]));
     for (const [id, building] of this.buildings) {
       if (this.map.at(id) !== 'residential') continue;
@@ -993,6 +1033,7 @@ export class BuildingSystem {
         // The city's share of the fuel bought at its own stations, as a month's figure.
         const fuel = this.fuelFor(id, route.path.length);
         if (fuel.local) this.fuelTax += fuel.cost * prices.fuel.tax * calendar.daysPerMonth;
+        this.parkingFees += this.keepCost(id, person.car!, route.path.length).toCity * calendar.daysPerMonth;
       }
     }
   }
@@ -1077,6 +1118,8 @@ export class BuildingSystem {
         forest: this.wild[home] === 1, gas: this.covered.gas[home] === 1,
         fuelDear: fuelPrice(this.clock) >= prices.fuel.dear,
         late: trip?.jam === true && !rides,
+        carDear: (person.car ?? 0) >= 2 && zone !== undefined &&
+          this.keepCost(home, person.car!, trip?.route.path.length ?? 0).cost > 0.2 * this.payAt(person.job, who.trait === 'rich', home),
         raise: zone !== undefined && ['busy', 'good'].includes(this.tradeOf(person.job) ?? '') };
     };
   }
@@ -2322,9 +2365,10 @@ export class BuildingSystem {
     const loans = this.loans.length * economy.loan.payment;
     const { visitors, licence } = this;
     const fuel = Math.round(this.fuelTax);
+    const parking = Math.round(this.parkingFees);
     upkeep = Math.round(upkeep);
-    return { tax, fares, trade, visitors, licence, fuel, loans, upkeep,
-      net: tax + fares + trade + visitors + licence + fuel - upkeep - loans };
+    return { tax, fares, trade, visitors, licence, fuel, parking, loans, upkeep,
+      net: tax + fares + trade + visitors + licence + fuel + parking - upkeep - loans };
   }
 
   /** How many buildings stand at each level, 1 to 4. */

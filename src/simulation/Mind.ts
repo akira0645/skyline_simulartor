@@ -27,7 +27,7 @@ export const thoughts = {
   'no-clinic': -8, 'no-hospital': -8, 'no-shops': -8, 'want-other-job': -8, 'slump-worry': -8,
   'tax-high': -8, jam: -6, 'no-school': -6, 'nothing-near': -6, 'no-highschool': -5, 'want-ride': -5,
   strangers: -4, 'want-car': -3, online: -2,
-  'kids-nowhere': -4, 'casino-near': -3, scared: -10, 'good-pay': 6, 'forest-near': 6, late: -5, 'no-gas': -3, 'fuel-dear': -4,
+  'kids-nowhere': -4, 'casino-near': -3, scared: -10, 'good-pay': 6, 'forest-near': 6, late: -5, 'no-gas': -3, 'fuel-dear': -4, 'car-dear': -3,
   'temple-near': 4, 'proud-car': 4, 'fun-near': 4, 'kids-happy': 4, handy: 5, 'close-knit': 6,
   'new-here': 2, 'love-car': 3, 'garden-proud': 4, neighbours: 4, 'tax-low': 5, 'ride-glad': 5,
   'old-timer': 5, 'nice-home': 5, 'near-commute': 6, 'boom-glad': 6, 'water-near': 6, 'park-near': 8,
@@ -101,6 +101,8 @@ export interface Facts {
   late: boolean;
   gas: boolean;
   fuelDear: boolean;
+  /** Keeping the vehicle takes a good part of what is left of the pay. */
+  carDear: boolean;
   /** Somewhere to go for fun within a walk, a casino in whose reach the home lies, a school within a walk. */
   fun: boolean;
   casino: boolean;
@@ -137,6 +139,7 @@ export function thoughtsOf(facts: Facts): Thought[] {
     if (facts.jam && (facts.way === 'drive' || facts.way === 'scooter')) list.push('jam');
     if (facts.way === 'bike') list.push('want-car');
     if (facts.late) list.push('late');
+    if (facts.carDear) list.push('car-dear');
     if (facts.car && facts.town && !facts.gas) list.push('no-gas');
     if (facts.car && facts.fuelDear && (facts.way === 'drive' || facts.way === 'scooter')) list.push('fuel-dear');
     if (facts.content === false) list.push('want-other-job');

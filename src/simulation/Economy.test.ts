@@ -63,7 +63,7 @@ it('settles tax and upkeep once a month and keeps the balance in the save', () =
   // With no factory, everything the four of them need is bought in.
   const trade = -4 * goods.perResident * goods.importCost;
   const upkeep = 3 * economy.upkeep.road + economy.upkeep.avenue + economy.upkeep.power + economy.upkeep.water;
-  expect(budget).toEqual({ tax, fares: 0, trade, visitors: 0, licence: 0, fuel: 0, loans: 0, upkeep, net: tax + trade - upkeep });
+  expect(budget).toEqual({ tax, fares: 0, trade, visitors: 0, licence: 0, fuel: 0, parking: 0, loans: 0, upkeep, net: tax + trade - upkeep });
   expect(budget.net).toBeLessThan(0);
 
   // A thirtieth of the month's figure is paid each day, at the day's last tick.

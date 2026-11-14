@@ -128,7 +128,8 @@ export class TileRenderer {
   draw(city: BuildingSystem, camera: Camera, width: number, height: number, preview: Cell[],
     selected?: Cell, layer: Overlay = 'none',
     range?: { centre: Cell; radius: number; kind: Facility | Service | 'bus' | 'metro' }, hour?: number,
-    lines: readonly Line[] = [], marks: readonly Cell[] = [], rush: readonly number[] = []) {
+    lines: readonly Line[] = [], marks: readonly Cell[] = [], rush: readonly number[] = [],
+    aim?: { cells: readonly Cell[]; ok: boolean }) {
     const map = city.map;
     const start = camera.cellAt(0, 0);
     const end = camera.cellAt(width, height);
@@ -511,6 +512,16 @@ export class TileRenderer {
       if (map.get({ x, y }) === undefined) continue;
       overlay.rect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE)
         .fill({ color: 0xffffff, alpha: 0.35 });
+    }
+    // Where the tool in hand would build if the button went down now: green where it can, red where it cannot.
+    if (aim) {
+      const colour = aim.ok ? 0x7ee08a : 0xff6b6b;
+      for (const { x, y } of aim.cells) {
+        if (map.get({ x, y }) === undefined) continue;
+        overlay.rect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE).fill({ color: colour, alpha: 0.28 });
+        overlay.rect(x * TILE_SIZE + 1, y * TILE_SIZE + 1, TILE_SIZE - 2, TILE_SIZE - 2).stroke({ color: 0x25232b, width: 4 });
+        overlay.rect(x * TILE_SIZE + 1, y * TILE_SIZE + 1, TILE_SIZE - 2, TILE_SIZE - 2).stroke({ color: colour, width: 2 });
+      }
     }
     // What the panel is pointing out: a yellow frame with a dark edge so it shows on anything.
     for (const { x, y } of marks) {

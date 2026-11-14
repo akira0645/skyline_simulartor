@@ -24,6 +24,15 @@ export const prices = {
    * money. A small town's prices stay as they are.
    */
   level: { boom: 0.08, normal: 0.03, slump: -0.02 } satisfies Record<Mood, number>,
+  /**
+   * Keeping a vehicle. Besides fuel, its owner pays the licence (see Wealth.ts) and, for a car,
+   * a parking space by the month: `parking` by vehicle, in the order of Wealth's `vehicles`.
+   * A car kept at the kerb of a small house parks free. One kept in a car park within
+   * `lotReach` tiles of home pays the city; one kept under a big building pays the building.
+   * Whoever cannot pay for the vehicle they have sells it for `resale` of its price and goes
+   * down to the next one, and nobody buys one they could not afford to keep.
+   */
+  keep: { parking: [0, 0, 30, 60, 120], lotReach: 2, resale: 0.3 },
   /** Someone held up in traffic on the way to work is late, and is docked this share of the day's pay. */
   late: { dock: 0.1 },
 };

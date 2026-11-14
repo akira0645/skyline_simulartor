@@ -1,8 +1,15 @@
 import { isRoad, MAP_SIZE, type Cell, type TileMap } from './TileMap';
 
-const size = MAP_SIZE ** 2;
+const tiles = MAP_SIZE ** 2;
+/**
+ * A node is a road tile, or the elevated road over a tile: that one's number is the tile's
+ * plus `ELEVATED`. An elevated road joins only other elevated road, except at its ends, which
+ * come down to the roads beside them. So it crosses a road under it without meeting it.
+ */
+export const ELEVATED = tiles;
+const size = 2 * tiles;
 const indexOf = ({ x, y }: Cell) => y * MAP_SIZE + x;
-const cellAt = (id: number): Cell => ({ x: id % MAP_SIZE, y: Math.floor(id / MAP_SIZE) });
+const cellAt = (node: number): Cell => ({ x: node % tiles % MAP_SIZE, y: Math.floor(node % tiles / MAP_SIZE) });
 const directions = [[0, -1], [1, 0], [0, 1], [-1, 0]];
 
 export class RoadGraph {
@@ -69,6 +76,8 @@ export class RoadGraph {
    * Visits road tiles outward from `from`, cheapest first, where a route costs the sum of
    * `cost` over every tile on it, both ends included. Tiles that cost more than `limit` to
    * reach are skipped. `visit` returns true to stop. Equal costs are visited in tile order.
+   * `cost` is asked about every node, elevated ones included; `visit` sees road tiles only,
+   * since nothing stands beside an elevated road.
    * `from` is one cell, or the indices of several road tiles to spread out from at once.
    */
   explore(from: Cell | readonly number[], cost: (id: number) => number, limit: number,
@@ -132,7 +141,7 @@ export class RoadGraph {
       pop();
       if (settled[id] === search) continue;
       settled[id] = search;
-      if (visit(id, value)) return;
+      if (id < ELEVATED && visit(id, value)) return;
       for (const next of this.edges.get(id)!) {
         if (settled[next] === search) continue;
         const total = value + cost(next);
@@ -157,7 +166,7 @@ export class RoadGraph {
     this.edges.clear();
     this.components.fill(-1);
 
-    for (let id = 0; id < size; id++) {
+    for (let id = 0; id < tiles; id++) {
       const cell = cellAt(id);
       if (!isRoad(this.map.get(cell))) continue;
       const adjacent: number[] = [];
@@ -166,6 +175,20 @@ export class RoadGraph {
         if (isRoad(this.map.get(neighbor))) adjacent.push(indexOf(neighbor));
       }
       this.edges.set(id, adjacent);
+    }
+    for (const id of this.map.spanTiles()) {
+      const cell = cellAt(id);
+      const around = directions.map(([dx, dy]) => ({ x: cell.x + dx, y: cell.y + dy }));
+      const adjacent = around.filter(neighbor => this.map.hasSpan(neighbor)).map(neighbor => indexOf(neighbor) + ELEVATED);
+      // An end of the elevated road: a ramp down to each road beside it.
+      if (adjacent.length <= 1) {
+        for (const neighbor of around) {
+          if (!isRoad(this.map.get(neighbor)) || this.map.hasSpan(neighbor)) continue;
+          adjacent.push(indexOf(neighbor));
+          this.edges.get(indexOf(neighbor))!.push(id + ELEVATED);
+        }
+      }
+      this.edges.set(id + ELEVATED, adjacent);
     }
 
     for (const start of this.edges.keys()) {

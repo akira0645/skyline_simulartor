@@ -294,7 +294,7 @@ export class TileRenderer {
             g.rect(left, top + 1, TILE_SIZE, 1).fill(0x25232b);
             for (let at = 2; at < TILE_SIZE; at += 6) g.rect(left + at, top + 2, 3, 4).fill(0xe5484d).rect(left + at + 1, top + 6, 1, 1).fill(0xf2c94c);
           }
-        } else {
+        } else if (tile !== 'viaduct') {
           cityAt(zoneIndex[tile], LOT_ROW, x, y);
           const building = city.getBuilding({ x, y });
           if (building?.block !== undefined) {
@@ -366,6 +366,36 @@ export class TileRenderer {
           if (tile !== 'grass' && tile !== 'park' && tile !== 'farm') continue;
           g.rect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE)
             .fill(season === 'winter' ? { color: 0xf4f8ff, alpha: 0.5 } : { color: 0xd98838, alpha: 0.16 });
+        }
+      }
+    }
+    // Elevated roads, over everything else: a deck on pillars with a shadow under it.
+    for (let y = Math.max(0, start.y); y <= Math.min(MAP_SIZE - 1, end.y); y++) {
+      for (let x = Math.max(0, start.x); x <= Math.min(MAP_SIZE - 1, end.x); x++) {
+        if (!map.hasSpan({ x, y })) continue;
+        const left = x * TILE_SIZE;
+        const top = y * TILE_SIZE;
+        const sides = roadSides.map(([dx, dy]) => map.hasSpan({ x: x + dx, y: y + dy }));
+        const upright = (sides[0] || sides[2]) && !(sides[1] || sides[3]);
+        const bend = (sides[0] || sides[2]) && (sides[1] || sides[3]);
+        const decks = bend ? [true, false] : [upright];
+        for (const tall of decks) {
+          const [dx, dy, wide, high] = tall ? [6, 0, 20, TILE_SIZE] : [0, 6, TILE_SIZE, 20];
+          g.rect(left + dx + 3, top + dy + 3, wide, high).fill({ color: 0x101114, alpha: 0.3 });
+          g.rect(left + dx, top + dy, wide, high).fill(0x8d9199);
+          if (tall) {
+            g.rect(left + dx, top, 2, TILE_SIZE).rect(left + dx + wide - 2, top, 2, TILE_SIZE).fill(0xd6dbe6);
+            g.rect(left + 15, top + 4, 2, 8).rect(left + 15, top + 20, 2, 8).fill(0xf2c94c);
+          } else {
+            g.rect(left, top + dy, TILE_SIZE, 2).rect(left, top + dy + high - 2, TILE_SIZE, 2).fill(0xd6dbe6);
+            g.rect(left + 4, top + 15, 8, 2).rect(left + 20, top + 15, 8, 2).fill(0xf2c94c);
+          }
+        }
+        // An end comes down to the ground: a darker ramp across it.
+        if (sides.filter(Boolean).length <= 1) {
+          const at = sides.indexOf(true);
+          if (at === 0 || at === 2 || at < 0 && upright) g.rect(left + 6, top + (at === 0 ? 26 : 0), 20, 6).fill(0x6d7078);
+          else g.rect(left + (at === 3 ? 26 : 0), top + 6, 6, 20).fill(0x6d7078);
         }
       }
     }

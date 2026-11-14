@@ -19,7 +19,8 @@ import { isBig, isFacility, isService, TILES, type Service } from '../simulation
 import { services } from '../simulation/Services';
 import { SimulationClock, type SimulationSpeed } from '../simulation/SimulationClock';
 import { SimulationEngine } from '../simulation/SimulationEngine';
-import { AUTO_SLOT, readSave, writeSave } from '../storage/SaveManager';
+import { AUTO_SLOT, deleteSave, listSaves, readSave, SLOTS, writeSlot, type SaveNote } from '../storage/SaveManager';
+import type { DilemmaId } from '../simulation/Dilemmas';
 import { goals } from '../simulation/Goals';
 import { combos, COMBOS, taskList, type Combo, type TaskId } from '../simulation/Combos';
 import { challenges, festivals, POLICIES, seasons, visitorsToday, type ChallengeId, type FestivalId, type Policy,
@@ -34,7 +35,7 @@ const speeds = [0, 1, 2, 4] as const;
 
 /** The build tools, one group per tab of the toolbar. */
 const toolGroups: [string, [Tool, string][]][] = [
-  ['道路', [['road', '道路'], ['avenue', '大道']]],
+  ['道路', [['road', '道路'], ['avenue', '大道'], ['viaduct', '高架']]],
   ['交通', [['bus', '公車站'], ['metro', '捷運站']]],
   ['分區', [['residential', '住宅'], ['commercial', '商業'], ['industrial', '工業']]],
   ['水電', [['power', '電廠'], ['water', '水塔']]],
@@ -98,6 +99,7 @@ function toolTip(tool: Tool): string {
     case 'metro': return '蓋在道路或大道上。再到右邊「路線」連起來。';
     case 'line': return '照順序點站；再點一次拿掉。好了按「完成」。';
     case 'avenue': return '快一倍、能走三倍的車，可直接鋪在舊路上。';
+    case 'viaduct': return '拖曳蓋高架，可以跨過房子、河和別的路。只有兩端會接到旁邊的路。';
     case 'residential': return '拖曳劃住宅，要貼著路。離工廠遠一點。';
     case 'commercial': return '拖曳劃商業，要貼著路。';
     case 'industrial': return '拖曳劃工業，要貼著路。會污染附近。';
@@ -160,7 +162,7 @@ const tileNames: Record<Tile, string> = {
   fire: '消防局', police: '警察局', school: '小學', clinic: '診所',
   river: '河流', bridge: '橋', bus: '公車站', metro: '捷運站',
   market: '市場', highschool: '高中', hospital: '醫院', university: '大學', museum: '博物館', stadium: '體育場',
-  annex: '大建築', farm: '農田', library: '圖書館', pool: '游泳池', ktv: 'KTV', amusement: '遊樂園', temple: '廟', mall: '大型商場', casino: '賭場', cinema: '電影院', parking: '停車場',
+  annex: '大建築', viaduct: '高架道路', farm: '農田', library: '圖書館', pool: '游泳池', ktv: 'KTV', amusement: '遊樂園', temple: '廟', mall: '大型商場', casino: '賭場', cinema: '電影院', parking: '停車場',
 };
 
 /** What each kind of home is called, and who tends to live in it. */
@@ -397,6 +399,15 @@ const policyNames: Record<Policy, [string, string]> = {
   festive: ['節慶補助', '節日收入多五成。每月 $200。'],
 };
 const challengeNames: Record<ChallengeId, string> = { grow: '人口', riders: '搭車的人', top: '3 級建築' };
+/** Decisions that come up: the question, then what each answer does and the word on its button. */
+const dilemmaNames: Record<DilemmaId, [string, [string, string], [string, string]]> = {
+  investor: ['外地企業想投資', ['收下', '+$5,000，但 90 天內比較沒人想來'], ['婉拒', '扶植本地店家，60 天內更多人想來']],
+  film: ['劇組想來拍片', ['免費借', '+$2,000，城市出名，60 天內更多人想來'], ['收場地費', '+$4,000']],
+  volunteers: ['居民想辦掃街', ['市府出錢', '−$1,000，60 天內更多人想來'], ['發感謝狀', '−$300，小有幫助']],
+  donor: ['富商想捐款', ['收進市庫', '+$3,000'], ['請他辦活動', '90 天內更多人想來']],
+  fair: ['鄰鎮邀請合辦市集', ['出錢參加', '−$1,500，60 天內更多人想來'], ['只去觀摩', '拿補助 +$500']],
+  lottery: ['彩券行想進駐', ['全面開放', '+$3,500，但 60 天內比較沒人想來'], ['限量開放', '+$1,500']],
+};
 /** The three ready-made cities. */
 const demoList: [DemoSize, string, string, string[]][] = [
   ['small', '小鎮', '140 人', ['捷運', '電影院', '東岸待開發']],
@@ -471,6 +482,9 @@ export function App() {
   const knownTask = useRef(0);
   const knownCombos = useRef(0);
   const knownFeast = useRef(0);
+  const knownDilemma = useRef(0);
+  // The list of saves while it is open: what each slot holds.
+  const [saves, setSaves] = useState<Record<string, SaveNote | null>>();
   const knownChallenge = useRef(0);
   // The festival or policy whose explanation is shown.
   const [about, setAbout] = useState<FestivalId | Policy>();
@@ -499,21 +513,36 @@ export function App() {
     setTick(step(engine, clock, lastTime, tickMs));
   }
 
-  async function save() {
+  /** What the list of saves shows for the city as it is now. */
+  function note(): SaveNote {
+    const now = engine.city.getStats();
+    return { population: now.population, funds: now.funds, rank: now.rank, tick: engine.getSnapshot().tick, at: Date.now() };
+  }
+
+  async function openSaves() {
+    try {
+      setSaves(await listSaves());
+    } catch {
+      setMessage('讀不到存檔清單。');
+    }
+  }
+
+  async function save(slot: string) {
     updateClock();
     try {
-      await writeSave(engine.save());
-      setMessage('城市存好了。');
+      await writeSlot(engine.save(), slot, note());
+      setSaves(await listSaves());
+      setMessage('存好了。');
     } catch (error) {
       console.error('Save failed', error);
       setMessage('存不起來，請再試一次。');
     }
   }
 
-  async function load() {
+  async function load(slot: string) {
     let data: unknown;
     try {
-      data = await readSave();
+      data = await readSave(slot);
     } catch (error) {
       console.error('Load failed', error);
       setMessage('讀不到之前存的城市。');
@@ -540,7 +569,9 @@ export function App() {
     knownMood.current = engine.city.getStats().mood;
     rendererRef.current?.refresh?.();
     setDemo(false);
-    setMessage('回到上次存的城市。');
+    setSaves(undefined);
+    if (rendererRef.current) rendererRef.current.marks = [];
+    setMessage('讀好了。');
   }
 
   useEffect(() => {
@@ -596,7 +627,7 @@ export function App() {
       setMessage('回到上次離開的城市。');
     }).catch(() => undefined);
     // Every quarter of a minute, and when the page is put away.
-    const keep = () => void writeSave(engine.save(), AUTO_SLOT).catch(() => undefined);
+    const keep = () => void writeSlot(engine.save(), AUTO_SLOT, note()).catch(() => undefined);
     const timer = window.setInterval(keep, 15000);
     const onHide = () => { if (document.visibilityState === 'hidden') keep(); };
     document.addEventListener('visibilitychange', onHide);
@@ -685,6 +716,11 @@ export function App() {
         `今天是${festivalNames[feast.id][0]}，可惜城裡沒地方辦（${festivalNames[feast.id][1]}）。`);
     }
     knownFeast.current = Math.max(knownFeast.current, feast?.tick ?? 0);
+    const { dilemmaEnd } = engine.city.getNotices();
+    if (dilemmaEnd && dilemmaEnd.tick > knownDilemma.current && dilemmaEnd.answer < 0) {
+      setMessage(`「${dilemmaNames[dilemmaEnd.id][0]}」沒人回覆，對方走了。`);
+    }
+    knownDilemma.current = Math.max(knownDilemma.current, dilemmaEnd?.tick ?? 0);
     if (next.combosSeen.length > knownCombos.current) {
       setMessage(`湊出「${comboNames[next.combosSeen.find(combo => !seenCombos.current.includes(combo)) ?? next.combosSeen[0]][0]}」，記進手冊了。`);
     }
@@ -749,13 +785,14 @@ export function App() {
     knownEvent.current = engine.getSnapshot().tick;
     knownTask.current = engine.getSnapshot().tick;
     knownFeast.current = engine.getSnapshot().tick;
+    knownDilemma.current = engine.getSnapshot().tick;
     knownChallenge.current = engine.getSnapshot().tick;
     knownGoals.current = opening.goals.length;
     seenCombos.current = opening.combosSeen;
     knownCombos.current = opening.combosSeen.length;
     if (rendererRef.current) rendererRef.current.marks = [];
     knownMood.current = opening.mood;
-    void writeSave(engine.save(), AUTO_SLOT).catch(() => undefined);
+    void writeSlot(engine.save(), AUTO_SLOT, note()).catch(() => undefined);
     setStats(engine.city.getStats());
     rendererRef.current?.refresh?.();
     setMessage(done);
@@ -940,8 +977,7 @@ export function App() {
         <div className="menu" role="group" aria-label="城市">
           <button type="button" onClick={startNew}>新地圖</button>
           <button type="button" aria-pressed={choosing} onClick={() => setChoosing(!choosing)}>示範</button>
-          <button type="button" onClick={() => void save()}>儲存</button>
-          <button type="button" onClick={() => void load()}>讀取</button>
+          <button type="button" aria-pressed={saves !== undefined} onClick={() => saves ? setSaves(undefined) : void openSaves()}>存檔</button>
         </div>
       </header>
 
@@ -1156,6 +1192,8 @@ export function App() {
               <Tag label={festivalNames[stats.festival.id][0]} value={stats.festival.days ? `${stats.festival.days} 天後` : '今天'}
                 tone={stats.festival.ready ? 'good' : 'bad'} picked={about === stats.festival.id}
                 onPick={() => setAbout(stats.festival.id)} />
+              {stats.boost !== 0 && <Tag label="人氣" value={`${stats.boost > 0 ? '+' : ''}${stats.boost}`}
+                tone={stats.boost > 0 ? 'good' : 'bad'} tip="之前的決定，讓三種分區比較多或比較少人想來" />}
             </div>
             <h2 className="sub">政策</h2>
             <div className="tags">
@@ -1380,6 +1418,51 @@ export function App() {
         <button type="button" onClick={() => setChoosing(false)}>取消</button>
       </div>}
 
+      {stats.dilemma && <div className="hud card" role="dialog" aria-label="突發事件">
+        <h2>突發事件<small>剩 {Math.max(0, Math.ceil((stats.dilemma.until - tick) / 8))} 天</small></h2>
+        <p>{dilemmaNames[stats.dilemma.id][0]}</p>
+        {([0, 1] as const).map(answer => {
+          const [word, effect] = dilemmaNames[stats.dilemma!.id][answer + 1] as [string, string];
+          return <button key={answer} type="button" onClick={() => {
+            engine.city.decide(answer);
+            setStats(engine.city.getStats());
+            setMessage(`${word}：${effect}。`);
+          }}><b>{word}</b><span>{effect}</span></button>;
+        })}
+      </div>}
+
+      {saves && <div className="hud over files" role="dialog" aria-label="存檔">
+        <h2>存檔</h2>
+        <ul>
+          {[...SLOTS, AUTO_SLOT, 'manual'].map((slot, index) => {
+            const held = slot in saves;
+            const kept = saves[slot];
+            const own = index < SLOTS.length;
+            if (!own && !held) return null;
+            const day = kept && dateAt(kept.tick);
+            return <li key={slot} className={held ? undefined : 'empty'}>
+              <b>{own ? `第 ${index + 1} 格` : slot === AUTO_SLOT ? '自動' : '舊存檔'}</b>
+              {kept && day ? <span className="tags">
+                <Tag label={rankNames[kept.rank]} value={`${kept.population.toLocaleString('en-US')} 人`} />
+                <Tag label="資金" value={money(kept.funds)} />
+                <Tag label={`${day.year} 年 ${day.month} 月 ${day.day} 日`} />
+                <Tag label="存於" value={new Date(kept.at).toLocaleString('zh-TW', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })} tone="dim" />
+              </span> : <span className="tags"><Tag label={held ? '有存檔' : '空的'} tone="dim" /></span>}
+              <span className="row">
+                {own && <button type="button" onClick={() => {
+                  if (!held || window.confirm('要蓋掉這一格嗎？')) void save(slot);
+                }}>存</button>}
+                <button type="button" disabled={!held} onClick={() => void load(slot)}>讀</button>
+                {own && <button type="button" disabled={!held} onClick={() => {
+                  if (window.confirm('要刪掉這一格嗎？')) void deleteSave(slot).then(openSaves);
+                }}>刪</button>}
+              </span>
+            </li>;
+          })}
+        </ul>
+        <button type="button" onClick={() => setSaves(undefined)}>關閉</button>
+      </div>}
+
       {failed && <p className="hud toast" role="alert">地圖無法顯示。</p>}
 
       {stats.bankrupt && <div className="hud over" role="alertdialog" aria-label="破產">
@@ -1388,7 +1471,7 @@ export function App() {
         <div className="row">
           <button type="button" disabled={stats.loans.length >= economy.loan.max}
             onClick={() => changeLines(() => engine.city.borrow(), `借到 ${money(economy.loan.amount)}。`)}>借 {money(economy.loan.amount)}</button>
-          <button type="button" onClick={() => void load()}>讀取</button>
+          <button type="button" onClick={() => void openSaves()}>讀取存檔</button>
           <button type="button" onClick={startNew}>新地圖</button>
         </div>
       </div>}

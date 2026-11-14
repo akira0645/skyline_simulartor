@@ -374,3 +374,25 @@ button.tag[aria-pressed="true"] b { color: var(--ink); }
 .side .timed { border-color: var(--loss); }
 .side .timed > h2:first-child { background: #55302d; }
 .build .tabs button { width: 4.2rem; }
+
+/* --- A decision that has come up: a card on the left, out of the way of the map's middle */
+.card { top: 4.8rem; left: 0.6rem; width: 17rem; padding: 0 0.6rem 0.6rem; border-color: var(--sand); }
+.card h2 { display: flex; justify-content: space-between; margin: 0 -0.6rem 0.5rem; padding: 0.2rem 0.6rem; background: var(--sand); color: var(--ink); }
+.card h2 small { font-weight: normal; }
+.card p { margin: 0 0 0.5rem; }
+.card button { display: grid; gap: 0.1rem; width: 100%; margin-top: 0.3rem; padding: 0.3rem 0.5rem; text-align: left; background: var(--ink); }
+.card button b { font-weight: normal; color: var(--sand); }
+.card button span { font-size: 0.85rem; color: var(--steel); }
+
+/* --- The list of saves */
+.over.files { border-color: var(--sand); width: min(40rem, calc(100% - 2rem)); }
+.files ul { margin: 0 0 0.7rem; padding: 0; list-style: none; }
+.files li { display: grid; grid-template-columns: 4rem 1fr auto; align-items: center; gap: 0.5rem; padding: 0.35rem 0.4rem;
+  border-bottom: 1px solid var(--asphalt); }
+.files li.empty b { color: var(--steel); }
+.files li b { font-weight: normal; color: var(--sand); }
+.files .row { display: flex; gap: 0.25rem; }
+.files .row button { padding: 0.1rem 0.5rem; }
+[data-tool="viaduct"] i { background: linear-gradient(#0000 0 8px, #d6dbe6 8px 10px, #8d9199 10px 22px, #d6dbe6 22px 24px, #0000 24px), var(--grass); }
+[data-tool="viaduct"] i::after { content: ""; position: absolute; left: 6px; right: 6px; top: 15px; height: 2px;
+  background: repeating-linear-gradient(90deg, #f2c94c 0 6px, #0000 6px 10px); }

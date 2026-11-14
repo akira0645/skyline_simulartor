@@ -8,6 +8,7 @@ import type { Zone } from './TileMap';
 import { HOME_KINDS, type HomeKind } from './Residents';
 import { vehicles } from './Wealth';
 import { challenges, type Challenge } from './Seasons';
+import { dilemmas, type Boost, type Dilemma } from './Dilemmas';
 
 /**
  * 4 added funds, the milestone rank and avenue tiles; 3 added power and water facility tiles;
@@ -68,6 +69,8 @@ export interface SaveData {
   lines: SavedLine[];
   /** The road tiles with a metro station under them. */
   metros: number[];
+  /** The tiles an elevated road passes over. Saves from before there were any have none. */
+  spans: number[];
   /** The ids of the goals already rewarded. */
   goals: string[];
   /** Months left to pay on each loan. */
@@ -79,6 +82,9 @@ export interface SaveData {
   /** The policies that are on, and the challenge under way if there is one. */
   policies: string[];
   challenge?: Challenge;
+  /** The decision waiting for an answer, and what the last answers still do to demand. */
+  dilemma?: Dilemma;
+  boosts: Boost[];
 }
 
 const zonedCode = (code: number) => isZone(TILES[code]);
@@ -109,6 +115,23 @@ function parseLines(lines: unknown, tiles: Uint8Array, metros: ReadonlySet<numbe
     ids.add(id);
     return { id, kind, stops: [...stops] as number[], vehicles };
   });
+}
+
+function parseSpans(value: unknown): number[] {
+  if (value === undefined) return [];
+  if (!Array.isArray(value) || !value.every(id => isCount(id) && id < MAP_SIZE ** 2)) throw new Error('存檔資料損壞。');
+  return [...new Set(value as number[])].sort((a, b) => a - b);
+}
+
+function parseDilemma({ dilemma, boosts }: Record<string, unknown>): { dilemma?: Dilemma; boosts: Boost[] } {
+  const list = boosts === undefined ? [] : boosts;
+  if (!Array.isArray(list) || list.length > 16 ||
+      !list.every(boost => Number.isFinite(boost?.amount) && isCount(boost?.until))) throw new Error('存檔資料損壞。');
+  const kept = list.map(({ amount, until }) => ({ amount, until }));
+  if (dilemma === undefined) return { boosts: kept };
+  const { id, until } = (dilemma ?? {}) as Record<string, unknown>;
+  if (!dilemmas.list.some(entry => entry.id === id) || !isCount(until)) throw new Error('存檔資料損壞。');
+  return { dilemma: { id: id as Dilemma['id'], until }, boosts: kept };
 }
 
 function parseChallenge(value: unknown): { challenge?: Challenge } {
@@ -220,11 +243,13 @@ export function parseSave(data: unknown): SaveData {
   }
   return { schemaVersion: SCHEMA_VERSION, seed: seed as number, tick, tiles: layout, zones, buildings: records,
     funds: funds as number, rank, taxRate, metros: [...metros].sort((a, b) => a - b),
+    spans: parseSpans((data as Record<string, unknown>).spans),
     lines: parseLines((data as Record<string, unknown>).lines, tiles, metros),
     goals: parseList((data as Record<string, unknown>).goals, value => typeof value === 'string') as string[],
     loans: parseList((data as Record<string, unknown>).loans, isCount) as number[],
     tasks: parseList((data as Record<string, unknown>).tasks, value => typeof value === 'string') as string[],
     combos: parseList((data as Record<string, unknown>).combos, value => typeof value === 'string') as string[],
     policies: parseList((data as Record<string, unknown>).policies, value => typeof value === 'string') as string[],
-    ...parseChallenge((data as Record<string, unknown>).challenge) };
+    ...parseChallenge((data as Record<string, unknown>).challenge),
+    ...parseDilemma(data as Record<string, unknown>) };
 }

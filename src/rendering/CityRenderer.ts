@@ -18,6 +18,7 @@ import { DETAIL_ZOOM, TileRenderer } from './TileRenderer';
 import { commuterPosition } from './commuterPosition';
 import { shiftIndex, workShift } from '../simulation/WorkShift';
 import { weekendAt } from '../simulation/calendar';
+import { seasonAt } from '../simulation/Seasons';
 import { utilities } from '../simulation/Utilities';
 import { mind, SHOP_SHIFT } from '../simulation/Mind';
 
@@ -405,6 +406,108 @@ export class CityRenderer {
         if (age > sceneLength(scene) || this.city.now < scene.event.tick) scenes.delete(key);
         else drawScene(effects, scene, age);
       }
+      drawLife();
+    };
+
+    /**
+     * The small movements of a living city, in the part of the map in view: smoke from the
+     * works, light on the water, lamps on the rides, snow in winter and fireworks on the night
+     * of a festival. All of it is for show.
+     */
+    const drawLife = () => {
+      const map = this.city.map;
+      const left = Math.max(0, Math.floor(-camera.x / camera.scale / TILE_SIZE));
+      const top = Math.max(0, Math.floor(-camera.y / camera.scale / TILE_SIZE));
+      const right = Math.min(MAP_SIZE - 1, left + Math.ceil(app.screen.width / camera.scale / TILE_SIZE) + 1);
+      const bottom = Math.min(MAP_SIZE - 1, top + Math.ceil(app.screen.height / camera.scale / TILE_SIZE) + 1);
+      // Far out there is too much on screen for any of it to read, and too much to draw.
+      if (camera.scale < 0.6) return;
+      const time = animationTime;
+      const hour = this.hour();
+      const night = hour >= 19 || hour < 5;
+      for (let y = top; y <= bottom; y++) {
+        for (let x = left; x <= right; x++) {
+          const tile = map.get({ x, y });
+          const seed = (Math.imul(x, 73856093) ^ Math.imul(y, 19349663)) >>> 0;
+          const px = x * TILE_SIZE;
+          const py = y * TILE_SIZE;
+          if (tile === 'river') {
+            // A glint that comes and goes on some of the water.
+            if (seed % 2 === 0 && Math.floor(time / 500 + seed % 7) % 3 === 0) {
+              effects.rect(px + 4 + seed % 20, py + 6 + (seed >>> 5) % 18, 4, 1).fill({ color: 0xdff3fb, alpha: 0.9 });
+            }
+          } else if (tile === 'industrial' || tile === 'power') {
+            if (tile === 'industrial' && !this.city.getBuilding({ x, y })?.occupants) continue;
+            // Three puffs rising from the chimney, each fading as it climbs and drifts.
+            for (let puff = 0; puff < 3; puff++) {
+              const rise = ((time / 2200 + puff / 3 + seed % 10 / 10) % 1);
+              const size = 4 + Math.floor(rise * 6);
+              effects.rect(px + 20 + Math.round(rise * 6) - size / 2, py + 6 - Math.round(rise * 22), size, size)
+                .fill({ color: tile === 'power' ? 0xeef1f6 : 0xb9bcc2, alpha: 0.9 * (1 - rise) });
+            }
+          } else if (tile === 'park') {
+            if (!this.city.parkAt({ x, y }).fountain) continue;
+            // The fountain's jet, higher and lower by turns.
+            const jet = 3 + Math.floor(time / 180) % 4;
+            effects.rect(px + 15, py + 14 - jet, 2, jet).fill(0xdff3fb);
+            effects.rect(px + 13, py + 15 - jet, 1, 2).rect(px + 18, py + 15 - jet, 1, 2).fill({ color: 0xdff3fb, alpha: 0.8 });
+          } else if (tile === 'amusement') {
+            // The wheel's cars light up one after another, round and round.
+            const cars = [[16, 4], [26, 10], [28, 16], [22, 26], [10, 26], [4, 16], [6, 10]];
+            const lit = Math.floor(time / 220) % cars.length;
+            cars.forEach(([dx, dy], index) => {
+              if (index === lit || index === (lit + 3) % cars.length) effects.rect(px + dx, py + dy, 4, 4).fill(0xfff4c2);
+            });
+          } else if (tile === 'casino' || tile === 'ktv' || tile === 'cinema') {
+            // Signs that blink, brighter after dark.
+            if (Math.floor(time / 400 + seed) % 2) {
+              const wide = tile === 'casino' ? 2 * TILE_SIZE - 16 : TILE_SIZE - 8;
+              effects.rect(px + (tile === 'casino' ? 8 : 4), py + (tile === 'casino' ? 40 : 12), wide, 2)
+                .fill({ color: 0xfff4c2, alpha: night ? 0.95 : 0.5 });
+            }
+          } else if (tile === 'temple' && this.city.comboAt({ x, y }) === 'fair' && night) {
+            // The lanterns of the temple fair glow at night.
+            for (let at = 2; at < TILE_SIZE; at += 6) {
+              effects.rect(px + at - 1, py + 1, 5, 6).fill({ color: 0xffb84d, alpha: 0.35 + 0.2 * Math.sin(time / 300 + at) });
+            }
+          }
+        }
+      }
+      // Snow drifting down over the whole view in winter.
+      if (seasonAt(this.city.now) === 'winter') {
+        const width = (right - left + 1) * TILE_SIZE;
+        const height = (bottom - top + 1) * TILE_SIZE;
+        for (let flake = 0; flake < 90; flake++) {
+          const fall = (time / (26 + flake % 9) + flake * 97) % height;
+          const sway = Math.sin(time / 700 + flake) * 6;
+          effects.rect(left * TILE_SIZE + (flake * 131 % width) + sway, top * TILE_SIZE + fall, 2, 2).fill({ color: 0xffffff, alpha: 0.85 });
+        }
+      }
+      // Fireworks over the view on the night of a festival that was held.
+      const feast = this.city.getFeasts().at(-1);
+      if (feast?.income && this.city.now - feast.tick < 8 && (hour >= 18 || hour < 2)) {
+        const colours = [0xff6b6b, 0xffe14d, 0x7fd0ff, 0xb48cff, 0x7ee08a];
+        for (let rocket = 0; rocket < 4; rocket++) {
+          const life = (time / 1600 + rocket / 4) % 1;
+          const round = Math.floor(time / 1600 + rocket / 4);
+          const pick = (Math.imul(round + 1, 2654435761) ^ Math.imul(rocket + 1, 40503)) >>> 0;
+          const cx = (left + 2 + pick % Math.max(1, right - left - 3)) * TILE_SIZE;
+          const cy = (top + 2 + (pick >>> 8) % Math.max(1, Math.floor((bottom - top) / 2))) * TILE_SIZE;
+          const colour = colours[pick % colours.length];
+          if (life < 0.25) {
+            // The rocket climbs.
+            effects.rect(cx, cy + (0.25 - life) * 240, 2, 6).fill(0xfff4c2);
+            continue;
+          }
+          const spread = (life - 0.25) / 0.75;
+          for (let spark = 0; spark < 16; spark++) {
+            const angle = spark * Math.PI / 8;
+            const reach = 8 + spread * 44;
+            effects.rect(cx + Math.cos(angle) * reach, cy + Math.sin(angle) * reach + spread * spread * 18, 3, 3)
+              .fill({ color: spark % 2 ? colour : 0xffffff, alpha: 1 - spread });
+          }
+        }
+      }
     };
     app.ticker.add(ticker => {
       const speed = this.speed();
@@ -533,7 +636,7 @@ export class CityRenderer {
         this.onLineClick?.(start);
       } else if (tool !== 'pan') {
         const cells = selection(tool, start, boundedCell(x, y));
-        const result = this.city.execute(isRoad(tool) ? { type: 'BUILD_ROAD', path: cells, road: tool } :
+        const result = this.city.execute(tool === 'viaduct' ? { type: 'BUILD_VIADUCT', path: cells } : isRoad(tool) ? { type: 'BUILD_ROAD', path: cells, road: tool } :
           tool === 'demolish' ? { type: 'DEMOLISH', ...start } :
           isFacility(tool) ? { type: 'BUILD_FACILITY', ...start, facility: tool } :
           isService(tool) ? { type: 'BUILD_SERVICE', ...start, service: tool } :

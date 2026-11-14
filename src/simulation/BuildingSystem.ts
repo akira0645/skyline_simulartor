@@ -5,6 +5,7 @@ import { challenges, disasters, festivals, nextFestival, policies, POLICIES, sea
   type Challenge, type FestivalId, type Policy, type Season } from './Seasons';
 import { cycle, economy, milestones, tileCost, type Mood } from './Economy';
 import { goals } from './Goals';
+import { dilemmas, type Answer, type Boost, type Dilemma } from './Dilemmas';
 import { comboIncome, combos, comboValue, COMBOS, taskList, tasks, type Combo, type TaskId } from './Combos';
 import { goods } from './Goods';
 import { jobs } from './Jobs';
@@ -12,7 +13,7 @@ import { COMPLEX_LEVEL, landValue, MAX_LEVEL } from './LandValue';
 import { childrenAt, homeSites, residentAt, traitOf, traits, TRAITS, type HomeKind, type Trait } from './Residents';
 import { doingAt, mind, moodOf, thoughtsOf, type Facts, type Thought, type Way } from './Mind';
 import { pollution } from './Pollution';
-import { RoadGraph } from './RoadGraph';
+import { ELEVATED, RoadGraph } from './RoadGraph';
 import type { SaveData, SavedBuilding, SavedPerson } from './SaveData';
 import { alsoServes, emergencies, expectations, scare, SCHOOLS, services, SERVICES } from './Services';
 import { footprint, isBig, isFacility, isRoad, isService, isZone, MAP_SIZE, type Cell, type Facility, type GameCommand,
@@ -107,6 +108,10 @@ export class BuildingSystem {
   private readonly tasksOn: TaskId[] = [];
   private readonly tasksRest = new Map<TaskId, number>();
   private taskDone?: { id: TaskId; tick: number };
+  /** The decision waiting for an answer and what past answers still do to demand (both saved), and how the last one went (not saved). */
+  private dilemma?: Dilemma;
+  private readonly boosts: Boost[] = [];
+  private dilemmaEnd?: { id: Dilemma['id']; answer: number; lost: number; tick: number };
   /** The policies that are on. Saved. */
   private readonly policiesOn = new Set<Policy>();
   /** The challenge under way (saved), and how the last one ended (not saved). */
@@ -488,6 +493,43 @@ export class BuildingSystem {
     return this.covered.university[home] ? 'university' : this.covered.highschool[home] ? 'highschool' : undefined;
   }
 
+  /**
+   * Answers the decision that is waiting: 0 for its first answer, 1 for its second. Money
+   * changes hands at once; what it does to demand lasts as long as the answer says.
+   */
+  decide(answer: 0 | 1): void {
+    if (!this.dilemma) return;
+    const { id } = this.dilemma;
+    const taken: Answer = dilemmas.list.find(entry => entry.id === id)!.answers[answer];
+    this.funds += taken.funds ?? 0;
+    if (taken.demand) {
+      this.boosts.push({ amount: taken.demand.amount, until: this.clock + taken.demand.days * calendar.ticksPerDay });
+    }
+    const lost = taken.risk && roll(this.seed, this.clock, 91) / 2 ** 32 < taken.risk.chance ? -taken.risk.funds : 0;
+    this.funds -= lost;
+    this.dilemmaEnd = { id, answer, lost, tick: this.clock };
+    this.dilemma = undefined;
+  }
+
+  /** Lets a decision nobody made pass, and now and then brings a new one. Once a day. */
+  private reviewDilemma(tick: number): void {
+    for (let index = this.boosts.length - 1; index >= 0; index--) {
+      if (this.boosts[index].until <= tick) this.boosts.splice(index, 1);
+    }
+    if (this.dilemma) {
+      if (tick >= this.dilemma.until) {
+        this.dilemmaEnd = { id: this.dilemma.id, answer: -1, lost: 0, tick };
+        this.dilemma = undefined;
+      }
+      return;
+    }
+    const day = Math.floor(tick / calendar.ticksPerDay);
+    if (day % dilemmas.every || this.residents < dilemmas.population ||
+        roll(this.seed, tick, 92) / 2 ** 32 >= dilemmas.chance) return;
+    const pick = dilemmas.list[roll(this.seed, tick, 93) % dilemmas.list.length];
+    this.dilemma = { id: pick.id as Dilemma['id'], until: tick + dilemmas.days * calendar.ticksPerDay };
+  }
+
   /** Turns a policy on or off. */
   setPolicy(policy: Policy, on: boolean): void {
     if (on) this.policiesOn.add(policy);
@@ -497,7 +539,7 @@ export class BuildingSystem {
 
   /** The last task done and how the last challenge ended, for telling the player. Not saved. */
   getNotices() {
-    return { taskDone: this.taskDone, challengeEnd: this.challengeEnd };
+    return { taskDone: this.taskDone, challengeEnd: this.challengeEnd, dilemmaEnd: this.dilemmaEnd };
   }
 
   /** The festivals held lately, newest last. Not saved. */
@@ -1054,7 +1096,14 @@ export class BuildingSystem {
   }
 
   /** Minutes to cross a road tile with the traffic now on it. */
-  private readonly minutesAt = (id: number) => tileMinutes(this.flows[id], this.map.at(id) as Road);
+  /** What kind of road a commuter is on at a tile of their route: an elevated road counts as an avenue. */
+  private readonly roadAt = (id: number): Road => {
+    const tile = this.map.at(id);
+    return isRoad(tile) ? tile : 'avenue';
+  };
+  /** Minutes to cross a node of the road graph: a road tile, or the elevated road over one. */
+  private readonly minutesAt = (node: number) => node >= ELEVATED ? tileMinutes(this.flows[node - ELEVATED], 'avenue') :
+    tileMinutes(this.flows[node], this.roadAt(node));
 
   /** Whether a home accepts another resident: room, nobody waiting for work, a bearable commute. */
   private takesNewcomers(id: number, building: SavedBuilding): boolean {
@@ -1220,7 +1269,7 @@ export class BuildingSystem {
       const id = indexOf(cell);
       const tile = this.map.get(cell);
       // A station going in or coming out leaves the road above it, and all else, as it was.
-      const stationOnly = command.type === 'BUILD_METRO' || (command.type === 'DEMOLISH' && isRoad(tile));
+      const stationOnly = result.layer === true || command.type === 'BUILD_METRO' || (command.type === 'DEMOLISH' && isRoad(tile));
       if (!stationOnly) this.removeBuilding(id);
       // A stop that is gone drops out of its lines.
       for (const line of this.lines) {
@@ -1394,6 +1443,7 @@ export class BuildingSystem {
 
     if (daily) this.reviewTasks(tick);
     if (daily) this.reviewChallenge(tick);
+    if (daily) this.reviewDilemma(tick);
     if (daily && this.goalsDone.size < goals.length) {
       const view = this.getStats();
       for (const goal of goals) {
@@ -1561,7 +1611,8 @@ export class BuildingSystem {
         if (trait === 'gardener') this.gardeners.set(id, (this.gardeners.get(id) ?? 0) + 1);
       }
     }
-    this.tileUpkeep = this.map.stationTiles().length * economy.upkeep.metro;
+    this.tileUpkeep = this.map.stationTiles().length * economy.upkeep.metro +
+      this.map.spanTiles().length * economy.upkeep.viaduct;
     this.tileCounts.clear();
     this.idleCount = 0;
     this.visitors = 0;
@@ -1622,7 +1673,7 @@ export class BuildingSystem {
           const from = this.roadAccess(before);
           const to = this.roadAccess(cell);
           leg = from && to ? this.roadGraph.shortestPath(from, to)?.path : undefined;
-          for (const tile of leg ?? []) legMinutes += tileMinutes(0, this.map.get(tile) as Road);
+          for (const tile of leg ?? []) legMinutes += tileMinutes(0, this.roadAt(indexOf(tile)));
         } else {
           leg = [];
           let { x, y } = before;
@@ -2071,7 +2122,7 @@ export class BuildingSystem {
       const flows = this.shiftFlows[commute.shift];
       for (const cell of commute.path) {
         const tile = indexOf(cell);
-        commute.minutes += tileMinutes(flows[tile], this.map.at(tile) as Road);
+        commute.minutes += tileMinutes(flows[tile], this.roadAt(tile));
       }
       // The average over those who drive and those who ride.
       if (commute.riders) {
@@ -2085,16 +2136,17 @@ export class BuildingSystem {
   }
 
   save(): Omit<SaveData, 'schemaVersion' | 'seed' | 'tick'> {
-    return { tiles: this.map.save(), metros: this.map.stationTiles(), zones: [...this.zones.keys()],
+    return { tiles: this.map.save(), metros: this.map.stationTiles(), spans: this.map.spanTiles(), zones: [...this.zones.keys()],
       buildings: [...this.buildings.values()].map(building => building.people ?
         { ...building, people: building.people.map(person => ({ ...person })) } : { ...building }),
       funds: this.funds, rank: this.rank, taxRate: this.taxRate,
       lines: this.lines.map(line => ({ ...line, stops: [...line.stops] })),
       goals: [...this.goalsDone], loans: [...this.loans], tasks: [...this.tasksOn],
-      combos: [...this.combosSeen], policies: [...this.policiesOn], challenge: this.challenge && { ...this.challenge } };
+      combos: [...this.combosSeen], policies: [...this.policiesOn], challenge: this.challenge && { ...this.challenge },
+      dilemma: this.dilemma && { ...this.dilemma }, boosts: this.boosts.map(boost => ({ ...boost })) };
   }
 
-  load({ tiles, zones, buildings, funds, rank, taxRate, tick, lines, goals: done, loans, seed, metros, tasks: saved, combos: known, policies: chosen, challenge }: SaveData): void {
+  load({ tiles, zones, buildings, funds, rank, taxRate, tick, lines, goals: done, loans, seed, metros, tasks: saved, combos: known, policies: chosen, challenge, spans, dilemma, boosts }: SaveData): void {
     this.seed = seed;
     this.goalsDone.clear();
     for (const goal of done) this.goalsDone.add(goal);
@@ -2108,6 +2160,9 @@ export class BuildingSystem {
     for (const policy of POLICIES) if (chosen.includes(policy)) this.policiesOn.add(policy);
     this.challenge = challenge && { ...challenge };
     this.challengeEnd = undefined;
+    this.dilemma = dilemma && { ...dilemma };
+    this.dilemmaEnd = undefined;
+    this.boosts.splice(0, this.boosts.length, ...boosts.map(boost => ({ ...boost })));
     this.feasts.length = 0;
     for (const combo of COMBOS) if (known.includes(combo)) this.combosSeen.add(combo);
     this.taskDone = undefined;
@@ -2117,7 +2172,7 @@ export class BuildingSystem {
     this.funds = funds;
     this.rank = rank;
     this.taxRate = taxRate;
-    this.map.load(tiles, metros);
+    this.map.load(tiles, metros, spans);
     this.zones.clear();
     this.buildings.clear();
     this.facilities.clear();
@@ -2168,7 +2223,8 @@ export class BuildingSystem {
     const { default: usual, above, below } = economy.taxRate;
     const mood = this.mood();
     const shift = (this.taxRate > usual ? (usual - this.taxRate) * above : (usual - this.taxRate) * below) +
-      (mood === 'boom' ? cycle.boom.demand : mood === 'slump' ? cycle.slump.demand : 0);
+      (mood === 'boom' ? cycle.boom.demand : mood === 'slump' ? cycle.slump.demand : 0) +
+      this.boosts.reduce((sum, boost) => boost.until > this.clock ? sum + boost.amount : sum, 0);
     const demand = zoneDemand(supply);
     for (const zone of zoneOrder) demand[zone] = Math.max(-100, Math.min(100, demand[zone] + shift));
     return demand;
@@ -2246,6 +2302,9 @@ export class BuildingSystem {
       festival: { ...nextFestival(this.clock), ready: this.venueOf(nextFestival(this.clock).id) > 0 },
       /** The challenge under way with where its figure stands. */
       challenge: this.challenge && { ...this.challenge, now: this.challengeFigure(this.challenge.id) },
+      /** The decision waiting for an answer, and what past answers add to demand just now. */
+      dilemma: this.dilemma && { ...this.dilemma },
+      boost: this.boosts.reduce((sum, boost) => boost.until > this.clock ? sum + boost.amount : sum, 0),
 
       loans: [...this.loans], bankrupt: this.funds < economy.bankrupt, mood: this.mood() };
   }

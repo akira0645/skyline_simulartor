@@ -14,17 +14,18 @@ export type Service = 'fire' | 'police' | 'school' | 'clinic' |
  * `annex` is the rest of a building that takes two tiles by two: the building's own tile is
  * its top left corner, and the three others are annexes.
  */
-export type Tile = 'grass' | Road | Zone | Facility | 'park' | Service | 'river' | 'bus' | 'metro' | 'annex' | 'farm';
+export type Tile = 'grass' | Road | Zone | Facility | 'park' | Service | 'river' | 'bus' | 'metro' | 'annex' | 'farm' | 'viaduct';
 /**
  * Save files store tiles as indices into this list, so only append to it. `metro` is no longer
  * a tile on the map: a metro station lies under a road tile, which stays a road. Old saves
  * that have the tile are turned into a road with a station under it when they are read.
+ * `viaduct` is not a tile on the map either: an elevated road passes over a tile, whatever it is.
  */
 export const TILES: readonly Tile[] =
   ['grass', 'road', 'residential', 'commercial', 'industrial', 'power', 'water', 'avenue', 'park',
     'fire', 'police', 'school', 'clinic', 'river', 'bridge', 'bus', 'metro',
     'annex', 'market', 'highschool', 'hospital', 'university', 'museum', 'stadium', 'temple',
-    'mall', 'casino', 'cinema', 'parking', 'farm', 'library', 'pool', 'ktv', 'amusement'];
+    'mall', 'casino', 'cinema', 'parking', 'farm', 'library', 'pool', 'ktv', 'amusement', 'viaduct'];
 export const isZone = (tile: Tile | undefined): tile is Zone =>
   tile === 'residential' || tile === 'commercial' || tile === 'industrial';
 export const isFacility = (tile: string | undefined): tile is Facility =>
@@ -53,6 +54,8 @@ export type GameCommand =
   | { type: 'BUILD_SERVICE'; x: number; y: number; service: Service }
   | { type: 'BUILD_BUS_STOP'; x: number; y: number }
   | { type: 'BUILD_METRO'; x: number; y: number }
+  /** Raises an elevated road over these tiles, whatever is on them. */
+  | { type: 'BUILD_VIADUCT'; path: Cell[] }
   | { type: 'DEMOLISH'; x: number; y: number };
 
 /** The part of a generated map, from the top left corner, that never gets water. */
@@ -68,6 +71,19 @@ export class TileMap {
   private readonly tiles: Tile[] = Array<Tile>(MAP_SIZE ** 2).fill('grass');
   /** The road tiles with a metro station under them. */
   private readonly stations = new Set<number>();
+
+  /** The tiles an elevated road passes over. */
+  private readonly spans = new Set<number>();
+
+  /** Whether an elevated road passes over a cell. */
+  hasSpan({ x, y }: Cell): boolean {
+    return x >= 0 && y >= 0 && x < MAP_SIZE && y < MAP_SIZE && this.spans.has(y * MAP_SIZE + x);
+  }
+
+  /** The tiles an elevated road passes over, in order. */
+  spanTiles(): number[] {
+    return [...this.spans].sort((a, b) => a - b);
+  }
 
   /** Whether there is a metro station under a cell. */
   hasStation({ x, y }: Cell): boolean {
@@ -168,7 +184,26 @@ export class TileMap {
    */
   execute(command: GameCommand,
     approve?: (changes: { cell: Cell; tile: Tile }[]) => string | undefined):
-    { changed: Cell[]; error?: string } {
+    { changed: Cell[]; error?: string; layer?: boolean } {
+    // An elevated road goes over whatever is there and leaves it as it is.
+    if (command.type === 'BUILD_VIADUCT') {
+      if (command.path.some(cell => this.get(cell) === undefined)) return { changed: [], error: '超出地圖範圍了。' };
+      const fresh = command.path.filter(cell => !this.hasSpan(cell));
+      const error = fresh.length ? approve?.(fresh.map(cell => ({ cell, tile: 'viaduct' as const }))) : undefined;
+      if (error) return { changed: [], error };
+      for (const { x, y } of fresh) this.spans.add(y * MAP_SIZE + x);
+      if (fresh.length) this.roadVersion++;
+      return { changed: fresh, layer: true };
+    }
+    // Pulling down under an elevated road takes the elevated road first and leaves the rest.
+    if (command.type === 'DEMOLISH' && this.hasSpan(command)) {
+      const cell = { x: command.x, y: command.y };
+      const error = approve?.([{ cell, tile: 'grass' }]);
+      if (error) return { changed: [], error };
+      this.spans.delete(cell.y * MAP_SIZE + cell.x);
+      this.roadVersion++;
+      return { changed: [cell], layer: true };
+    }
     // A metro station goes under a road and leaves the road as it is.
     if (command.type === 'BUILD_METRO') {
       const cell = { x: command.x, y: command.y };
@@ -181,7 +216,7 @@ export class TileMap {
       const error = approve?.([{ cell, tile: 'metro' }]);
       if (error) return { changed: [], error };
       this.stations.add(cell.y * MAP_SIZE + cell.x);
-      return { changed: [cell] };
+      return { changed: [cell], layer: true };
     }
     // Pulling down a road that has a station takes the station first and leaves the road.
     if (command.type === 'DEMOLISH' && this.hasStation(command)) {
@@ -189,7 +224,7 @@ export class TileMap {
       const error = approve?.([{ cell, tile: 'grass' }]);
       if (error) return { changed: [], error };
       this.stations.delete(cell.y * MAP_SIZE + cell.x);
-      return { changed: [cell] };
+      return { changed: [cell], layer: true };
     }
     const big = command.type === 'BUILD_SERVICE' && isBig(command.service);
     const cells = command.type === 'BUILD_ROAD' ? command.path :
@@ -258,8 +293,10 @@ export class TileMap {
     return Uint8Array.from(this.tiles, tile => TILES.indexOf(tile));
   }
 
-  load(codes: Uint8Array, stations: readonly number[] = []): void {
+  load(codes: Uint8Array, stations: readonly number[] = [], spans: readonly number[] = []): void {
     this.roadVersion++;
+    this.spans.clear();
+    for (const id of spans) this.spans.add(id);
     this.stations.clear();
     for (const id of stations) this.stations.add(id);
     codes.forEach((code, index) => { this.tiles[index] = TILES[code]; });

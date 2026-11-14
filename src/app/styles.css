@@ -398,3 +398,8 @@ button.tag[aria-pressed="true"] b { color: var(--ink); }
   background: repeating-linear-gradient(90deg, #f2c94c 0 6px, #0000 6px 10px); }
 [data-tool="gas"] i { background: linear-gradient(#0000 0 6px, #e5484d 6px 13px, #0000 13px), linear-gradient(90deg, #0000 0 5px, #d6dbe6 5px 7px, #0000 7px 24px, #d6dbe6 24px 26px, #0000 26px), #55575b;
   box-shadow: inset 0 0 0 2px #84878c; }
+
+/* Keep the map clear of the data panel on wide screens. */
+@media (min-width: 64rem) and (min-aspect-ratio: 16/9) {
+  .viewport { right: 22.7rem; }
+}

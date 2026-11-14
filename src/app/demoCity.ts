@@ -79,6 +79,13 @@ function river(city: City, size: DemoSize) {
   }
   // San Francisco: the bay along the whole south side, nine tiles across.
   if (size === 'large') for (const cell of block(0, MAP_SIZE - 1, 28, 36)) water.push(cell);
+  // California: an ocean frontage south of town, with a beach between the ocean and boulevard.
+  if (size === 'small') {
+    for (let x = 0; x < MAP_SIZE; x++) {
+      const shore = 15 + Math.round(1.5 * Math.sin(x / 6));
+      water.push(...block(x, x, shore, MAP_SIZE - 1));
+    }
+  }
   city.map.flood(water);
 }
 
@@ -149,6 +156,8 @@ export function demoCity(engine: SimulationEngine, size: DemoSize = 'small') {
     theme: size === 'small' ? 'california' : size === 'medium' ? 'newyork' : 'sf' });
   if (size === 'small') {
     oldTown(city, 32);
+    city.execute({ type: 'BUILD_ROAD', path: block(18, 18, 9, 11) });
+    city.execute({ type: 'BUILD_ROAD', path: block(2, 18, 11, 11), road: 'avenue' });
     // The far bank: a cross street and lots for homes and shops, and nothing else yet.
     city.execute({ type: 'BUILD_ROAD', path: block(28, 28, 2, 8) });
     city.execute({ type: 'SET_ZONE', tiles: [...block(26, 27, 4, 4), ...block(29, 32, 4, 4), ...block(29, 31, 3, 3)],

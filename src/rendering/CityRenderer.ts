@@ -356,8 +356,10 @@ export class CityRenderer {
             junctions.has(aheadY * MAP_SIZE + aheadX) && greenUpright(aheadX, aheadY) !== vertical;
           // Nobody waits behind another for ever: after a few seconds the car edges past, which
           // undoes any knot that cars from several ways have tied.
-          trip.held = blocked && !red ? (trip.held ?? 0) + elapsed : 0;
-          speed = red || (blocked && trip.held < 3500) ? 0 : 1 / VEHICLE_PACE[tier];
+          // The same goes for a light: one that has not let the car through in two full turns is
+          // taken to be stuck, whatever the reason, and the car goes.
+          trip.held = blocked || red ? (trip.held ?? 0) + elapsed : 0;
+          speed = trip.held > 0 && trip.held < (red ? 2 * LIGHT + 600 : 3500) ? 0 : 1 / VEHICLE_PACE[tier];
           drawCar(spot.x, spot.y, vertical, i, tier);
           seenAt(spot);
           if (inLane) moving.push({ x: tileX, y: tileY, hx, hy, index: i });

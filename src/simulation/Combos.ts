@@ -16,7 +16,16 @@ export const combos = {
   farmstead: { tiles: 6, times: 1.5, reach: 2 },
   /** Shops at the top level filling a square `side` tiles wide. */
   arcade: { side: 3, income: { perResident: 0.5, most: 1500 } },
-  /** A temple with a market and a park both within `reach`. */
+  /** A culture centre with a market and a park both within `reach`. */
+  arts: { reach: 6, income: { perResident: 0.15, most: 300 } },
+  coldchain: { reach: 6, capacity: 48, marketPerDay: 1, batchDays: 4, cratesPerYield: 2 },
+  nightmarket: { reach: 5, income: { perResident: 0.1, most: 160 } },
+  interchange: { reach: 4, income: { perResident: 0.08, most: 120 } },
+  familyquarter: { reach: 4, seats: 8, value: { reach: 1, amount: 2 } },
+  localbusiness: { reach: 4, value: { reach: 1, amount: 2 } },
+  workshop: { reach: 5, materials: 6, goodsPerMaterial: 1 },
+  bookquarter: { reach: 4, homes: 2, value: { reach: 2, amount: 3 } },
+  chinatown: { reach: 5, homes: 3, shops: 2, income: { perResident: 0.2, most: 450 } },
   fair: { reach: 3, income: { perResident: 0.4, most: 800 } },
   /** A market with `shops` shop buildings within `reach`. */
   foodstreet: { reach: 2, shops: 4, income: { perResident: 0.3, most: 600 } },
@@ -34,7 +43,7 @@ export const combos = {
   port: { income: { perResident: 0.6, most: 2000 } },
 };
 export const COMBOS = ['forest', 'riverpark', 'farmstead', 'arcade', 'fair', 'foodstreet', 'plaza', 'funcity',
-  'campus', 'medical', 'estate', 'port'] as const;
+  'campus', 'medical', 'estate', 'port', 'chinatown', 'bookquarter', 'arts', 'coldchain', 'nightmarket', 'interchange', 'familyquarter', 'localbusiness', 'workshop'] as const;
 export type Combo = (typeof COMBOS)[number];
 export const comboValue = (combo: Combo) => (combos[combo] as { value?: { reach: number; amount: number } }).value;
 export const comboIncome = (combo: Combo) => (combos[combo] as { income?: { perResident: number; most: number } }).income;
@@ -56,6 +65,8 @@ export const taskList = [
   { id: 'clinic', issue: 'no-clinic', from: 5, to: 0, reward: 1200 },
   { id: 'highschool', issue: 'no-highschool', from: 5, to: 0, reward: 2000 },
   { id: 'hospital', issue: 'no-hospital', from: 5, to: 0, reward: 4000 },
+  { id: 'parks', issue: 'no-park', from: 12, to: 5, reward: 1200 },
+  { id: 'transit-cover', issue: 'no-transit', from: 20, to: 8, reward: 2200 },
   { id: 'staff', issue: 'vacancies', from: 10, to: 3, reward: 1500 },
 ] as const;
 export type TaskId = (typeof taskList)[number]['id'];

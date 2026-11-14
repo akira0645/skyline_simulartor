@@ -24,7 +24,7 @@ const UNANSWERED = 7000;
 const travelTime = (scene: Scene) => (scene.route ? (scene.route.length - 1) * DASH : 0);
 
 export function sceneLength(scene: Scene): number {
-  return scene.route ? travelTime(scene) + ON_SCENE : UNANSWERED;
+  return scene.route ? travelTime(scene) * (scene.event.kind === 'crash-hospital' ? 2 : 1) + ON_SCENE : UNANSWERED;
 }
 
 const BODY: Record<string, number> = { fire: 0xd9423a, crime: 0x3f5f98, sick: 0xf4f6f8 };
@@ -33,7 +33,20 @@ const OUTLINE = 0x1b1d22;
 /** Draws one frame of a scene, `age` milliseconds after it began. */
 export function drawScene(g: Graphics, scene: Scene, age: number): void {
   const { event, route } = scene;
-  const trouble = event.kind.split('-')[0];
+  if (event.kind.startsWith('crash')) {
+    const left = event.cell.x * TILE_SIZE;
+    const top = event.cell.y * TILE_SIZE;
+    const ambulance = event.kind === 'crash-hospital';
+    if (!ambulance) drawMarker(g, left, top, age, event.kind !== 'crash-no-hospital');
+    if (route) {
+      const travel = travelTime(scene);
+      const progress = age <= travel ? age / DASH :
+        ambulance ? Math.max(0, (travel + ON_SCENE + travel - age) / DASH) : route.length - 1;
+      drawVehicle(g, route, Math.min(route.length - 1, progress), age, ambulance ? 'sick' : 'crime');
+    }
+    return;
+  }
+  const trouble = event.kind.startsWith('robbery') ? 'crime' : event.kind.split('-')[0];
   const left = event.cell.x * TILE_SIZE;
   const top = event.cell.y * TILE_SIZE;
   const arrival = travelTime(scene);

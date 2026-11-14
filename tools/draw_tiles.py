@@ -23,7 +23,7 @@ Buildings are transparent around their footprint and are drawn over their lot.
 Light comes from the top left; shadows fall to the bottom right.
 """
 from pathlib import Path
-from PIL import Image
+from PIL import Image, ImageDraw
 
 T = 16
 VARIANTS = 4
@@ -666,20 +666,24 @@ def cinema():
 
 
 def parking():
-    """A car park: bays marked on asphalt, a few cars and a blue P sign."""
+    """Six marked bays, a central aisle, and a raised entrance sign."""
     t = Tile()
-    t.rect(0, 0, 15, 15, KERB)
-    t.rect(1, 1, 14, 14, ASPHALT)
+    t.slab(0, 0, 15, 15, '#d2cbb9', '#9b9b91', '#5d655f')
+    t.rect(1, 1, 14, 14, '#484e54')
     for x in (5, 10):
-        t.rect(x, 1, x, 5, PAPER)
-        t.rect(x, 10, x, 14, PAPER)
-    for x, y, colour in ((1, 1, '#d87856'), (6, 1, '#5bb6ce'), (11, 10, '#e6c15a'), (1, 10, '#d6d9de')):
-        t.rect(x, y, x + 3, y + 4, '#232831')
-        t.rect(x + 1, y + 1, x + 2, y + 3, colour)
-        t.rect(x + 1, y + 2, x + 2, y + 2, '#a9d8de')
-    t.rect(11, 1, 14, 5, '#3f6fb0')        # sign
-    t.rect(12, 2, 12, 4, PAPER)
-    t.rect(13, 2, 13, 3, PAPER)
+        for y in (1, 10):
+            t.rect(x, y, x, y + 4, '#d0d2bc')
+    for x in (2, 7, 12):
+        t.rect(x, 1, x + 1, 1, '#e0be70')
+        t.rect(x, 14, x + 1, 14, '#e0be70')
+    t.rect(1, 7, 14, 8, '#555c60')
+    t.rect(4, 7, 7, 7, '#d3bb78')
+    t.rect(6, 6, 6, 8, '#d3bb78')
+    t.rect(8, 7, 10, 8, '#daddce')
+    t.rect(14, 7, 15, 8, '#a2a09a')
+    t.slab(0, 0, 3, 4, '#8cb8d9', '#365e9c', '#243f66')
+    t.rect(1, 1, 1, 3, '#faf1da')
+    t.rect(2, 1, 2, 2, '#faf1da')
     return t
 
 
@@ -773,7 +777,7 @@ def amusement():
 
 
 def mall():
-    """A shopping mall: a long glass front under a red sign, with its own car park."""
+    """A shopping mall: a glazed shopping arcade with a public entrance plaza."""
     t = Tile(size=2 * T)
     t.shadow(2, 2, 29, 22)
     t.slab(2, 2, 29, 9, '#e8ecef', '#cfd6dc', '#a3adb6')
@@ -794,13 +798,22 @@ def mall():
         t.window(x, 19, x + 2, 21)
     t.rect(13, 19, 18, 22, '#22344d')
     t.rect(15, 19, 16, 22, GLASS_LIGHT)
-    t.rect(2, 23, 29, 30, ASPHALT)         # car park
-    for x in range(4, 29, 5):
-        t.rect(x, 24, x, 29, PAPER)
-    for x, colour in ((5, '#5bb6ce'), (15, '#d87856'), (20, '#e6c15a')):
-        t.rect(x, 24, x + 3, 29, '#232831')
-        t.rect(x + 1, 25, x + 2, 28, colour)
-        t.rect(x + 1, 26, x + 2, 26, '#a9d8de')
+    t.slab(2, 23, 29, 30, '#d6cdb9', '#b5aa97', '#82786a')
+    for y in (25, 28):
+        t.rect(3, y, 28, y, '#c7bda8')
+    for x in (4, 24):
+        t.slab(x, 24, x + 3, 27, '#a6b980', '#55765a', '#3f5b4b')
+        t.rect(x + 1, 25, x + 2, 25, '#c08c78')
+    t.slab(11, 22, 20, 25, '#e1d4b6', '#b5a794', '#786e63')
+    t.rect(13, 27, 18, 27, '#eee0c5')
+    for x, colour in ((4, '#c7756d'), (23, '#cfaa68')):
+        t.rect(x, 16, x + 4, 19, '#253c4b')
+        t.rect(x + 1, 17, x + 3, 18, colour)
+    for x in (4, 8, 22, 26):
+        t.rect(x, 12, x, 14, '#bda893')
+    t.slab(6, 5, 11, 7, '#b7ccd0', '#83979f', '#50646b')
+    for x in (7, 10):
+        t.rect(x, 6, x, 6, '#394d59')
     return t
 
 
@@ -1387,9 +1400,147 @@ def restyle(sheet, style, F):
     return out
 
 
+def finish_lot(image, kind, level):
+    """Draw 32px features over the lit roof and facade of each building."""
+    draw = ImageDraw.Draw(image)
+    def rect(box, color):
+        draw.rectangle(box, fill=color)
+
+    if kind == 'food':
+        for x in (8, 16):
+            rect((x, 11, x + 5, 14), '#475b59')
+            rect((x, 11, x + 5, 11), '#cce1ce')
+        rect((19, 24, 26, 26), '#b99b60')
+    elif kind == 'metal':
+        for x in (9, 15):
+            rect((x, 16, x + 2, 20), '#303945')
+            rect((x, 16, x + 2, 17), '#d2a05d')
+    elif kind == 'warehouse':
+        for x in (7, 14, 21):
+            rect((x, 22, x + 4, 27), '#364552')
+            for y in (23, 25):
+                rect((x + 1, y, x + 3, y), '#879ca5')
+    elif kind == 'shop':
+        for x in range(6, 26, 4):
+            rect((x, 21, x + 3, 23), '#ecdbc1' if x % 8 == 6 else '#a65053')
+        rect((9, 18, 21, 19), '#e8bb7d')
+    elif kind == 'office':
+        rect((22, 7, 26, 10), '#344857')
+        rect((22, 7, 26, 7), '#adbfc3')
+        for x in (9, 15, 21):
+            rect((x, 24, x + 2, 25), '#d4bb80')
+    else:
+        rect((9, 27, 21, 28), '#c1ae91')
+        for x in (6, 23):
+            rect((x, 24, x + 3, 27), '#41694e')
+            rect((x, 24, x + 2, 24), '#81a663')
+        if level > 1:
+            rect((12, 21, 20, 22), '#bdab95')
+    return image
+
+
+# Three footprint heights per industrial use; each family keeps its own roof shape.
+INDUSTRY_ROWS = [
+    [workshop(), factory(), heavy_plant()],
+    [warehouse(), warehouse().recolour({'#7d95a8': '#688795'}), tanks()],
+    [warehouse(), warehouse().recolour({'#7d95a8': '#64788f'}), warehouse().recolour({'#7d95a8': '#536781'})],
+]
+
+def civic_front(bank):
+    image = Image.new('RGBA', (32, 32))
+    draw = ImageDraw.Draw(image)
+    rect = draw.rectangle
+    rect((2, 28, 30, 30), '#858477')
+    if bank:
+        rect((4, 6, 27, 28), '#343642')
+        rect((5, 6, 26, 12), '#577d96')
+        rect((9, 8, 22, 10), '#f0d479')
+        for x in (6, 20):
+            rect((x, 15, x + 5, 23), '#8dc3d4')
+            rect((x, 15, x + 5, 16), '#d5eff3')
+        rect((13, 17, 18, 27), '#101114')
+        rect((14, 18, 17, 23), '#547a89')
+        rect((15, 18, 15, 24), '#a9cbd1')
+        rect((6, 24, 11, 25), '#b3a485')
+        rect((20, 24, 25, 25), '#b3a485')
+        rect((8, 12, 23, 13), '#709eb0')
+        rect((12, 28, 19, 29), '#b1a991')
+    else:
+        rect((3, 12, 28, 26), '#d6cbb0')
+        draw.polygon([(2, 12), (16, 5), (30, 12)], fill='#b97a61')
+        rect((14, 15, 17, 26), '#343642')
+        for x in (6, 10, 21, 25):
+            rect((x, 15, x + 1, 25), '#f4e9d2')
+        rect((4, 26, 27, 27), '#b1aa99')
+        rect((15, 1, 15, 6), '#eeeeee')
+        rect((16, 1, 21, 3), '#b84042')
+        draw.line([(4, 11), (16, 6), (27, 11)], fill='#e1b092')
+        draw.ellipse((14, 8, 17, 11), fill='#f2ddba')
+        rect((16, 9, 16, 10), '#795f53')
+        rect((12, 28, 19, 29), '#ddd1b6')
+        for x in (3, 26):
+            rect((x, 26, x + 2, 28), '#5f7954')
+            rect((x, 26, x + 1, 26), '#9eb473')
+    return image
+
+
+
+def civic_details(kind):
+    t = Tile()
+    palettes = {
+        'culture': ('#bd979d', '#874b60', '#543246', '#e4c6ae'),
+        'coldstore': ('#b1c8ce', '#588090', '#344d60', '#dae1dd'),
+        'daycare': ('#e2ad72', '#b67249', '#724d49', '#f5d9a5'),
+        'recycling': ('#a1b58a', '#527752', '#334d41', '#cbd0b5'),
+        'workshop': ('#ae9175', '#795742', '#493d37', '#c3b3a0'),
+        'gas': ('#f19b83', '#bc433f', '#69363d', '#e8dad0'),
+    }
+    t.shadow(1, 4, 14, 14)
+    t.slab(1, 11, 14, 14, '#bbb9ab', '#96968c', '#646d65')
+    if kind == 'square':
+        for y in (5, 8, 11, 14):
+            t.slab(1, y, 14, y + 1, '#d1c7ac', '#a79d89', '#827d70')
+        t.slab(6, 6, 9, 9, '#d9d7ca', '#599aa5', '#697b7d')
+        t.rect(7, 7, 8, 7, '#c5ebea')
+        for x in (2, 12):
+            t.slab(x, 4, x + 1, 6, '#9cb574', '#507c58', '#405940')
+            t.rect(x, 11, x + 1, 11, '#785640')
+        return t
+    light, roof, edge, wall = palettes[kind]
+    t.slab(2, 6, 13, 12, wall, wall, edge)
+    t.slab(1, 3, 14, 7, light, roof, edge)
+    t.rect(3, 4, 12, 4, light)
+    if kind == 'culture':
+        t.slab(5, 2, 10, 4, '#b0dee1', '#608899', '#365363')
+        t.rect(7, 3, 7, 4, '#c3dedf')
+        t.slab(4, 8, 11, 12, '#c5e1e4', '#516f80', '#303c4b')
+        for x in (6, 9):
+            t.rect(x, 8, x, 12, '#d0b59d')
+        t.rect(2, 9, 3, 11, '#cf6f69')
+        t.rect(12, 9, 13, 11, '#d7ab68')
+        t.rect(5, 13, 10, 13, '#ddd6c3')
+    elif kind in ('coldstore', 'workshop'):
+        for x in (3, 9):
+            t.slab(x, 8, x + 3, 12, '#b3c2be', '#647478', '#3c474a')
+            for y in (9, 11):
+                t.rect(x + 1, y, x + 2, y, '#90a1a0')
+        t.rect(12, 12, 14, 13, '#bd9a60')
+        t.slab(10, 2, 12, 4, '#cad4d2', '#8c9e9f', edge)
+    elif kind == 'recycling':
+        for x, colour in ((3, '#5b926a'), (7, '#5b89a0'), (11, '#c49d50')):
+            t.slab(x, 10, x + 2, 13, '#ccd9b9', colour, '#46554c')
+        t.window(5, 8, 10, 9)
+    else:
+        t.window(3, 8, 5, 10)
+        t.window(10, 8, 12, 10)
+        t.rect(7, 10, 8, 12, edge)
+        for x in (3, 11):
+            t.rect(x, 12, x + 1, 13, '#629866' if kind == 'daycare' else '#d99a54')
+    return t
+
 if __name__ == '__main__':
     F = 2 * T
-    sheet = Image.new('RGBA', (16 * F, (len(ROWS) + 2 + len(HOME_ROWS)) * F), (0, 0, 0, 0))
+    sheet = Image.new('RGBA', (16 * F, (len(ROWS) + 2 + len(HOME_ROWS) + len(INDUSTRY_ROWS) + 1) * F), (0, 0, 0, 0))
     for row, tiles in enumerate(ROWS):
         for column, tile in enumerate(tiles):
             sheet.paste(fine(tile.image, ground=row < 2), (column * F, row * F))
@@ -1397,7 +1548,41 @@ if __name__ == '__main__':
         sheet.paste(fine(tile.image), (column * 2 * F, len(ROWS) * F))
     for row, tiles in enumerate(HOME_ROWS):
         for column, tile in enumerate(tiles):
-            sheet.paste(fine(tile.image), (column * F, (len(ROWS) + 2 + row) * F))
+            sheet.paste(finish_lot(fine(tile.image), 'home', row + 1),
+                        (column * F, (len(ROWS) + 2 + row) * F))
+    for row, tiles in enumerate(INDUSTRY_ROWS):
+        kind = ('metal', 'food', 'warehouse')[row]
+        for column, tile in enumerate(tiles):
+            sheet.paste(finish_lot(fine(tile.image), kind, column + 1),
+                        (column * F, (len(ROWS) + 2 + len(HOME_ROWS) + row) * F))
+    for column in range(len(ROWS[3])):
+        box = (column * F, 3 * F, (column + 1) * F, 4 * F)
+        kind = 'shop' if column in (0, 1, 3, 4, 7) else 'office'
+        sheet.paste(finish_lot(sheet.crop(box), kind, 1), box[:2])
+    civic_row = len(ROWS) + 2 + len(HOME_ROWS) + len(INDUSTRY_ROWS)
+    for column, bank in enumerate((False, True)):
+        sheet.paste(civic_front(bank), (column * F, civic_row * F))
+    for column, kind in enumerate(('culture', 'coldstore', 'square', 'daycare', 'recycling', 'workshop', 'gas'), 2):
+        sheet.paste(fine(civic_details(kind).image), (column * F, civic_row * F))
+    for column, tile in enumerate(('park', 'farm', 'viaduct'), 9):
+        icon = Tile()
+        icon.slab(1, 2, 14, 14, '#a1b979', '#718d55', '#455a42')
+        if tile == 'park':
+            icon.rect(2, 10, 13, 11, '#cbbf9d')
+            for x in (4, 10):
+                icon.slab(x, 4, x + 2, 8, '#a4bd68', '#5b8749', '#3f6246')
+                icon.rect(x + 1, 9, x + 1, 10, '#785b41')
+        elif tile == 'farm':
+            for y in (4, 7, 10, 13):
+                icon.rect(2, y, 13, y + 1, '#805e45')
+                for x in (3, 6, 9, 12):
+                    icon.rect(x, y, x, y, '#b8b66b')
+        else:
+            icon.slab(2, 5, 13, 9, '#d2d7d9', '#69717a', '#444850')
+            icon.rect(4, 10, 5, 13, '#818487')
+            icon.rect(10, 10, 11, 13, '#818487')
+            icon.rect(5, 7, 10, 7, '#e1c589')
+        sheet.paste(fine(icon.image), (column * F, civic_row * F))
     sheet.save(OUT)
     print(f'wrote {OUT}')
     for style in STYLES:

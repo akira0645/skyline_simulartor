@@ -13,7 +13,7 @@ import { shifts } from './WorkShift';
 
 export type Doing = 'sleeping' | 'getting-ready' | 'to-work' | 'working' | 'break' | 'to-home' |
   'job-hunting' | 'park' | 'shopping' | 'gardening' | 'helping' | 'dining' | 'home' | 'temple' | 'online' |
-  'outing' | 'family' | 'day-off';
+  'outing' | 'family' | 'day-off' | 'chinatown' | 'reading' | 'exhibition' | 'nightmarket' | 'daycare' | 'bank' | 'school' | 'highschool' | 'university' | 'clinic' | 'hospital' | 'referred' | 'cinema' | 'pool' | 'ktv' | 'amusement' | 'casino' | 'museum' | 'stadium';
 
 /**
  * How someone gets to work. A trip of fewer than `mind.driveFrom` road tiles is walked; a
@@ -84,6 +84,12 @@ export interface Facts {
   park: boolean;
   water: boolean;
   shops: boolean;
+  chinatown?: boolean;
+  bookquarter?: boolean;
+  arts?: boolean;
+  nightmarket?: boolean;
+  daycare?: number;
+  bank?: boolean;
   transit: boolean;
   /** A temple within a walk, how many kinds of place are, and how close-knit the home is (see Community.ts). */
   temple: boolean;
@@ -185,12 +191,15 @@ export function moodOf(list: readonly Thought[]): number {
 }
 
 /** What they do with a free evening: it follows who they are and what is near, and varies by the day. */
-function evening(facts: Facts, day: number): Doing {
+function evening(facts: Facts, day: number, hour: number): Doing {
   const choices: Doing[] = ['home'];
   if (facts.park) choices.push('park');
   if (facts.shops) choices.push('shopping');
   else if (facts.town) choices.push('online');
   if (facts.temple) choices.push('temple');
+  if (facts.nightmarket && hour >= 17 && hour < 23) choices.push('nightmarket');
+  if (facts.chinatown) choices.push('chinatown');
+  if (facts.bookquarter) choices.push('reading');
   if (facts.kids) choices.push('family');
   if (facts.trait === 'gardener') choices.push('gardening', 'gardening');
   if (facts.trait === 'helper') choices.push('helping', 'helping');
@@ -208,23 +217,32 @@ export function doingAt(facts: Facts, hour: number, day: number, weekend = false
   if (weekend && facts.shift !== undefined && facts.shift !== SHOP_SHIFT) {
     if (hour < 8 || hour >= 23) return 'sleeping';
     if (hour < 10) return 'day-off';
-    if (hour >= 18) return evening(facts, day);
+    if (hour >= 18) return evening(facts, day, hour);
     const choices: Doing[] = ['day-off'];
     if (facts.fun) choices.push('outing', 'outing');
     if (facts.park) choices.push('park');
     if (facts.shops) choices.push('shopping');
     if (facts.temple) choices.push('temple');
+    if (facts.chinatown) choices.push('chinatown');
+    if (facts.bookquarter) choices.push('reading');
+    if (facts.arts) choices.push('exhibition');
+    if (facts.bank && hour < 16) choices.push('bank');
     if (facts.kids) choices.push('family');
     return choices[(day + facts.slot) % choices.length];
   }
+  if (facts.daycare && facts.shift !== undefined && (hour >= 7 && hour < 8 || hour >= 17 && hour < 18)) {
+    const shift = shifts[facts.shift];
+    if (hour < shift.start || hour >= shift.end) return 'daycare';
+  }
+  if (facts.bank && facts.shift === undefined && hour >= 10 && hour < 11 && (day + facts.slot) % 3 === 0) return 'bank';
   if (facts.shift === undefined) {
     return hour < 7 || hour >= 22 ? 'sleeping' : hour < 8 ? 'getting-ready' :
-      hour >= 12 && hour < 13 ? 'break' : hour < 17 ? 'job-hunting' : evening(facts, day);
+      hour >= 12 && hour < 13 ? 'break' : hour < 17 ? 'job-hunting' : evening(facts, day, hour);
   }
   const { start, end } = shifts[facts.shift];
   const length = end - start;
   const since = (hour - start + 24) % 24;
   if (since < length) return Math.abs(since - length / 2) < 0.5 ? 'break' : 'working';
-  return since < length + 1.5 ? 'to-home' : since < 13.5 ? evening(facts, day) :
+  return since < length + 1.5 ? 'to-home' : since < 13.5 ? evening(facts, day, hour) :
     since < 21.5 ? 'sleeping' : since < 22 ? 'getting-ready' : 'to-work';
 }

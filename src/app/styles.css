@@ -277,7 +277,7 @@ h2 { margin: 0 0 0.4rem; font-size: 0.9rem; color: var(--sand); }
 .side .tabs i { margin-left: 0.2rem; padding: 0 0.2rem; font-size: 0.75rem; }
 
 /* The sheet of tiles grew two rows taller for the two-by-two buildings. */
-.tray i { background-size: 512px 352px; }
+.tray i { background-size: 512px auto; }
 
 /* --- People in a home, goals, and the bankruptcy notice */
 .side h2.sub { margin-top: 0.8rem; }
@@ -403,3 +403,44 @@ button.tag[aria-pressed="true"] b { color: var(--ink); }
 @media (min-width: 64rem) and (min-aspect-ratio: 16/9) {
   .viewport { right: 22.7rem; }
 }
+
+/* Keep all categories available when the build tray outgrows its viewport. */
+.build { max-width: calc(100% - 1.2rem); }
+.build .tray, .build .tabs { min-width: 0; justify-content: safe center; overflow-x: auto; }
+.build .tray button, .build .tabs button { flex: 0 0 auto; white-space: nowrap; }
+.build .tabs .look { margin-right: 0; }
+.build .tabs .remove { margin-right: 0.5rem; }
+
+.game > [hidden] { display: none; }
+.panel-toggle { z-index: 2; padding: 0.25rem 0.5rem; }
+.panel-toggle-side { right: 0.6rem; top: 4.25rem; }
+.side { top: 6.35rem; max-height: calc(100% - 15rem); }
+.panel-toggle-views { left: 0.6rem; bottom: 0.6rem; }
+.views { bottom: 2.8rem; }
+.panel-toggle-build { left: 50%; bottom: 0.6rem; transform: translateX(-50%); }
+.build { bottom: 2.8rem; }
+.game[data-side-open="false"] > .viewport { right: 0; }
+
+.game > .side:not([hidden]) {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+}
+.side > .tabs {
+  position: static;
+  flex: none;
+  margin: 0;
+  overflow-x: auto;
+}
+.side-content {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0.7rem;
+  scrollbar-width: thin;
+}
+
+[data-tool="square"] i { background: repeating-linear-gradient(#b9b09e 0 4px, #d2c6ae 4px 6px); box-shadow: inset 0 0 0 4px #667f59; }
+[data-tool="daycare"] i { background: linear-gradient(#bb8247 0 9px, #eed4a5 9px 25px, #648355 25px); }
+[data-tool="recycling"] i { background: repeating-linear-gradient(90deg, #466757 0 3px, #75a777 3px 9px, #669baa 9px 15px, #c2a064 15px 21px); box-shadow: inset 0 7px #497c63, inset 0 -6px #424a48; }
+[data-tool="workshop"] i { background: repeating-linear-gradient(#818481 0 2px, #b9b8a7 2px 4px); box-shadow: inset 0 9px #80614f, inset 0 -5px #424a48, inset 6px 0 #424a48, inset -6px 0 #424a48; }

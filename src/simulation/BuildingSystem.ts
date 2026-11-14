@@ -1,4 +1,5 @@
-import { calendar, weekendAt } from './calendar';
+import { SHOP_SHIFT } from './Mind';
+import { calendar, dateAt, hourAt, weekendAt } from './calendar';
 import { bond, circle, PLACES, type Place } from './Community';
 import { dayPay, pay, schooling, trade, vehicles, type Trade } from './Wealth';
 import { challenges, disasters, festivals, nextFestival, policies, POLICIES, seasonAt, seasons, visitorsToday,
@@ -12,7 +13,7 @@ import { goods } from './Goods';
 import { jobs } from './Jobs';
 import { COMPLEX_LEVEL, landValue, MAX_LEVEL } from './LandValue';
 import { childrenAt, homeSites, residentAt, traitOf, traits, TRAITS, type HomeKind, type Trait } from './Residents';
-import { doingAt, mind, moodOf, thoughtsOf, type Facts, type Thought, type Way } from './Mind';
+import { doingAt, mind, moodOf, thoughtsOf, type Doing, type Facts, type Thought, type Way } from './Mind';
 import { pollution } from './Pollution';
 import { ELEVATED, RoadGraph } from './RoadGraph';
 import type { SaveData, SavedBuilding, SavedPerson, Theme } from './SaveData';
@@ -48,19 +49,20 @@ export interface Commute {
   line?: number;
   /** Minutes the ride takes, waiting included. */
   transitMinutes?: number;
+  transfer?: number;
 }
 
 /** What holds a building back, most pressing first. */
 export type Issue = 'no-road' | 'no-power' | 'no-water' | 'no-jobs' | 'long-commute' | 'pollution' |
-  'crime' | 'scared' | 'no-school' | 'no-clinic' | 'no-highschool' | 'no-hospital' | 'vacancies';
+  'crime' | 'scared' | 'no-school' | 'no-clinic' | 'no-highschool' | 'no-hospital' | 'vacancies' | 'no-park' | 'no-transit';
 export const ISSUES: readonly Issue[] = ['no-road', 'no-power', 'no-water', 'no-jobs', 'long-commute',
-  'pollution', 'crime', 'scared', 'no-school', 'no-clinic', 'no-highschool', 'no-hospital', 'vacancies'];
+  'pollution', 'crime', 'scared', 'no-school', 'no-clinic', 'no-highschool', 'no-hospital', 'vacancies', 'no-park', 'no-transit'];
 
 /** Something that happened in the city, newest last. Not saved. */
 export interface CityEvent {
   tick: number;
   /** An emergency nobody came to, or the one the service in reach dealt with. */
-  kind: (typeof emergencies)[number]['trouble' | 'handled'] | 'flood' | 'flood-helped' | 'flu';
+  kind: (typeof emergencies)[number]['trouble' | 'handled'] | 'flood' | 'flood-helped' | 'flu' | 'robbery' | 'robbery-stopped' | 'nightmarket-open' | 'market-restocked' | 'crash' | 'crash-cleared' | 'crash-hospital' | 'crash-no-hospital';
   cell: Cell;
   /** The station that answered, when one did. */
   station?: Cell;
@@ -130,9 +132,20 @@ export class BuildingSystem {
   /** The season the city was last worked out in, to notice when it turns. */
   private lastSeason: Season = 'spring';
   /** How many tiles of each kind the map has, as of the last refresh. */
+  private readonly bankSites: Cell[] = [];
   private readonly tileCounts = new Map<string, number>();
   /** Which special group each tile belongs to, as its place in `COMBOS` plus one; how many of each there are. */
   private readonly special = new Uint8Array(MAP_SIZE ** 2);
+  private readonly nearNightMarket = new Uint8Array(MAP_SIZE ** 2);
+  private readonly memberships = new Uint32Array(MAP_SIZE ** 2);
+  private readonly coldRoutes = new Map<number, { farms: number[]; markets: number[] }>();
+  private readonly coldStock = new Map<number, number>();
+  private readonly marketStock = new Map<number, number>();
+  private readonly daycareSeats = new Map<number, number>();
+  private readonly recyclingRoutes = new Map<number, Set<number>>();
+  private readonly transfers = new Map<number, number>();
+  private readonly transferStops = new Map<number, { metroStop: number; busIndex: number; metroIndex: number;
+    bus: Line & { loads: number[] }; metro: Line & { loads: number[] } }[]>();
   private readonly comboCounts = Object.fromEntries(COMBOS.map(combo => [combo, 0])) as Record<Combo, number>;
   /** The groups the city has ever had, for the handbook. Saved. */
   private readonly combosSeen = new Set<Combo>();
@@ -213,6 +226,38 @@ export class BuildingSystem {
   private readonly staff = new Map<number, { home: number; person: SavedPerson }[]>();
   /** The tick of the latest growth call, for showing how recent an event is. */
   private clock = 0;
+  private readonly monthlyVisits = new Map<number, number>();
+
+  visitCountAt(cell: Cell): number | undefined {
+    const anchor = this.map.anchorOf(cell) ?? cell;
+    const tile = this.map.get(anchor);
+    const id = indexOf(anchor);
+    if (isService(tile) || isFacility(tile) || this.map.hasStation(anchor) ||
+        tile === 'bus' || tile === 'park' || tile === 'farm' || (isZone(tile) && this.buildings.has(id))) {
+      return this.monthlyVisits.get(id) ?? 0;
+    }
+    return undefined;
+  }
+
+  private recordVisits(tick: number): void {
+    const previous = dateAt(tick - 1);
+    const current = dateAt(tick);
+    if (previous.month !== current.month) this.monthlyVisits.clear();
+
+    const count = (id: number, people: number) => {
+      this.monthlyVisits.set(id, (this.monthlyVisits.get(id) ?? 0) + people);
+    };
+    const hour = hourAt(tick);
+    for (const visit of this.facilityVisits(hour, () => true)) {
+      count(indexOf(visit.path.at(-1)!), 1);
+      if (visit.transfer) count(indexOf(visit.transfer.at(-1)!), 1);
+    }
+    for (const route of this.commutes) {
+      const start = shifts[route.shift].start;
+      if (start <= hour && start > hour - 24 / calendar.ticksPerDay &&
+          (!weekendAt(tick) || route.shift === SHOP_SHIFT)) count(route.workId, route.workers);
+    }
+  }
   /** What nearby parks add to land value, per tile. */
   private readonly green = new Float32Array(MAP_SIZE ** 2);
   readonly roadGraph: RoadGraph;
@@ -294,20 +339,20 @@ export class BuildingSystem {
     const tile = this.map.get(cell);
     if (!isRoad(tile)) return 0;
     let flow = 0;
-    this.shiftFlows.forEach((flows, shift) => { flow += (share[shift] ?? 0) * flows[indexOf(cell)]; });
-    return congestion(flow, tile);
+    this.shiftFlows.forEach((flows, shift) => { if (this.shiftRuns(shift)) flow += (share[shift] ?? 0) * flows[indexOf(cell)]; });
+    return this.crashDelay(cell) ? Math.max(1, congestion(flow, tile)) : congestion(flow, tile);
   }
 
   congestionAt(cell: Cell, hour?: number): number {
     const tile = this.map.get(cell);
     if (!isRoad(tile)) return 0;
     const id = indexOf(cell);
-    let flow = this.flows[id];
+    let flow = weekendAt(this.clock) ? this.shiftFlows[SHOP_SHIFT][id] : this.flows[id];
     if (hour !== undefined) {
       flow = 0;
-      for (const shift of rushShifts(hour)) flow += this.shiftFlows[shift][id];
+      for (const shift of rushShifts(hour)) if (this.shiftRuns(shift)) flow += this.shiftFlows[shift][id];
     }
-    return congestion(flow, tile);
+    return this.crashDelay(cell) ? Math.max(1, congestion(flow, tile)) : congestion(flow, tile);
   }
 
   /** Sets the tax rate in percent, kept within the allowed range, and returns it. */
@@ -388,6 +433,50 @@ export class BuildingSystem {
   }
 
   /** The latest events, oldest first. */
+  crashDelay(cell: Cell): boolean {
+    return this.events.some(event => (event.kind === 'crash' || event.kind === 'crash-cleared') &&
+      event.cell.x === cell.x && event.cell.y === cell.y &&
+      this.clock - event.tick < (event.station ? 2 : calendar.ticksPerDay));
+  }
+
+  private rollCrash(tick: number, seed: number): void {
+    const routes = this.commutes.filter(route => route.workers > route.riders && route.path.length >= mind.driveFrom);
+    if (!routes.length || roll(seed, tick, 201) / 2 ** 32 >= Math.min(0.1, routes.length * 0.001)) return;
+    const route = routes[roll(seed, tick, 202) % routes.length];
+    const cell = route.path[roll(seed, tick, 203) % route.path.length];
+    const component = this.roadGraph.componentAt(cell);
+    const responder = (service: 'police' | 'hospital') => {
+      const reach = services.radius[service];
+      let best: Cell | undefined;
+      let shortest = Infinity;
+      for (let dy = -reach; dy <= reach; dy++) {
+        const span = reach - Math.abs(dy);
+        for (let dx = -span; dx <= span; dx++) {
+          const station = { x: cell.x + dx, y: cell.y + dy };
+          if (this.map.get(station) !== service) continue;
+          const door = this.doorOf(station);
+          if (!door || this.roadGraph.componentAt(door) !== component) continue;
+          const path = this.roadGraph.shortestPath(cell, door);
+          if (!path || path.distance >= shortest) continue;
+          best = station;
+          shortest = path.distance;
+        }
+      }
+      return best;
+    };
+    const police = responder('police');
+    this.events.push({ tick, kind: police ? 'crash-cleared' : 'crash', cell, station: police });
+    if (roll(seed, tick, 204) % 3 === 0) {
+      const hospital = responder('hospital');
+      this.events.push({ tick, kind: hospital ? 'crash-hospital' : 'crash-no-hospital', cell, station: hospital });
+      if (hospital) {
+        const id = indexOf(hospital);
+        this.monthlyVisits.set(id, (this.monthlyVisits.get(id) ?? 0) + 1);
+      }
+    }
+    if (this.events.length > EVENT_LOG) this.events.splice(0, this.events.length - EVENT_LOG);
+  }
+
   getEvents(): readonly CityEvent[] {
     return this.events;
   }
@@ -456,7 +545,7 @@ export class BuildingSystem {
     for (const service of SERVICES) if (this.covered[service][id]) value += services.value[service];
     if (this.unsafe(id)) value -= services.crime.penalty;
     if (this.scared[id]) value -= scare.value;
-    for (const combo of COMBOS) if (this.near[combo]?.[id]) value += comboValue(combo)!.amount;
+    value += Math.min(12, COMBOS.reduce((bonus, combo) => bonus + (this.near[combo]?.[id] ? comboValue(combo)!.amount : 0), 0));
     if (zone !== 'industrial') value -= landValue.pollution * this.smog[id];
     if (zone === 'residential') {
       value -= Math.min(landValue.commute.max,
@@ -485,7 +574,7 @@ export class BuildingSystem {
       content: who.liking && zone ? who.liking === zone : undefined,
       home: cellAt(home), work: zone ? cellAt(person.job) : undefined, homeId: home, slot: person.slot,
       /** What they own, what they have saved and what they earn a day. */
-      car: person.car ?? 0, money: person.money ?? 0,
+      car: person.car ?? 0, money: person.money ?? 0, bank: this.bankFor(cellAt(home)),
       pay: zone ? this.payAt(person.job, who.trait === 'rich', home) : 0, school: this.schoolOf(home),
       /** What the vehicle costs a day to keep, and where it is kept. */
       keep: Math.round(this.keepCost(home, person.car ?? 0,
@@ -572,8 +661,12 @@ export class BuildingSystem {
   }
 
   /** Whether a commute is held up: it takes this much longer than the empty road would. */
+  private shiftRuns(shift: number): boolean {
+    return !weekendAt(this.clock) || shift === SHOP_SHIFT;
+  }
+
   private heldUp(route: Commute): boolean {
-    return route.minutes > mind.jam * route.path.length * traffic.minutesPerTile;
+    return this.shiftRuns(route.shift) && route.minutes > mind.jam * route.path.length * traffic.minutesPerTile;
   }
 
   /** What a day's fuel costs someone with a vehicle and this far to drive, and whether a station is in reach of home. */
@@ -722,6 +815,18 @@ export class BuildingSystem {
     return code ? COMBOS[code - 1] : undefined;
   }
 
+  hasCombo(cell: Cell, combo: Combo): boolean {
+    return this.map.get(cell) !== undefined && this.member(indexOf(cell), combo);
+  }
+
+  combosAt(cell: Cell): Combo[] {
+    return COMBOS.filter(combo => this.hasCombo(cell, combo));
+  }
+
+  private member(id: number, combo: Combo): boolean {
+    return (this.memberships[id] & (1 << COMBOS.indexOf(combo))) !== 0;
+  }
+
   /** What a home on this tile is called for what it stands by: a forest cabin or a farmhouse. */
   nickAt(cell: Cell): 'cabin' | 'farmhouse' | undefined {
     const id = indexOf(cell);
@@ -749,8 +854,8 @@ export class BuildingSystem {
     if ('brand' in what) {
       for (const building of this.buildings.values()) if (building.brand === what.brand) found.push(building.id);
     } else if ('combo' in what) {
-      const code = COMBOS.indexOf(what.combo) + 1;
-      this.special.forEach((value, id) => { if (value === code) found.push(id); });
+      const bit = 1 << COMBOS.indexOf(what.combo);
+      this.memberships.forEach((value, id) => { if (value & bit) found.push(id); });
     } else if ('idle' in what) {
       for (let id = 0; id < MAP_SIZE ** 2; id++) {
         const tile = this.map.at(id);
@@ -773,6 +878,13 @@ export class BuildingSystem {
   private findCombos(): void {
     const { special, rural } = this;
     special.fill(0);
+    this.memberships.fill(0);
+    this.nearNightMarket.fill(0);
+    this.coldRoutes.clear();
+    for (const id of this.coldStock.keys()) if (this.map.at(id) !== 'coldstore') this.coldStock.delete(id);
+    for (const id of this.marketStock.keys()) if (this.map.at(id) !== 'market') this.marketStock.delete(id);
+    this.daycareSeats.clear();
+    this.recyclingRoutes.clear();
     rural.fill(0);
     for (const field of Object.values(this.near)) field.fill(0);
     this.barns.clear();
@@ -788,14 +900,15 @@ export class BuildingSystem {
       }
     };
     /** Marks the tiles of a group, and those its land value reaches. */
-    const mark = (combo: Combo, group: readonly number[]) => {
+    const mark = (combo: Combo, group: readonly number[], showOn: readonly number[] = group) => {
       this.comboCounts[combo]++;
       this.combosSeen.add(combo);
       const value = comboValue(combo);
       for (const part of group) {
-        special[part] = COMBOS.indexOf(combo) + 1;
+        this.memberships[part] |= 1 << COMBOS.indexOf(combo);
         if (value) around(part, value.reach, near => { this.near[combo]![near] = 1; });
       }
+      for (const part of showOn) special[part] = COMBOS.indexOf(combo) + 1;
     };
     /** The tiles that touch `start` and pass `member`, `start` among them. */
     const seen = new Uint8Array(MAP_SIZE ** 2);
@@ -864,6 +977,129 @@ export class BuildingSystem {
         if (square.every(topShop)) mark('arcade', square);
       }
     }
+
+    const access = (id: number) => {
+      const cell = cellAt(id);
+      return isRoad(this.map.at(id)) ? cell : this.doorOf(cell);
+    };
+    const nearby = (id: number, reach: number, match: (lot: number) => boolean) => {
+      const entry = access(id);
+      const component = entry && this.roadGraph.componentAt(entry);
+      const lots: number[] = [];
+      if (component === undefined) return lots;
+      around(id, reach, lot => {
+        if (!match(lot)) return;
+        const dest = access(lot);
+        if (dest && this.roadGraph.componentAt(dest) === component) lots.push(lot);
+      });
+      return lots;
+    };
+    const built = (tile: Zone) => (id: number) => this.map.at(id) === tile && this.buildings.has(id);
+    const lotOf = (id: number, reach: number, tile: string) => nearby(id, reach, lot => this.map.at(lot) === tile)[0];
+
+    for (const [id, riders] of this.transfers) {
+      const shops = nearby(id, combos.interchange.reach, built('commercial'));
+      const bus = this.transferStops.get(id)?.map(link => link.bus.stops[link.busIndex]) ?? [];
+      if (riders && shops.length) mark('interchange', [id, ...bus, ...shops], [id]);
+    }
+
+    for (let id = 0; id < MAP_SIZE ** 2; id++) {
+      switch (this.map.at(id)) {
+        case 'temple': {
+          const reach = combos.nightmarket.reach;
+          const square = lotOf(id, reach, 'square');
+          const food = nearby(id, reach, lot => built('commercial')(lot) && shiftIndex('commercial', lot) === 2);
+          if (square !== undefined && food.length) {
+            mark('nightmarket', [id, square, ...food], [square]);
+            for (const home of nearby(square, reach + 2, built('residential'))) this.nearNightMarket[home] = 1;
+          }
+          break;
+        }
+        case 'daycare': {
+          const reach = combos.familyquarter.reach;
+          const park = lotOf(id, reach, 'park');
+          const homes = nearby(id, reach, built('residential'));
+          if (park === undefined || !homes.length) break;
+          mark('familyquarter', [id, park, ...homes], [id]);
+          let seats = combos.familyquarter.seats;
+          for (const home of homes) {
+            const placed = Math.min(seats, this.kidsAt(home).length - (this.daycareSeats.get(home) ?? 0));
+            this.daycareSeats.set(home, (this.daycareSeats.get(home) ?? 0) + placed);
+            seats -= placed;
+            if (!seats) break;
+          }
+          break;
+        }
+        case 'bank': {
+          const reach = combos.localbusiness.reach;
+          const homes = nearby(id, reach, built('residential'));
+          const shops = nearby(id, reach, built('commercial'));
+          if (homes.length && shops.length) mark('localbusiness', [id, ...homes, ...shops], [id]);
+          break;
+        }
+        case 'workshop': {
+          const reach = combos.workshop.reach;
+          const depot = lotOf(id, reach, 'recycling');
+          const factories = nearby(id, reach, factory);
+          if (depot !== undefined && factories.length) {
+            mark('workshop', [id, depot, ...factories], [id, depot]);
+            const route = this.recyclingRoutes.get(depot) ?? new Set<number>();
+            for (const lot of factories) route.add(lot);
+            this.recyclingRoutes.set(depot, route);
+          }
+          break;
+        }
+      }
+
+      const district = combos.chinatown;
+      const centre = this.map.at(id);
+      if (centre === 'culture' || centre === 'coldstore') {
+        const component = this.roadGraph.componentAt(this.doorOf(cellAt(id)) ?? { x: -1, y: -1 });
+        if (component === undefined) continue;
+        const reach = centre === 'culture' ? combos.arts.reach : combos.coldchain.reach;
+        const markets: number[] = [];
+        const members: number[] = [];
+        around(id, reach, lot => {
+          const tile = this.map.at(lot);
+          if (tile === 'park' && centre === 'culture') members.push(lot);
+          if (tile !== 'market' && tile !== 'farm') return;
+          const road = this.doorOf(cellAt(lot));
+          if (!road || this.roadGraph.componentAt(road) !== component) return;
+          if (tile === 'market') markets.push(lot);
+          else if (centre === 'coldstore') members.push(lot);
+        });
+        if (markets.length && members.length) {
+          mark(centre === 'culture' ? 'arts' : 'coldchain', [id, ...markets, ...members], [id]);
+          if (centre === 'coldstore') {
+            const distance = (lot: number) => Math.abs(cellAt(lot).x - cellAt(id).x) + Math.abs(cellAt(lot).y - cellAt(id).y);
+            this.coldRoutes.set(id, { farms: members, markets: markets.sort((a, b) => distance(a) - distance(b)) });
+          }
+        }
+        continue;
+      }
+      if (centre !== 'temple' && centre !== 'library') continue;
+      const reach = centre === 'library' ? combos.bookquarter.reach : district.reach;
+      const door = this.doorOf(cellAt(id));
+      const component = door && this.roadGraph.componentAt(door);
+      if (component === undefined) continue;
+      const homes: number[] = [];
+      const shops: number[] = [];
+      around(id, reach, lot => {
+        if (!this.buildings.has(lot)) return;
+        const tile = this.map.at(lot);
+        if (tile !== 'residential' && (tile !== 'commercial' || shiftIndex(tile, lot) !== 2)) return;
+        const road = this.doorOf(cellAt(lot));
+        if (!road || this.roadGraph.componentAt(road) !== component) return;
+        (tile === 'residential' ? homes : shops).push(lot);
+      });
+      if (centre === 'library') {
+        if (homes.length >= combos.bookquarter.homes && has(id, reach, 'park')) mark('bookquarter', [id, ...homes]);
+        continue;
+      }
+      if (homes.length >= district.homes && shops.length >= district.shops) {
+        mark('chinatown', [id, ...homes, ...shops], [...(special[id] ? [] : [id]), ...homes, ...shops]);
+      }
+    }
   }
 
   /** Takes up the tasks the city's troubles call for, and pays for the ones that are done. Once a day. */
@@ -888,7 +1124,7 @@ export class BuildingSystem {
   /** What a tile of farmland grows in a month. */
   private farmYield(id: number): number {
     return this.smog[id] > pollution.limit ? 0 :
-      (this.shore[id] ? goods.farm.watered : goods.farm.dry) * (this.special[id] ? combos.farmstead.times : 1) *
+      (this.shore[id] ? goods.farm.watered : goods.farm.dry) * (this.member(id, 'farmstead') ? combos.farmstead.times : 1) *
       seasons.farm[seasonAt(this.clock)];
   }
 
@@ -976,6 +1212,25 @@ export class BuildingSystem {
   }
 
   /** A day's pay and a day's bills for everyone; whoever has saved enough buys the next vehicle up. */
+  bankFor(home: Cell): Cell | undefined {
+    if (!this.isCovered(home, 'bank')) return undefined;
+    const road = this.roadBeside(home);
+    const component = road && this.roadGraph.componentAt(road);
+    if (component === undefined) return undefined;
+    let nearest: Cell | undefined;
+    let distance = services.radius.bank + 1;
+    for (const bank of this.bankSites) {
+      const next = Math.abs(bank.x - home.x) + Math.abs(bank.y - home.y);
+      if (next >= distance) continue;
+      const entry = this.roadBeside(bank);
+      if (entry && this.roadGraph.componentAt(entry) === component) {
+        nearest = bank;
+        distance = next;
+      }
+    }
+    return nearest;
+  }
+
   private payDay(): void {
     const routes = new Map(this.commutes.map(route => [route.homeId * MAP_SIZE ** 2 + route.workId, route]));
     for (const [id, building] of this.buildings) {
@@ -1012,6 +1267,9 @@ export class BuildingSystem {
           // A scooter is no news; a car is.
           if (person.car > 1) this.tell('new-car', id, person);
         }
+        // Residents with a reachable bank earn 0.5% on savings each game month.
+        if (this.clock % (calendar.ticksPerDay * calendar.daysPerMonth) === 0 && money >= 200 &&
+            this.bankFor(cellAt(id))) money += Math.floor(money * 0.005);
         if (money) person.money = money;
         else delete person.money;
       }
@@ -1079,6 +1337,12 @@ export class BuildingSystem {
     const shared = { troubles: this.issuesOf(home, building),
       shops: places.includes('shops') || places.includes('market'),
       park: places.includes('park') || this.grand[home] === 1, water: this.shore[home] === 1,
+      chinatown: this.member(home, 'chinatown'),
+      bookquarter: this.member(home, 'bookquarter'),
+      arts: this.covered.culture[home] === 1 && this.comboCounts.arts > 0,
+      nightmarket: this.nearNightMarket[home] === 1,
+      daycare: this.daycareSeats.get(home) ?? 0,
+      bank: this.covered.bank[home] === 1 && !!this.bankFor(cellAt(home)),
       temple: places.includes('temple'), places: places.length, bond: this.bondOf(home),
       town: this.residents >= circle.population, fun: places.includes('fun'),
       casino: this.covered.casino[home] === 1, school: places.includes('school'), kids: this.kidsAt(home).length,
@@ -1136,9 +1400,132 @@ export class BuildingSystem {
     if (!building || !person) return undefined;
     const facts = this.factsFor(home, building)(person);
     const list = thoughtsOf(facts);
+    const visit = this.facilityVisits(Math.floor(hour), cell => indexOf(cell) === home)
+      .find(trip => trip.slot === slot);
     return { ...this.describe(home, person), kind: building.kind, jobId: person.job, way: facts.way,
       minutes: facts.minutes, thoughts: list, mood: moodOf(list), kids: facts.kids,
-      doing: doingAt(facts, hour, Math.floor(this.clock / calendar.ticksPerDay), weekendAt(this.clock)) };
+      doing: visit?.doing ?? doingAt(facts, hour, Math.floor(this.clock / calendar.ticksPerDay), weekendAt(this.clock)) };
+  }
+
+  private medicalTrip(origin: Cell, from: Cell, need: number) {
+    const component = this.roadGraph.componentAt(from);
+    const nearest = (tile: 'clinic' | 'hospital', start: Cell, entry: Cell, specialist = false) => {
+      let best: { path: Cell[]; distance: number; specialized: boolean } | undefined;
+      const reach = services.radius[tile];
+      for (let dy = -reach; dy <= reach; dy++) {
+        const span = reach - Math.abs(dy);
+        for (let dx = -span; dx <= span; dx++) {
+          const dest = { x: start.x + dx, y: start.y + dy };
+          if (this.map.get(dest) !== tile) continue;
+          const door = this.doorOf(dest);
+          if (!door || this.roadGraph.componentAt(door) !== component) continue;
+          const route = this.roadGraph.shortestPath(entry, door);
+          if (!route) continue;
+          const specialized = specialist && this.hasCombo(dest, 'medical');
+          if (best && (best.specialized !== specialized ? best.specialized : best.distance <= route.distance)) continue;
+          best = { path: [start, ...route.path, dest], distance: route.distance, specialized };
+        }
+      }
+      return best?.path;
+    };
+    const clinic = need === 1 ? undefined : nearest('clinic', origin, from);
+    if (clinic) {
+      if (need !== 2) return { doing: 'clinic' as const, path: clinic };
+      const referral = clinic.at(-1)!;
+      return { doing: 'clinic' as const, path: clinic, transfer: nearest('hospital', referral, this.doorOf(referral)!, true) };
+    }
+    const hospital = nearest('hospital', origin, from, need === 2);
+    return hospital && { doing: 'hospital' as const, path: hospital };
+  }
+
+  /** Trips to facilities follow the road network; the first and last segments are driveways. */
+  facilityVisits(hour: number, visible: (home: Cell) => boolean) {
+    const day = Math.floor(this.clock / calendar.ticksPerDay);
+    const visits: { home: number; slot: number; doing: Doing; path: Cell[]; transfer?: Cell[] }[] = [];
+    const scheduled: { tile: string; doing: Doing; from: number; until: number }[] = [
+      { tile: 'school', doing: 'school', from: 7, until: 9 },
+      { tile: 'highschool', doing: 'highschool', from: 7, until: 9 },
+      { tile: 'university', doing: 'university', from: 8, until: 11 },
+      { tile: 'daycare', doing: 'daycare', from: 16, until: 18 },
+      { tile: 'bank', doing: 'bank', from: 10, until: 13 },
+      { tile: 'market', doing: 'shopping', from: 13, until: 16 },
+      { tile: 'mall', doing: 'shopping', from: 12, until: 19 },
+      { tile: 'clinic', doing: 'clinic', from: 9, until: 11 },
+      { tile: 'culture', doing: 'exhibition', from: 13, until: 17 },
+      { tile: 'library', doing: 'reading', from: 14, until: 17 },
+      { tile: 'park', doing: 'park', from: 17, until: 20 },
+      { tile: 'temple', doing: 'temple', from: 10, until: 17 },
+      { tile: 'cinema', doing: 'cinema', from: 17, until: 22 },
+      { tile: 'pool', doing: 'pool', from: 11, until: 18 },
+      { tile: 'ktv', doing: 'ktv', from: 18, until: 23 },
+      { tile: 'amusement', doing: 'amusement', from: 10, until: 18 },
+      { tile: 'casino', doing: 'casino', from: 18, until: 23 },
+      { tile: 'museum', doing: 'museum', from: 10, until: 17 },
+      { tile: 'stadium', doing: 'stadium', from: 15, until: 21 },
+      { tile: 'square', doing: 'nightmarket', from: 18, until: 21 },
+    ];
+    const options = scheduled.filter(visit => hour >= visit.from && hour < visit.until);
+    if (!options.length) return visits;
+    for (const [home, building] of this.buildings) {
+      if (!building.people?.length || this.map.at(home) !== 'residential' || !visible(cellAt(home))) continue;
+      const from = this.roadAccess(cellAt(home));
+      if (!from) continue;
+      for (let offset = 0; offset < building.people.length; offset++) {
+        const person = building.people[(day + offset) % building.people.length];
+        if ((home + person.slot + day) % 3 !== 0) continue;
+        const shift = person.job < 0 ? undefined : shiftIndex(this.map.at(person.job) as Zone, person.job);
+        const hours = shift === undefined ? undefined : shifts[shift];
+        if (hours && (!weekendAt(this.clock) || shift === SHOP_SHIFT) && hour >= hours.start && hour < hours.end) continue;
+        if (hour >= 9 && hour < 11 && (home + day) % 7 === 0) {
+          const need = roll(this.seed, day, home) % 3;
+          const medical = this.medicalTrip(cellAt(home), from, need);
+          if (medical) {
+            visits.push({ home, slot: person.slot, ...medical });
+            break;
+          }
+        }
+        const kinds = options.filter(visit => visit.tile !== 'clinic' &&
+          (visit.tile !== 'school' || (!weekendAt(this.clock) && this.kidsAt(home).some(child => child.age >= 6 && child.age < 13))) &&
+          (visit.tile !== 'highschool' || (!weekendAt(this.clock) && this.kidsAt(home).some(child => child.age >= 13))) &&
+          (visit.tile !== 'university' || (!weekendAt(this.clock) && this.describe(home, person).age <= 26)) &&
+          (visit.tile !== 'daycare' || (!weekendAt(this.clock) && (this.daycareSeats.get(home) ?? 0) > 0)));
+        if (!kinds.length) continue;
+        const origin = cellAt(home);
+        const first = (home + person.slot + day) % kinds.length;
+        for (let next = 0; next < kinds.length; next++) {
+          const { tile, doing } = kinds[(first + next) % kinds.length];
+          let nearest: { path: Cell[]; distance: number } | undefined;
+          for (let dy = -6; dy <= 6; dy++) {
+            const span = 6 - Math.abs(dy);
+            for (let dx = -span; dx <= span; dx++) {
+              const dest = { x: origin.x + dx, y: origin.y + dy };
+              if (this.map.get(dest) !== tile || (tile === 'square' && !this.hasCombo(dest, 'nightmarket'))) continue;
+              const entry = this.doorOf(dest);
+              if (!entry || this.roadGraph.componentAt(from) !== this.roadGraph.componentAt(entry)) continue;
+              const route = this.roadGraph.shortestPath(from, entry);
+              if (!route || route.path.length > 16 || (nearest && nearest.distance <= route.path.length)) continue;
+              nearest = { path: [origin, ...route.path, dest], distance: route.path.length };
+            }
+          }
+          if (!nearest) continue;
+          visits.push({ home, slot: person.slot, doing, path: nearest.path });
+          break;
+        }
+        if (visits.at(-1)?.home === home) break;
+      }
+    }
+    return visits;
+  }
+
+  visitorsAt(cell: Cell, hour: number) {
+    const anchor = this.map.anchorOf(cell) ?? cell;
+    return this.facilityVisits(Math.floor(hour), home =>
+      Math.abs(home.x - anchor.x) + Math.abs(home.y - anchor.y) <=
+        (this.map.get(anchor) === 'hospital' ? services.radius.clinic + services.radius.hospital : 6))
+      .filter(visit => indexOf(visit.path.at(-1)!) === indexOf(anchor) ||
+        (visit.transfer && indexOf(visit.transfer.at(-1)!) === indexOf(anchor)))
+      .map(visit => ({ ...visit, name: this.describe(visit.home,
+        this.buildings.get(visit.home)!.people!.find(person => person.slot === visit.slot)!).name }));
   }
 
   /** The place in a home of someone who lives there and works at `workId`, if anyone does. */
@@ -1179,7 +1566,7 @@ export class BuildingSystem {
   /** What a park tile looks like: part of a big park or not, and whether the fountain stands on it. */
   parkAt(cell: Cell): { big: boolean; fountain: boolean } {
     const id = indexOf(cell);
-    return { big: this.parkSize[id] >= landValue.bigPark.tiles, fountain: this.fountains.has(id) };
+    return { big: this.parkSize[id] >= landValue.bigPark.tiles, fountain: this.fountains.has(id) && this.comboAt(cell) !== 'forest' };
   }
 
   /** Borrows one loan's worth of money, if the city has not got too many already. */
@@ -1238,6 +1625,8 @@ export class BuildingSystem {
       if ((this.employed.get(id) ?? 0) < building.occupants) issues.push('no-jobs');
       if ((this.commuteMinutes.get(id) ?? 0) > traffic.longCommute) issues.push('long-commute');
       if (this.smog[id] > pollution.limit) issues.push('pollution');
+      if (this.residents >= 150 && !this.green[id]) issues.push('no-park');
+      if (this.residents >= 300 && !this.transitCover[id]) issues.push('no-transit');
     }
     if (this.unsafe(id)) issues.push('crime');
     if (this.scared[id]) issues.push('scared');
@@ -1307,7 +1696,7 @@ export class BuildingSystem {
         lines: this.plans.filter(plan => plan.stops.includes(id)).map(plan => plan.id) };
     }
     if (isRoad(tile)) {
-      return { tile, flow: Math.round(this.flows[id]), congestion: this.congestionAt(cell),
+      return { tile, flow: Math.round(weekendAt(this.clock) ? this.shiftFlows[SHOP_SHIFT][id] : this.flows[id]), congestion: this.congestionAt(cell),
         roadCapacity: tile === 'avenue' ? traffic.avenue.capacity : traffic.capacity };
     }
     if (isFacility(tile)) {
@@ -1389,6 +1778,7 @@ export class BuildingSystem {
         const at = line.stops.indexOf(id);
         if (at >= 0 && this.stopAt(cell) !== line.kind) line.stops.splice(at, 1);
       }
+      this.monthlyVisits.delete(id);
       if (stationOnly) continue;
       this.buildings.delete(id);
       if (isZone(tile)) this.zones.set(id, cell);
@@ -1455,6 +1845,7 @@ export class BuildingSystem {
    */
   grow(tick: number, seed: number): void {
     this.clock = tick;
+    this.recordVisits(tick);
     this.bonds.clear();
     // A day's share of the month's tax and upkeep.
     if (tick % calendar.ticksPerDay === 0) {
@@ -1462,6 +1853,7 @@ export class BuildingSystem {
       // The sights' month is an average: weekends bring more than a day's share of it, weekdays less.
       this.funds += this.visitors / calendar.daysPerMonth * (visitorsToday(tick) - 1);
       this.holdFestival(tick);
+      this.deliverFood();
     }
     // At the end of a month every loan has one payment fewer to go.
     if (tick % (calendar.ticksPerDay * calendar.daysPerMonth) === 0 && this.rank >= cycle.rank) {
@@ -1496,9 +1888,10 @@ export class BuildingSystem {
 
     // A full building on good enough land grows a level and holds more.
     for (const [id, building] of this.buildings) {
+      const loan = this.map.at(id) === 'commercial' && this.member(id, 'localbusiness') && building.occupants > 0;
       if (building.level >= MAX_LEVEL || building.occupants < this.capacityOf(building) ||
           this.valueOf(id) < landValue.upgrade[building.level - 1] ||
-          roll(seed, tick, id + 16) / 2 ** 32 >= landValue.chance) continue;
+          roll(seed, tick, id + 16) / 2 ** 32 >= landValue.chance * (loan ? 1.5 : 1)) continue;
       const larger = landValue.capacity[this.map.at(id) as Zone][building.level++];
       building.capacity = Math.max(building.capacity, larger);
       changed = true;
@@ -1555,7 +1948,14 @@ export class BuildingSystem {
     // A neighbourhood gets over its fright.
     if (daily && this.scares.some(({ until }) => until <= tick)) changed = true;
     if (changed) this.refresh();
-    if (daily) this.rollEmergencies(tick, seed);
+    if (daily) {
+      this.rollEmergencies(tick, seed);
+      this.rollCrash(tick, seed);
+      if (Math.floor(tick / calendar.ticksPerDay) % 7 === 5) {
+        const square = this.find({ combo: 'nightmarket' }).find(cell => this.map.get(cell) === 'square');
+        if (square) this.addCityEvent('nightmarket-open', square);
+      }
+    }
 
     if (daily) this.reviewTasks(tick);
     if (daily) this.reviewChallenge(tick);
@@ -1648,6 +2048,36 @@ export class BuildingSystem {
       this.events.push({ tick, kind, cell: cellAt(id), station: service && this.nearestStation(cellAt(id), service) });
       if (this.events.length > EVENT_LOG) this.events.shift();
     };
+    const robbery = services.robbery;
+    if (this.residents >= robbery.population && (this.tileCounts.get('bank') ?? 0) > 0) {
+      let financiallyStressed = 0;
+      for (const building of this.buildings.values()) {
+        for (const person of building.people ?? []) {
+          if (person.job < 0 && (person.money ?? 0) < robbery.lowSavings) financiallyStressed++;
+        }
+      }
+      const hardship = financiallyStressed / this.residents;
+      const patrol = this.policiesOn.has('patrol') ? policies.patrol.crime : 1;
+      if (roll(seed, tick, 67) / 2 ** 32 < (robbery.baseChance + hardship * robbery.hardshipBonus) * patrol) {
+        const banks: number[] = [];
+        for (let id = 0; id < MAP_SIZE ** 2; id++) {
+          if (this.map.at(id) === 'bank' && this.doorOf(cellAt(id))) banks.push(id);
+        }
+        if (banks.length) {
+          const bank = banks[roll(seed, tick, 68) % banks.length];
+          const station = this.nearestStation(cellAt(bank), 'police');
+          const from = station && this.roadBeside(station);
+          const to = this.roadBeside(cellAt(bank));
+          const helped = this.covered.police[bank] === 1 && !!(from && to && this.roadGraph.shortestPath(from, to));
+          note(helped ? 'robbery-stopped' : 'robbery', bank, helped ? 'police' : undefined);
+          if (!helped) {
+            this.funds -= robbery.loss;
+            this.scares.push({ id: bank, until: tick + scare.days * calendar.ticksPerDay });
+            changed = true;
+          }
+        }
+      }
+    }
     const { flood, flu } = disasters;
     if (season === flood.season && this.residents >= flood.population && roll(seed, tick, 61) / 2 ** 32 < flood.chance) {
       for (const id of struck(62, flood.most, id => this.shore[id] === 1)) {
@@ -1705,6 +2135,7 @@ export class BuildingSystem {
     this.connectUtilities();
     this.coverServices();
     this.planLines();
+    this.connectTransfers();
     this.assignJobs();
     this.shareCustom();
     // Vehicles and the fuel they burn, which needs the routes and the stations' reach.
@@ -1717,7 +2148,7 @@ export class BuildingSystem {
     let clerks = 0;
     for (const [id, building] of this.buildings) {
       const zone = this.map.at(id);
-      if (zone === 'industrial') factoryHands += building.occupants * (this.special[id] ? combos.estate.goods : 1);
+      if (zone === 'industrial') factoryHands += building.occupants * (this.member(id, 'estate') || this.member(id, 'port') ? combos.estate.goods : 1);
       else if (zone === 'commercial') clerks += building.occupants;
       if (zone !== 'residential') continue;
       this.residents += building.occupants;
@@ -1731,6 +2162,7 @@ export class BuildingSystem {
     this.tileUpkeep = this.map.stationTiles().length * economy.upkeep.metro +
       this.map.spanTiles().length * economy.upkeep.viaduct;
     this.tileCounts.clear();
+    this.bankSites.length = 0;
     this.idleCount = 0;
     this.visitors = 0;
     let markets = 0;
@@ -1747,11 +2179,25 @@ export class BuildingSystem {
         this.idleCount++;
         continue;
       }
+      if (tile === 'bank') this.bankSites.push(cellAt(id));
       if (tile === 'market') markets++;
       const sight = services.visitors[tile as Service];
       if (sight) this.visitors += this.sightIncome(id, tile as Service);
     }
-    const made = Math.round(factoryHands * goods.perWorker + farmed);
+    let repaired = 0;
+    const reused = new Map<number, number>();
+    for (const factories of this.recyclingRoutes.values()) {
+      let material = combos.workshop.materials;
+      for (const id of factories) {
+        const used = reused.get(id) ?? 0;
+        const work = Math.min(material, (this.buildings.get(id)?.occupants ?? 0) - used);
+        reused.set(id, used + work);
+        repaired += work * combos.workshop.goodsPerMaterial;
+        material -= work;
+        if (!material) break;
+      }
+    }
+    const made = Math.round(factoryHands * goods.perWorker + farmed + repaired);
     farmed = Math.round(farmed);
     for (const group of COMBOS) this.visitors += this.comboCounts[group] * this.comboIncome(group);
     for (const building of this.buildings.values()) if (building.brand) this.visitors += brands[building.brand];
@@ -1769,6 +2215,7 @@ export class BuildingSystem {
    */
   private planLines(): void {
     this.plans.length = 0;
+    this.transferStops.clear();
     this.transitCover.fill(0);
     this.stopsNear.clear();
     for (const line of this.lines) {
@@ -1833,6 +2280,82 @@ export class BuildingSystem {
         }
       });
     }
+  }
+
+  private connectTransfers(): void {
+    const buses = this.plans.filter(plan => plan.active && plan.kind === 'bus');
+    const metros = this.plans.filter(plan => plan.active && plan.kind === 'metro');
+    for (const bus of buses) for (const metro of metros) {
+      metro.stops.forEach((metroStop, metroIndex) => {
+        const station = cellAt(metroStop);
+        bus.stops.forEach((busStop, busIndex) => {
+          const access = this.roadAccess(cellAt(busStop));
+          if (!access || Math.abs(access.x - station.x) + Math.abs(access.y - station.y) > 3 ||
+              this.roadGraph.componentAt(access) !== this.roadGraph.componentAt(station)) return;
+          const walk = this.roadGraph.shortestPath(access, station);
+          if (!walk || walk.path.length > 4) return;
+          const link = { metroStop, bus, metro, busIndex, metroIndex };
+          const links = this.transferStops.get(metroStop);
+          if (links) links.push(link);
+          else this.transferStops.set(metroStop, [link]);
+        });
+      });
+    }
+  }
+
+  private addCityEvent(kind: CityEvent['kind'], cell: Cell): void {
+    this.events.push({ tick: this.clock, kind, cell });
+    if (this.events.length > EVENT_LOG) this.events.shift();
+  }
+
+  private deliverFood(): void {
+    const { capacity, marketPerDay, batchDays, cratesPerYield } = combos.coldchain;
+    const farmsUsed = new Set<number>();
+    const emptyMarkets = new Set([...this.marketStock].filter(([, stock]) => stock === 0).map(([id]) => id));
+    for (const id of this.marketStock.keys()) {
+      if (this.map.at(id) !== 'market') this.marketStock.delete(id);
+      else this.marketStock.set(id, Math.max(0, this.marketStock.get(id)! - marketPerDay));
+    }
+    const day = Math.floor(this.clock / calendar.ticksPerDay);
+    for (const [store, { farms, markets }] of this.coldRoutes) {
+      let stock = this.coldStock.get(store) ?? 0;
+      for (const market of [...markets].sort((a, b) => (this.marketStock.get(a) ?? 0) - (this.marketStock.get(b) ?? 0))) {
+        const current = this.marketStock.get(market) ?? 0;
+        const delivered = Math.min(stock, marketPerDay * batchDays - current);
+        this.marketStock.set(market, current + delivered);
+        if (delivered > 0 && emptyMarkets.delete(market)) this.addCityEvent('market-restocked', cellAt(market));
+        stock -= delivered;
+      }
+      for (const farm of farms) {
+        if (farmsUsed.has(farm) || stock >= capacity || day % batchDays !== farm % batchDays) continue;
+        stock = Math.min(capacity, stock + Math.round(this.farmYield(farm) * cratesPerYield));
+        farmsUsed.add(farm);
+      }
+      this.coldStock.set(store, stock);
+    }
+  }
+
+  transferRidersAt(cell: Cell): number {
+    return this.transfers.get(indexOf(cell)) ?? 0;
+  }
+
+  daycareSeatsAt(cell: Cell): number | undefined {
+    const id = indexOf(cell);
+    const tile = this.map.get(cell);
+    if (!this.hasCombo(cell, 'familyquarter')) return undefined;
+    if (tile === 'residential') return this.daycareSeats.get(id) ?? 0;
+    if (tile === 'daycare') return combos.familyquarter.seats;
+    return undefined;
+  }
+
+  foodStockAt(cell: Cell): number | undefined {
+    const id = indexOf(cell);
+    const tile = this.map.get(cell);
+    if (tile === 'coldstore') return this.coldStock.get(id) ?? 0;
+    if (tile === 'market' && (this.member(id, 'coldchain') || this.marketStock.has(id))) {
+      return this.marketStock.get(id) ?? 0;
+    }
+    return undefined;
   }
 
   /** Marks the tiles within reach of each fire station, police station, school and clinic. */
@@ -1932,7 +2455,7 @@ export class BuildingSystem {
     const { industry, power, road, park } = pollution;
     for (const id of this.buildings.keys()) {
       if (this.map.at(id) !== 'industrial') continue;
-      spread(id, industry.strength * (this.special[id] ? combos.estate.smog : 1) *
+      spread(id, industry.strength * (this.member(id, 'estate') || this.member(id, 'port') ? combos.estate.smog : 1) *
         (this.policiesOn.has('recycle') ? policies.recycle.smog : 1), industry.radius);
     }
     for (let id = 0; id < MAP_SIZE ** 2; id++) {
@@ -2076,6 +2599,7 @@ export class BuildingSystem {
 
   /** One round of matching. Returns true if a job came loose and the round must be run again. */
   private matchJobs(): boolean {
+    this.transfers.clear();
     this.commutes.length = 0;
     this.riders = 0;
     this.flows.fill(0);
@@ -2196,12 +2720,31 @@ export class BuildingSystem {
         if (list) list.push(...entries);
         else this.staff.set(workId, entries);
         // The quickest ride on one line with a stop near home and another near work, if any.
-        let ride: { plan: Line & { loads: number[] }; minutes: number } | undefined;
+        let ride: { plan: Line & { loads: number[] }; minutes: number;
+          second?: Line & { loads: number[] }; transfer?: number } | undefined;
         for (const from of this.stopsNear.get(building.id) ?? []) {
           for (const to of this.stopsNear.get(workId) ?? []) {
-            if (from.plan !== to.plan || from.index === to.index) continue;
-            const minutes = from.plan.headway / 2 + Math.abs(from.plan.times[from.index] - to.plan.times[to.index]);
-            if (!ride || minutes < ride.minutes) ride = { plan: from.plan, minutes };
+            if (from.plan === to.plan) {
+              if (from.index === to.index) continue;
+              const minutes = from.plan.headway / 2 + Math.abs(from.plan.times[from.index] - to.plan.times[to.index]);
+              if (!ride || minutes < ride.minutes) ride = { plan: from.plan, minutes };
+              continue;
+            }
+            if (from.plan.kind === to.plan.kind) continue;
+            for (const links of this.transferStops.values()) for (const link of links) {
+              const busFirst = from.plan === link.bus && to.plan === link.metro;
+              const metroFirst = from.plan === link.metro && to.plan === link.bus;
+              if (!busFirst && !metroFirst) continue;
+              const start = busFirst ? link.busIndex : link.metroIndex;
+              const end = busFirst ? link.metroIndex : link.busIndex;
+              if (from.index === start || to.index === end) continue;
+              const minutes = 3 + (from.plan.headway + to.plan.headway) / 2 +
+                Math.abs(from.plan.times[from.index] - from.plan.times[start]) +
+                Math.abs(to.plan.times[to.index] - to.plan.times[end]);
+              if (!ride || minutes < ride.minutes) {
+                ride = { plan: from.plan, second: to.plan, transfer: link.metroStop, minutes };
+              }
+            }
           }
         }
         // How many ride depends on how it compares with driving now, and on the room left.
@@ -2217,6 +2760,11 @@ export class BuildingSystem {
           const keen = having('rider');
           const willing = Math.floor((workers - having('driver') - keen) * share) + keen;
           riders = Math.max(0, Math.min(willing, ride.plan.capacity - ride.plan.loads[shift]));
+          if (ride.second) {
+            riders = Math.max(0, Math.min(riders, ride.second.capacity - ride.second.loads[shift]));
+            ride.second.loads[shift] += riders;
+            ride.second.riders += riders;
+          }
           ride.plan.loads[shift] += riders;
           ride.plan.riders += riders;
         }
@@ -2227,12 +2775,15 @@ export class BuildingSystem {
           if (flows[tile] > this.flows[tile]) this.flows[tile] = flows[tile];
         }
         this.commutes.push({ homeId: building.id, workId, workers, path, minutes: 0, shift, riders,
-          line: riders ? ride!.plan.id : undefined, transitMinutes: riders ? ride!.minutes : undefined });
+          line: riders ? ride!.plan.id : undefined, transfer: riders ? ride!.transfer : undefined, transitMinutes: riders ? ride!.minutes : undefined });
       }
       this.employed.set(building.id, people.filter(person => person.job >= 0).length);
     }
     if (loose) return true;
 
+    for (const { transfer, riders } of this.commutes) {
+      if (transfer !== undefined && riders) this.transfers.set(transfer, riders + (this.transfers.get(transfer) ?? 0));
+    }
     for (const plan of this.plans) plan.busiest = Math.max(...plan.loads);
 
     // Times are read once everyone is on the road, so early homes feel later traffic too.
@@ -2261,10 +2812,11 @@ export class BuildingSystem {
       lines: this.lines.map(line => ({ ...line, stops: [...line.stops] })),
       goals: [...this.goalsDone], loans: [...this.loans], tasks: [...this.tasksOn],
       combos: [...this.combosSeen], policies: [...this.policiesOn], challenge: this.challenge && { ...this.challenge },
-      dilemma: this.dilemma && { ...this.dilemma }, boosts: this.boosts.map(boost => ({ ...boost })), level: this.level, theme: this.theme };
+      dilemma: this.dilemma && { ...this.dilemma }, boosts: this.boosts.map(boost => ({ ...boost })), level: this.level, theme: this.theme,
+      coldStock: [...this.coldStock], marketStock: [...this.marketStock], monthlyVisits: [...this.monthlyVisits] };
   }
 
-  load({ tiles, zones, buildings, funds, rank, taxRate, tick, lines, goals: done, loans, seed, metros, tasks: saved, combos: known, policies: chosen, challenge, spans, dilemma, boosts, level, theme }: SaveData): void {
+  load({ tiles, zones, buildings, funds, rank, taxRate, tick, lines, goals: done, loans, seed, metros, tasks: saved, combos: known, policies: chosen, challenge, spans, dilemma, boosts, level, theme, coldStock, marketStock, monthlyVisits }: SaveData): void {
     this.seed = seed;
     this.goalsDone.clear();
     for (const goal of done) this.goalsDone.add(goal);
@@ -2293,6 +2845,12 @@ export class BuildingSystem {
     this.rank = rank;
     this.taxRate = taxRate;
     this.map.load(tiles, metros, spans);
+    this.monthlyVisits.clear();
+    for (const [id, count] of monthlyVisits ?? []) this.monthlyVisits.set(id, count);
+    this.coldStock.clear();
+    this.marketStock.clear();
+    for (const [id, stock] of coldStock ?? []) if (this.map.at(id) === 'coldstore') this.coldStock.set(id, stock);
+    for (const [id, stock] of marketStock ?? []) if (this.map.at(id) === 'market') this.marketStock.set(id, stock);
     this.zones.clear();
     this.buildings.clear();
     this.facilities.clear();

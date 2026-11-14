@@ -116,7 +116,7 @@ function oldTown(city: City, avenueEnd: number): Cell[] {
     // The schools and the clinic take three plots of the park strip, facing the north street.
     ['school', 4, 1], ['school', 10, 1], ['clinic', 7, 1],
     // A market, a high school, a temple and a cinema with its car park on the south street.
-    ['market', 9, 9], ['highschool', 11, 9], ['temple', 12, 9], ['cinema', 13, 9], ['parking', 10, 9],
+    ['cityhall', 1, 7], ['bank', 2, 7], ['market', 9, 9], ['highschool', 11, 9], ['temple', 12, 9], ['cinema', 13, 9], ['parking', 10, 9],
   ]);
   // A metro line from behind the homes to the factories: under the north street and the avenue.
   line(city, 'metro', [[3, 2], [10, 2], [16, 5]], 2);
@@ -163,13 +163,24 @@ export function demoCity(engine: SimulationEngine, size: DemoSize = 'small') {
     city.execute({ type: 'SET_ZONE', tiles: [...block(26, 27, 4, 4), ...block(29, 32, 4, 4), ...block(29, 31, 3, 3)],
       zone: 'residential' });
     city.execute({ type: 'SET_ZONE', tiles: [...block(26, 27, 6, 6), ...block(29, 32, 6, 6)], zone: 'commercial' });
+    fit(city, [['library', 2, 12], ['park', 3, 10], ['culture', 7, 10], ['market', 8, 10],
+      ['coldstore', 9, 10], ['square', 13, 10], ['daycare', 6, 10],
+      ['recycling', 17, 10], ['workshop', 17, 12]]);
+    fit(city, [['bus', 1, 3], ['bus', 4, 12]]);
+    line(city, 'bus', [[4, 12], [1, 3]], 2);
+    city.execute({ type: 'BUILD_FARM', tiles: [...block(6, 10, 12, 12), { x: 10, y: 10 }] });
+    const communityHomes = [{ x: 2, y: 10 }, { x: 3, y: 12 }, { x: 4, y: 10 }, { x: 5, y: 10 }, { x: 11, y: 12 }, { x: 13, y: 12 }, { x: 15, y: 10 }];
+    const communityShops = [{ x: 1, y: 1 }, { x: 3, y: 1 }, { x: 12, y: 12 }, { x: 14, y: 12 }];
+    city.execute({ type: 'SET_ZONE', tiles: communityHomes, zone: 'residential' });
+    city.execute({ type: 'SET_ZONE', tiles: communityShops, zone: 'commercial' });
+    city.execute({ type: 'SET_ZONE', tiles: [{ x: 16, y: 12 }], zone: 'industrial' });
     const id = ({ x, y }: Cell) => y * MAP_SIZE + x;
     const homes = [{ x: 1, y: 4 }, { x: 2, y: 4 }, { x: 8, y: 4 }, { x: 10, y: 4 }];
     const shops = [{ x: 2, y: 6 }, { x: 8, y: 6 }];
-    const factories = [{ x: 15, y: 4 }, { x: 16, y: 6 }];
+    const factories = [{ x: 15, y: 4 }, { x: 16, y: 6 }, { x: 16, y: 12 }];
     engine.load({ ...engine.save(), buildings: [
-      ...homes.map(home => ({ id: id(home), capacity: 4, occupants: 4, level: 1 })),
-      ...shops.map(shop => ({ id: id(shop), capacity: 3, occupants: 0, level: 1 })),
+      ...[...homes, ...communityHomes].map(home => ({ id: id(home), capacity: 4, occupants: 4, level: 1 })),
+      ...[...shops, ...communityShops].map(shop => ({ id: id(shop), capacity: 3, occupants: 0, level: 1 })),
       ...factories.map(factory => ({ id: id(factory), capacity: 5, occupants: 0, level: 1 })),
     ] });
     engine.advance(HISTORY);

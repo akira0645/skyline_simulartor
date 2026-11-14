@@ -72,6 +72,13 @@ it('adds up commuters per road tile and sends later homes around a jam', () => {
   // Commute times include the delay: the second home's eleven tiles take more than free flow.
   expect(commutes[1].minutes).toBeGreaterThan(11 * traffic.minutesPerTile);
   expect(city.getStats().commute).toBeGreaterThan(7 * traffic.minutesPerTile);
+
+  // Saturday has no factory commute, but employment and weekday routes are retained.
+  city.grow(40, 1);
+  expect(city.congestionAt({ x: 4, y: 2 })).toBe(0);
+  expect(city.getStats().late).toBe(0);
+  city.grow(56, 1);
+  expect(city.congestionAt({ x: 4, y: 2 })).toBeGreaterThan(0);
 });
 
 it('leaves jobs beyond the longest commute unfilled', () => {

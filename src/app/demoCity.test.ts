@@ -22,7 +22,9 @@ it('opens as a town that is lived in, pays its way and has work left to do', { t
   expect(opening.employed).toBeGreaterThan(0.85 * opening.population);
   expect(opening.funds).toBe(economy.startingFunds);
   expect(opening.budget.net).toBeGreaterThan(0);
+  expect(opening.budget.upkeep).toBeGreaterThanOrEqual(115);
   expect(Math.max(...engine.save().buildings.map(building => building.level))).toBeGreaterThanOrEqual(3);
+  expect(opening.combos).toMatchObject({ chinatown: 1, bookquarter: 1, arts: 1, coldchain: 1, nightmarket: 1, interchange: 1, familyquarter: 1, localbusiness: 1, workshop: 1 });
   expect(opening.riders).toBeGreaterThan(0);
   // What the town met by itself is ticked off; the larger goals are still to win.
   expect(opening.goals).toContain('jobs');
@@ -31,11 +33,13 @@ it('opens as a town that is lived in, pays its way and has work left to do', { t
 
   // Everything the town was meant to have got built and is connected.
   expect(city.map.get(powerPlant)).toBe('power');
+    expect(city.map.get({ x: 1, y: 7 })).toBe('cityhall');
+    expect(city.map.get({ x: 2, y: 7 })).toBe('bank');
   expect(city.map.get(waterTower)).toBe('water');
   expect(city.map.get(bridge)).toBe('bridge');
   const count = (tile: string) => engine.save().tiles.filter(code => TILES[code] === tile).length;
   expect(['power', 'water', 'fire', 'police', 'school', 'clinic', 'market', 'highschool'].map(count))
-    .toEqual([2, 2, 2, 2, 2, 1, 1, 1]);
+    .toEqual([2, 2, 2, 2, 2, 1, 2, 1]);
   // Three metro stations, each under a road that is still a road.
   expect(engine.save().metros).toHaveLength(3);
   expect(engine.save().metros.every(tile => ['road', 'avenue'].includes(TILES[engine.save().tiles[tile]]))).toBe(true);
@@ -43,7 +47,23 @@ it('opens as a town that is lived in, pays its way and has work left to do', { t
   expect(new Set(engine.save().buildings.filter(building => building.people).map(building => building.kind)).size)
     .toBeGreaterThan(2);
   expect(opening.idle).toBe(0);
-  expect(city.getLines()).toMatchObject([{ kind: 'metro', active: true, vehicles: 2 }]);
+  expect(city.getLines()).toMatchObject([{ kind: 'metro', active: true, vehicles: 2 },
+    { kind: 'bus', active: true, vehicles: 2 }]);
+  const temple = { x: 12, y: 9 };
+  expect(city.combosAt(temple)).toEqual(expect.arrayContaining(['chinatown', 'nightmarket']));
+  expect(city.find({ combo: 'nightmarket' })).toContainEqual(temple);
+  expect(city.transferRidersAt({ x: 3, y: 2 })).toBeGreaterThan(0);
+  const market = { x: 8, y: 10 };
+  expect(city.foodStockAt(market)).toBeGreaterThan(0);
+  const restored = new SimulationEngine({ version: 1, seed: 0, tick: 0 });
+  restored.load(structuredClone(engine.save()));
+  expect(restored.city.foodStockAt(market)).toBe(city.foodStockAt(market));
+  restored.city.execute({ type: 'DEMOLISH', x: 8, y: 11 });
+  restored.city.execute({ type: 'DEMOLISH', x: 8, y: 8 });
+  expect(restored.city.hasCombo(market, 'coldchain')).toBe(false);
+  expect(restored.city.foodStockAt(market)).toBeGreaterThan(0);
+  restored.advance(4 * calendar.ticksPerDay);
+  expect(restored.city.foodStockAt(market)).toBe(0);
   // People live and work somewhere in particular.
   const home = engine.save().buildings.find(building => building.people?.length)!;
   expect(home.people!.some(person => person.job >= 0)).toBe(true);
@@ -77,7 +97,8 @@ it('leaves the far bank without power, water or police until the player sees to 
   city.execute({ type: 'BUILD_SERVICE', x: x + 2, y: y + 2, service: 'fire' });
   const fixed = city.getStats();
   expect(fixed.idle).toBe(0);
-  expect(fixed.complaints).toMatchObject({ 'no-power': 0, 'no-water': 0, crime: 0 });
+  expect(fixed.complaints).toMatchObject({ 'no-power': 0, 'no-water': 0 });
+  expect(city.find({ issue: 'crime' }).filter(cell => cell.x >= x)).toEqual([]);
   engine.advance(12 * MONTH);
   expect(city.getStats().population).toBeGreaterThan(idle.population);
 });
@@ -93,6 +114,7 @@ it('comes in two larger sizes that are already cities, each with a new district 
     expect(opening.rank).toBe(rank);
     expect(opening.funds).toBe(demoSizes[size].funds);
     expect(opening.budget.net).toBeGreaterThan(0);
+  expect(opening.budget.upkeep).toBeGreaterThanOrEqual(115);
     expect(opening.idle).toBe(0);
     expect(city.getLines().filter(line => line.active)).toHaveLength(lines);
     // People have been here for years, own cars and live in homes of several kinds.
@@ -102,6 +124,8 @@ it('comes in two larger sizes that are already cities, each with a new district 
       .toBeGreaterThan(2);
     // The old town is the same in every size, so the outage buttons work in all of them.
     expect(city.map.get(powerPlant)).toBe('power');
+    expect(city.map.get({ x: 1, y: 7 })).toBe('cityhall');
+    expect(city.map.get({ x: 2, y: 7 })).toBe('bank');
     expect(city.map.get(works)).toBe('avenue');
     // The new district has streets and lots but no power, water or police.
     const { fresh } = demoSizes[size];

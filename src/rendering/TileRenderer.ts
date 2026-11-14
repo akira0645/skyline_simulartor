@@ -3,6 +3,8 @@ import { isBig, isFacility, isRoad, isService, MAP_SIZE, TILE_SIZE, type Cell, t
   type Zone } from '../simulation/TileMap';
 import type { HomeKind } from '../simulation/Residents';
 import type { Overlay } from '../app/tools';
+import { shiftIndex } from '../simulation/WorkShift';
+import { industryAt } from '../simulation/Industry';
 import { Camera } from './Camera';
 
 import type { BuildingSystem } from '../simulation/BuildingSystem';
@@ -31,6 +33,8 @@ const BUILDING_ART: Record<Zone, number[][]> = {
   commercial: [[0, 1, 3], [2, 4, 6, 7], [5, 8, 9]],
   industrial: [[1, 3, 5], [0, 2, 6], [4, 7, 8]],
 };
+const SHOP_ART = [[0, 1], [3], [4, 7]];
+const OFFICE_ART = [[2], [6], [5, 8, 9]];
 const zoneIndex: Record<Zone, number> = { residential: 0, commercial: 1, industrial: 2 };
 // Bit per neighbouring road, matching the column order of the road row.
 const roadSides = [[0, -1, 1], [1, 0, 2], [0, 1, 4], [-1, 0, 8]];
@@ -40,7 +44,7 @@ const TRAFFIC_COLOURS: [number, number][] = [[0.5, 0x4fc46b], [1, 0xf2d04b], [1.
 // The yellow median that tells an avenue from a street: [x, y, width, height] per road side.
 const MEDIAN = 0xf2c94c;
 const medianArms = [[15, 0, 2, 16], [16, 15, 16, 2], [15, 16, 2, 16], [0, 15, 16, 2]];
-const SMOG = 0x6b3fa0;
+const SMOG = 0xd28a38;
 // Land value from poor to prime.
 const VALUE_COLOURS: [number, number][] = [[30, 0xd9423a], [45, 0xf08a3c], [65, 0xf2d04b], [Infinity, 0x4fc46b]];
 const LEVEL_PIP = 0xffd95a;
@@ -53,7 +57,7 @@ const FACILITY_ROOF: Record<Facility | Service | 'bus' | 'metro', number> = {
   bus: 0xf2c94c, metro: 0xe5484d, market: 0xd9423a, highschool: 0x7f8fb8, hospital: 0xe04a3c,
   university: 0xc9735a, museum: 0xe6dfcf, stadium: 0x6fb565, temple: 0xe0782f,
   mall: 0xd9423a, casino: 0x8a5fd0, cinema: 0xc8322e, parking: 0x3f6fb0,
-  library: 0xb98a4a, pool: 0x5bb6ce, ktv: 0xe8799a, amusement: 0xf2c94c, gas: 0xe5484d,
+  library: 0xb98a4a, pool: 0x5bb6ce, ktv: 0xe8799a, amusement: 0xf2c94c, gas: 0xe5484d, cityhall: 0xb97a61, bank: 0x577d96, culture: 0x996694, coldstore: 0x568598, square: 0xad8f78, daycare: 0xb88449, recycling: 0x497c63, workshop: 0x80614f,
 };
 const WATER = [0x3f8fc4, 0x6fb4dc, 0x2f78ab];
 const SHORE = 0xd9cfa8;
@@ -62,11 +66,14 @@ const CIVIC_ROW = 5;
 // The signboard of each business a decision can bring: its board and the marks on it.
 const BRAND_SIGN = { lottery: [0xf2c94c, 0xe5484d], kiosk: [0xf4f6f8, 0xe5484d], branch: [0x3f6fb0, 0xf4f6f8],
   studio: [0x25232b, 0xf2c94c] } as const;
-const FLAGGED: readonly string[] = ['foodstreet', 'plaza', 'funcity', 'campus', 'medical'];
+const FLAGGED: readonly string[] = ['foodstreet', 'plaza', 'funcity', 'campus', 'medical', 'interchange'];
 // Where the two-by-two buildings start, and the column of the housing complex among them.
 const BIG_ROW = 6;
 const COMPLEX_ART = 0;
 const FOUNTAIN = [0x8f97a1, 0x74c7ed, 0xdff3fb];
+const CIVIC_DETAIL_ART: Partial<Record<string, number>> = {
+  cityhall: 0, bank: 1, culture: 2, coldstore: 3, square: 4, daycare: 5, recycling: 6, workshop: 7, gas: 8,
+};
 const CIVIC_ART: Partial<Record<Facility | Service | 'bus' | 'metro', number>> =
   { power: 0, water: 1, fire: 2, police: 3, school: 4, clinic: 5, bus: 6, metro: 7, market: 8, highschool: 9, temple: 10, cinema: 11,
     parking: 12, library: 13, pool: 14, ktv: 15 };
@@ -134,7 +141,7 @@ export class TileRenderer {
     selected?: Cell, layer: Overlay = 'none',
     range?: { centre: Cell; radius: number; kind: Facility | Service | 'bus' | 'metro' }, hour?: number,
     lines: readonly Line[] = [], marks: readonly Cell[] = [], rush: readonly number[] = [],
-    aim?: { cells: readonly Cell[]; ok: boolean }) {
+    aim?: { cells: readonly Cell[]; ok: boolean }, focus?: (cell: Cell) => boolean) {
     const map = city.map;
     const { theme } = city;
     this.city = this.sheets[theme];
@@ -169,8 +176,10 @@ export class TileRenderer {
         if (tile === 'grass') {
           tileAt(GRASS[seed % 7 === 0 ? 1 : 0], x, y);
           const roll = (seed >>> 8) % 100;
+          const boulevardPalm = theme === 'california' && x % 2 === 0 &&
+            (map.get({ x, y: y - 1 }) === 'avenue' || map.get({ x, y: y + 1 }) === 'avenue');
           // A tree's canopy covers the tile above, so it only grows below open grass.
-          if (theme === 'california' && roll >= 8 && roll < 30 &&
+          if (!boulevardPalm && theme === 'california' && roll >= 8 && roll < 30 &&
               roadSides.some(([dx, dy]) => map.get({ x: x + dx, y: y + dy }) === 'river')) {
             // By the water in California: a towel and a striped parasol on the grass.
             const left = x * TILE_SIZE + 6 + seed % 10;
@@ -179,7 +188,7 @@ export class TileRenderer {
             g.rect(left + 5, top + 3, 1, 8).fill(0x25232b);
             g.rect(left, top + 1, 11, 3).fill(0xe5484d).rect(left + 2, top + 1, 2, 3).rect(left + 7, top + 1, 2, 3).fill(0xf4f6f8)
               .rect(left + 2, top, 7, 1).fill(0xe5484d);
-          } else if (roll < 4 && theme === 'california') {
+          } else if (boulevardPalm || (roll < 4 && theme === 'california')) {
             // A palm: a thin leaning trunk and a crown of fronds.
             const left = x * TILE_SIZE;
             const top = y * TILE_SIZE;
@@ -342,24 +351,19 @@ export class TileRenderer {
           const anchor = map.anchorOf({ x, y });
           const art = anchor && BIG_ART[map.get(anchor) as Service];
           if (anchor && art !== undefined) bigs.set(anchor.y * MAP_SIZE + anchor.x, art);
-        } else if (tile === 'gas') {
-          // A filling station: a forecourt, a red canopy on posts over two pumps, and a small shop.
+        } else if (tile in CIVIC_DETAIL_ART) {
           tileAt(GRASS[0], x, y);
-          const left = x * TILE_SIZE;
-          const top = y * TILE_SIZE;
-          g.rect(left, top, TILE_SIZE, TILE_SIZE).fill(0x84878c).rect(left + 1, top + 1, 30, 30).fill(0x55575b);
-          g.rect(left + 19, top + 3, 11, 12).fill(0x25232b).rect(left + 20, top + 4, 9, 10).fill(0xf4f6f8)
-            .rect(left + 21, top + 8, 7, 6).fill(0x6fa8d0).rect(left + 20, top + 4, 9, 2).fill(0xe5484d);
-          g.rect(left + 3, top + 12, 2, 16).rect(left + 15, top + 12, 2, 16).fill(0xd6dbe6);
-          g.rect(left + 6, top + 20, 3, 8).rect(left + 11, top + 20, 3, 8).fill(0x25232b)
-            .rect(left + 6, top + 21, 3, 3).rect(left + 11, top + 21, 3, 3).fill(0xf2c94c);
-          g.rect(left + 3, top + 10, 16, 8).fill({ color: 0x101114, alpha: 0.3 });
-          g.rect(left + 1, top + 6, 18, 7).fill(0x25232b).rect(left + 2, top + 7, 16, 5).fill(0xe5484d)
-            .rect(left + 2, top + 7, 16, 1).fill(0xff8478).rect(left + 6, top + 9, 8, 1).fill(0xf4f6f8);
+          cityAt(CIVIC_DETAIL_ART[tile]!, 14, x, y);
         } else if (isFacility(tile) || isService(tile) || tile === 'bus' || tile === 'metro') {
           tileAt(GRASS[0], x, y);
           cityAt(CIVIC_ART[tile]!, CIVIC_ROW, x, y);
-          if (combo === 'fair') {
+          if (tile === 'library' && combo === 'bookquarter') {
+            const left = x * TILE_SIZE;
+            const top = y * TILE_SIZE;
+            g.rect(left + 8, top + 21, 16, 4).fill(0x355563)
+              .rect(left + 10, top + 22, 12, 1).fill(0xe2c78f);
+          }
+          if (combo === 'fair' || combo === 'chinatown') {
             // A temple fair: a string of red lanterns across the front.
             const left = x * TILE_SIZE;
             const top = y * TILE_SIZE;
@@ -374,7 +378,15 @@ export class TileRenderer {
           } else if (building) {
             const art = BUILDING_ART[tile][building.level - 1];
             if (building.kind) cityAt(KIND_ART[building.kind] * 2 + (seed >>> 4) % 2, HOME_ROW + building.level - 1, x, y);
-            else cityAt(art[(seed >>> 4) % art.length], BUILDING_ROW + zoneIndex[tile], x, y);
+            else if (tile === 'industrial') {
+              const row = { metal: 0, food: 1, warehouse: 2 }[industryAt({ x, y })];
+              cityAt(building.level - 1, HOME_ROW + 3 + row, x, y);
+            } else {
+              const shop = shiftIndex('commercial', y * MAP_SIZE + x) === 2;
+              const variants = tile === 'commercial'
+                ? (shop ? SHOP_ART : OFFICE_ART)[building.level - 1] : art;
+              cityAt(variants[(seed >>> 4) % variants.length], BUILDING_ROW + zoneIndex[tile], x, y);
+            }
             // Close up, a house shows the small things of the life in it.
             if (tile === 'residential' && building.level === 1 && camera.scale >= DETAIL_ZOOM) {
               const left = x * TILE_SIZE;
@@ -390,7 +402,21 @@ export class TileRenderer {
             const left = x * TILE_SIZE;
             const top = y * TILE_SIZE;
             const group = combo;
-            if (group === 'arcade') {
+            if (group === 'chinatown') {
+              if (tile === 'commercial') {
+                g.rect(left + 4, top + 19, 24, 3).fill(0x7e3033);
+                g.rect(left + 2, top + 20, 28, 3).fill(0xb74c45);
+                g.rect(left + 9, top + 15, 14, 3).fill(0x86403b)
+                  .rect(left + 11, top + 16, 10, 1).fill(0xf1c371);
+              } else {
+                g.rect(left + 8, top + 22, 2, 6).rect(left + 22, top + 22, 2, 6).fill(0x893633);
+                g.rect(left + 8, top + 22, 16, 2).fill(0xc15e4d);
+              }
+              for (const offset of [5, 25]) {
+                g.rect(left + offset, top + 24, 3, 4).fill(0xd96b50)
+                  .rect(left + offset, top + 27, 3, 1).fill(0xf1c371);
+              }
+            } else if (group === 'arcade') {
               // A shopping street: striped awnings along the foot of every shop.
               for (let at = 0; at < TILE_SIZE; at += 4) g.rect(left + at, top + 27, 4, 4).fill(at % 8 ? 0xf4f6f8 : 0xe5484d);
               g.rect(left, top + 31, TILE_SIZE, 1).fill(0x25232b);
@@ -494,7 +520,7 @@ export class TileRenderer {
             const level = city.pollutionAt(cell);
             if (level > 0) {
               overlay.rect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE)
-                .fill({ color: SMOG, alpha: 0.15 + 0.6 * level / 100 });
+                .fill({ color: level >= 50 ? 0xe44f32 : SMOG, alpha: level >= 50 ? 0.48 + level / 400 : level / 160 });
             }
             continue;
           }
@@ -562,6 +588,17 @@ export class TileRenderer {
       }
     }
 
+    if (focus) {
+      for (let y = Math.max(0, start.y); y <= Math.min(MAP_SIZE - 1, end.y); y++) {
+        for (let x = Math.max(0, start.x); x <= Math.min(MAP_SIZE - 1, end.x); x++) {
+          const cell = { x, y };
+          if (!focus(map.anchorOf(cell) ?? cell)) {
+            overlay.rect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE)
+              .fill({ color: 0x232833, alpha: 0.62 });
+          }
+        }
+      }
+    }
     for (const { x, y } of preview) {
       if (map.get({ x, y }) === undefined) continue;
       overlay.rect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE)
@@ -577,8 +614,7 @@ export class TileRenderer {
         overlay.rect(x * TILE_SIZE + 1, y * TILE_SIZE + 1, TILE_SIZE - 2, TILE_SIZE - 2).stroke({ color: colour, width: 2 });
       }
     }
-    // What the panel is pointing out: a yellow frame with a dark edge so it shows on anything.
-    for (const { x, y } of marks) {
+    if (!focus) for (const { x, y } of marks) {
       overlay.rect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE).stroke({ color: 0x25232b, width: 3 });
       overlay.rect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE).stroke({ color: 0xffe14d, width: 1.5 });
     }

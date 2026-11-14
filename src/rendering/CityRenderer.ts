@@ -10,7 +10,7 @@ import { transit } from '../simulation/Transit';
 import { lineColour } from '../app/lineColours';
 
 /** Milliseconds a line's vehicle takes per tile at 1× speed. */
-const LINE_PACE = { bus: 320, metro: 110 };
+const LINE_PACE = { bus: 320, metro: 250 };
 import { drawScene, sceneLength, type Scene } from './emergencyScenes';
 
 /** An emergency older than this many ticks when first seen is not played back. */
@@ -19,7 +19,7 @@ const CARS_SHOWN = 500;
 import { selection, type Overlay, type Tool } from '../app/tools';
 import { Camera } from './Camera';
 import { DETAIL_ZOOM, TileRenderer } from './TileRenderer';
-import { commuterPosition } from './commuterPosition';
+import { advancePedestrian, commuterPosition } from './commuterPosition';
 import { shiftIndex, shifts, workShift } from '../simulation/WorkShift';
 import { weekendAt } from '../simulation/calendar';
 import { rainingAt, seasonAt } from '../simulation/Seasons';
@@ -31,7 +31,8 @@ import { mind, SHOP_SHIFT } from '../simulation/Mind';
  * clock but run at this pace: a game day lasts eight seconds, so a commute timed in game hours
  * would be over in a blink.
  */
-const PACE = { walk: 900, drive: 450 };
+const WALK_MS_PER_TILE = 1250;
+const VISIT_STAY_MS = 1800;
 /** The same for each vehicle, in the order of Wealth's `vehicles`: a bicycle is slow, a car quick. */
 const VEHICLE_PACE = [700, 520, 450, 450, 430];
 /** How long a traffic light stays green each way, in milliseconds at 1× speed. */
@@ -41,19 +42,24 @@ const HEAD_START = 2;
 
 import type { BuildingSystem } from '../simulation/BuildingSystem';
 
+type FacilityVisit = ReturnType<BuildingSystem['facilityVisits']>[number];
+
 export class CityRenderer {
+  visitorsAt?: (cell: Cell) => (FacilityVisit & { phase: '前往中' | '使用中' | '回程' })[];
   refresh?: () => void;
   /** Called with the cell clicked while the line tool is in use. */
   onLineClick?: (cell: Cell) => void;
   /** Clears the inspected tile. */
   deselect?: () => void;
   /** Called when a commuter on the map is clicked, with their home and workplace. */
-  onPerson?: (homeId: number, workId: number) => void;
+  onPerson?: (homeId: number, person: { workId: number } | { slot: number }) => void;
   /** Tiles to frame on the map, and a way to bring one of them to the middle of the view. */
   marks: Cell[] = [];
+  focus?: (cell: Cell) => boolean;
   lookAt?: (cell: Cell) => void;
   /** The commuter to point out on the map, as `home:workplace`. */
   follow?: string;
+  followVisitor?: { home: number; slot: number };
   /** Where the map shows a commuter: settled at home or at work, or on the way to either. */
   tripOf?: (homeId: number, workId: number) => 'home' | 'work' | 'to-work' | 'to-home' | undefined;
 
@@ -116,7 +122,7 @@ export class CityRenderer {
     /** The cars that were on the road in the last frame, for the ones behind to keep clear of. */
     let cars: { x: number; y: number; hx: number; hy: number; index: number }[] = [];
     /** Where each commuter in sight was last drawn, for clicking on them. */
-    let spots: { x: number; y: number; homeId: number; workId: number }[] = [];
+    let spots: ({ x: number; y: number; homeId: number } & ({ workId: number } | { slot: number }))[] = [];
     this.tripOf = (homeId, workId) => {
       const trip = trips.get(`${homeId}:${workId}`);
       if (!trip) return undefined;
@@ -159,10 +165,10 @@ export class CityRenderer {
     };
     /** Road tiles where three or four roads meet, which get traffic lights; looked up again now and then. */
     let junctions = new Set<number>();
-    let junctionsAt = -Infinity;
+    let junctionRevision = -1;
     const findJunctions = () => {
-      if (performance.now() - junctionsAt < 500) return;
-      junctionsAt = performance.now();
+      if (junctionRevision === map.roadRevision) return;
+      junctionRevision = map.roadRevision;
       junctions = new Set();
       for (let y = 0; y < MAP_SIZE; y++) {
         for (let x = 0; x < MAP_SIZE; x++) {
@@ -177,6 +183,9 @@ export class CityRenderer {
     const greenUpright = (x: number, y: number) => (Math.floor(animationTime / LIGHT) + x + y) % 2 === 0;
     /** Whether it is raining just now; set once a frame. */
     let wet = false;
+    const walkForward = (roads: readonly Cell[], origin: Cell, along: number, advance: number, returning: boolean) =>
+      advancePedestrian(roads, origin, along, advance, returning, (entry, vertical) =>
+        !junctions.has(entry.y * MAP_SIZE + entry.x) || greenUpright(entry.x, entry.y) === vertical);
     const drawWalker = (cx: number, cy: number, index: number) => {
       // A person is small beside a house: three pixels across and nine tall.
       const x = Math.round(cx) - 1;
@@ -186,7 +195,7 @@ export class CityRenderer {
         people.rect(x - 3, y - 5, 9, 3).rect(x + 1, y - 2, 1, 3).fill(0x25232b);
         people.rect(x - 2, y - 4, 7, 1).fill([0xe5484d, 0x3f6fb0, 0xf2c94c, 0x5f9a6a, 0xf4f6f8][index % 5]);
       }
-      const stride = Math.floor(animationTime / 140 + index) % 2;
+      const stride = Math.floor(animationTime / 180 + index) % 2;
       people.rect(x - 1, y - 1, 5, 10).fill(0x25232b);
       people.rect(x, y, 3, 3).fill(0xffd1a0);
       people.rect(x, y + 3, 3, 3).fill([0x7edbed, 0xf6ba67, 0xe8799a, 0x8fbf6a, 0xd6d9de][index % 5]);
@@ -248,6 +257,21 @@ export class CityRenderer {
       }
     };
 
+    const activeVisits = new Map<number, { visit: FacilityVisit; elapsed: number; roads: Cell[]; returnPath?: Cell[]; homebound?: boolean }>();
+    this.visitorsAt = cell => {
+      const anchor = map.anchorOf(cell) ?? cell;
+      return [...activeVisits.values()].flatMap(({ visit, elapsed: age, homebound }) => {
+        if (homebound) return [];
+        const dest = visit.path.at(-1)!;
+        if (dest.x !== anchor.x || dest.y !== anchor.y) return [];
+        const travel = (visit.path.length - 1) * WALK_MS_PER_TILE;
+        const phase = age < travel ? '前往中' : age < travel + VISIT_STAY_MS ? '使用中' : '回程';
+        return [{ ...visit, phase }];
+      });
+    };
+    let visitKey = '';
+    let visitRevision = map.layoutRevision;
+    let visitTick = this.city.now;
     const drawPeople = (elapsed = 0) => {
       people.clear();
       wet = rainingAt(this.city.seed, this.city.now);
@@ -351,7 +375,7 @@ export class CityRenderer {
           return centre(position);
         };
         const along = trip.along;
-        let speed = 1 / PACE.walk;
+        let speed = 1 / WALK_MS_PER_TILE;
 
         if (!driving) {
           const spot = onRoad(along);
@@ -425,12 +449,13 @@ export class CityRenderer {
           }
           trip.held = blocked || red ? (trip.held ?? 0) + elapsed : 0;
           speed = filling || (trip.held > 0 && trip.held < (red ? 2 * LIGHT + 600 : 3500)) ? 0 : 1 / VEHICLE_PACE[tier];
+          if (this.city.crashDelay({ x: Math.floor(tileX), y: Math.floor(tileY) })) speed *= 0.35;
           drawCar(spot.x, spot.y, vertical, i, tier);
           seenAt(spot);
           if (inLane) moving.push({ x: tileX, y: tileY, hx, hy, index: i });
         }
 
-        trip.along = along + elapsed * speed;
+        trip.along = driving ? along + elapsed * speed : walkForward(route.path, returning ? workplace : home, along, elapsed * speed, returning);
         if (trip.along >= steps) trips.set(key, { at: to, wait: 0, count: trip.count });
       }
       if (elapsed > 0) cars = moving;
@@ -442,13 +467,7 @@ export class CityRenderer {
           drawCar(left + 6 + (bay % 3) * 10, top + (bay < 3 ? 8 : 24), true, lot + bay, 2 + bay % 2);
         }
       }
-      if (pin) {
-        // A yellow arrow bobbing over the one being followed.
-        const x = Math.round(pin.x);
-        const y = Math.round(pin.y) - 13 - Math.floor(animationTime / 300) % 2;
-        people.rect(x - 5, y - 8, 11, 6).rect(x - 3, y - 2, 7, 2).rect(x - 1, y, 3, 2).fill(0x25232b);
-        people.rect(x - 4, y - 7, 9, 4).rect(x - 2, y - 3, 5, 2).rect(x, y - 1, 1, 2).fill(0xffd95a);
-      }
+
 
       // Traffic lights at the junctions in sight: one lamp for each way, green or red.
       const viewLeft = -camera.x / camera.scale / TILE_SIZE - 1;
@@ -465,6 +484,72 @@ export class CityRenderer {
         people.rect(left + 1, top + 1, 5, 5).rect(left + 26, top + 26, 5, 5).fill(0x1b1d22);
         people.rect(left + 2, top + 2, 3, 3).fill(upright ? 0x4fc46b : 0xe5484d);
         people.rect(left + 27, top + 27, 3, 3).fill(upright ? 0xe5484d : 0x4fc46b);
+      }
+
+      const hour = this.hour();
+      const revision = map.layoutRevision;
+      if (revision !== visitRevision || this.city.now < visitTick) {
+        activeVisits.clear();
+        visitRevision = revision;
+      }
+      visitTick = this.city.now;
+      const key = [Math.floor(hour), revision, Math.floor(viewLeft / 4), Math.floor(viewTop / 4),
+        Math.ceil(viewRight / 4), Math.ceil(viewBottom / 4)].join(':');
+      for (const [home, trip] of activeVisits) {
+        const { visit, roads } = trip;
+        const origin = visit.path[0];
+        const dest = visit.path.at(-1)!;
+        const steps = roads.length + 1;
+        const travel = steps * WALK_MS_PER_TILE;
+        const returning = trip.elapsed >= travel + VISIT_STAY_MS;
+        if (returning && (visit.transfer || trip.returnPath)) {
+          const path = visit.transfer ?? trip.returnPath!;
+          const returnPath = visit.transfer ? this.city.roadBeside(path.at(-1)!) : undefined;
+          const homeRoad = returnPath && this.city.roadBeside(visit.path[0]);
+          const routeHome = returnPath && homeRoad && this.city.roadGraph.shortestPath(returnPath, homeRoad);
+          trip.returnPath = routeHome ? [path.at(-1)!, ...routeHome.path, visit.path[0]] : undefined;
+          trip.visit = { ...visit, path, transfer: undefined, doing: visit.transfer ? 'referred' : visit.doing };
+          trip.roads = path.slice(1, -1);
+          trip.elapsed = 0;
+          trip.homebound = !visit.transfer;
+          continue;
+        }
+        const walking = Math.max(0, returning ? trip.elapsed - travel - VISIT_STAY_MS : trip.elapsed);
+        if ((trip.homebound || returning) && walking >= travel) {
+          activeVisits.delete(home);
+          continue;
+        }
+        if (!returning && walking >= travel) {
+          trip.elapsed += elapsed;
+          continue;
+        }
+        const progress = walking / travel;
+        const point = commuterPosition({ homeId: origin.y * MAP_SIZE + origin.x, workId: dest.y * MAP_SIZE + dest.x, path: roads },
+          0, 'walk', returning ? 1 - progress : progress, false)!;
+        const spot = centre(point);
+        drawWalker(spot.x, spot.y, home + visit.slot);
+        spots.push({ ...spot, homeId: home, slot: visit.slot });
+        if (this.followVisitor?.home === home && this.followVisitor.slot === visit.slot) pin = spot;
+        trip.elapsed += (walkForward(roads, returning ? dest : visit.path[0],
+          walking / WALK_MS_PER_TILE, elapsed / WALK_MS_PER_TILE, returning) -
+          walking / WALK_MS_PER_TILE) * WALK_MS_PER_TILE;
+      }
+
+      if (elapsed > 0 && key !== visitKey) {
+        visitKey = key;
+        const scheduled = this.city.facilityVisits(Math.floor(hour), cell =>
+          cell.x >= viewLeft - 4 && cell.x <= viewRight + 4 && cell.y >= viewTop - 4 && cell.y <= viewBottom + 4);
+        for (const visit of scheduled) {
+          if (!activeVisits.has(visit.home)) activeVisits.set(visit.home, { visit, elapsed: 0, roads: visit.path.slice(1, -1) });
+        }
+      }
+
+      if (pin) {
+        // A yellow arrow bobbing over the one being followed.
+        const x = Math.round(pin.x);
+        const y = Math.round(pin.y) - 13 - Math.floor(animationTime / 300) % 2;
+        people.rect(x - 5, y - 8, 11, 6).rect(x - 3, y - 2, 7, 2).rect(x - 1, y, 3, 2).fill(0x25232b);
+        people.rect(x - 4, y - 7, 9, 4).rect(x - 2, y - 3, 5, 2).rect(x, y - 1, 1, 2).fill(0xffd95a);
       }
 
       // Each line's vehicles, evenly spread, running to the far end and back.
@@ -484,11 +569,15 @@ export class CityRenderer {
           return { x: (from.x + (to.x - from.x) * part + 0.5) * TILE_SIZE,
             y: (from.y + (to.y - from.y) * part + 0.5) * TILE_SIZE, upright: to.x === from.x };
         };
-        const lap = 2 * last * LINE_PACE[line.kind];
+        const travel = last * LINE_PACE[line.kind];
+        const layover = line.kind === 'metro' ? 650 : 0;
+        const halfLap = travel + layover;
+        const lap = 2 * halfLap;
         for (let vehicle = 0; vehicle < line.vehicles; vehicle++) {
           const turn = (animationTime / lap + vehicle / line.vehicles) % 1;
           const outbound = turn < 0.5;
-          const along = (outbound ? turn : 1 - turn) * 2 * last;
+          const progress = Math.min(1, (turn * lap % halfLap) / travel);
+          const along = (outbound ? progress : 1 - progress) * last;
           // A bus is one box; a train is three cars, the later ones trailing behind the first.
           const cars = line.kind === 'metro' ? 3 : 1;
           for (let car = 0; car < cars; car++) {
@@ -524,10 +613,11 @@ export class CityRenderer {
       effects.position.set(camera.x, camera.y);
       effects.scale.set(camera.scale);
       for (const event of this.city.getEvents()) {
+        if (event.kind === 'nightmarket-open' || event.kind === 'market-restocked') continue;
         const key = `${event.tick}:${event.kind}`;
         if (scenes.has(key) || this.city.now - event.tick > FRESH_TICKS) continue;
         const from = event.station && this.city.roadBeside(event.station);
-        const to = this.city.roadBeside(event.cell);
+        const to = isRoad(map.get(event.cell)) ? event.cell : this.city.roadBeside(event.cell);
         const route = from && to ? this.city.roadGraph.shortestPath(from, to)?.path : undefined;
         scenes.set(key, { event, since: animationTime, route });
       }
@@ -585,6 +675,18 @@ export class CityRenderer {
             const jet = 3 + Math.floor(time / 180) % 4;
             effects.rect(px + 15, py + 14 - jet, 2, jet).fill(0xdff3fb);
             effects.rect(px + 13, py + 15 - jet, 1, 2).rect(px + 18, py + 15 - jet, 1, 2).fill({ color: 0xdff3fb, alpha: 0.8 });
+          } else if (tile === 'square' && this.city.hasCombo({ x, y }, 'nightmarket') && hour >= 17 && hour < 23) {
+            for (const [dx, colour] of [[5, 0xc45948], [19, 0xbe8a44]]) {
+              effects.rect(px + dx, py + 12, 8, 9).fill(0x735843)
+                .rect(px + dx - 1, py + 11, 10, 4).fill(colour);
+              for (let stripe = 0; stripe < 10; stripe += 3) {
+                effects.rect(px + dx - 1 + stripe, py + 11, 1, 4).fill(0xf2d4a1);
+              }
+              effects.rect(px + dx + 2, py + 17, 4, 2).fill(0xeab672);
+              const visitor = (Math.floor(time / 280) + dx) % 9;
+              effects.rect(px + dx + visitor - 1, py + 24, 2, 3).fill(0x597794)
+                .rect(px + dx + visitor - 1, py + 23, 2, 1).fill(0xe5b38a);
+            }
           } else if (tile === 'amusement') {
             // The wheel's cars light up one after another, round and round.
             const cars = [[16, 4], [26, 10], [28, 16], [22, 26], [10, 26], [4, 16], [6, 10]];
@@ -608,7 +710,7 @@ export class CityRenderer {
               effects.rect(px + 16 - size / 2 + Math.sin(rise * 5 + seed) * 2, py + 12 - rise * 20, size, size)
                 .fill({ color: 0xf4f6f8, alpha: 0.6 * (1 - rise) });
             }
-          } else if (tile === 'temple' && this.city.comboAt({ x, y }) === 'fair' && night) {
+          } else if (tile === 'temple' && this.city.hasCombo({ x, y }, 'fair') && night) {
             // The lanterns of the temple fair glow at night.
             for (let at = 2; at < TILE_SIZE; at += 6) {
               effects.rect(px + at - 1, py + 1, 5, 6).fill({ color: 0xffb84d, alpha: 0.35 + 0.2 * Math.sin(time / 300 + at) });
@@ -725,7 +827,24 @@ export class CityRenderer {
     // `fromX` and `fromY` are where the pointer went down; `x` and `y` follow it.
     let drag: { id: number; tool: Tool; start: Cell; x: number; y: number; fromX: number; fromY: number } |
       undefined;
+    let lastFocus: typeof this.focus;
+    let lastRevision = -1;
+    let hasFocusMatches = false;
     const draw = () => {
+      const focus = this.focus;
+      if (focus !== lastFocus || lastRevision !== map.layoutRevision) {
+        lastFocus = focus;
+        lastRevision = map.layoutRevision;
+        hasFocusMatches = false;
+        if (focus) {
+          for (let id = 0; id < MAP_SIZE ** 2; id++) {
+            if (focus({ x: id % MAP_SIZE, y: Math.floor(id / MAP_SIZE) })) {
+              hasFocusMatches = true;
+              break;
+            }
+          }
+        }
+      }
       // Placing a plant or tower shows what it would reach, and which buildings are served now.
       const tool = getTool();
       const inspected = selected && (map.hasStation(selected) ? 'metro' : map.get(selected));
@@ -737,7 +856,7 @@ export class CityRenderer {
         kind === 'metro' ? { centre, radius: transit.metro.radius, kind: 'metro' as const } : undefined;
       const range = reach(tool, hover) ?? reach(inspected, selected);
 
-      const layer = this.overlay();
+      const layer = tool === 'park' ? 'pollution' : this.overlay();
       tiles.draw(this.city, camera, app.screen.width, app.screen.height, preview, selected,
         layer === 'none' && (isFacility(tool) || isService(tool) || tool === 'bus' || tool === 'metro') ?
           tool : layer,
@@ -745,7 +864,7 @@ export class CityRenderer {
         // Routes show while laying out transport, and in the map view for them.
         routesShown() ? this.city.getLines() : [], this.marks, rushNow(),
         aim && !drag && tool !== 'inspect' && tool !== 'pan' && tool !== 'line' ?
-          { cells: isBig(tool) ? footprint(aim) : [aim], ok: (isBig(tool) ? footprint(aim) : [aim]).every(cell => fits(tool, cell)) } : undefined);
+          { cells: isBig(tool) ? footprint(aim) : [aim], ok: (isBig(tool) ? footprint(aim) : [aim]).every(cell => fits(tool, cell)) } : undefined, hasFocusMatches && tool !== 'park' ? focus : undefined);
       drawPeople();
       drawEffects();
       app.render();
@@ -843,7 +962,7 @@ export class CityRenderer {
           if (distance < reach) [reach, picked] = [distance, spot];
         }
         if (picked && this.onPerson) {
-          this.onPerson(picked.homeId, picked.workId);
+          this.onPerson(picked.homeId, picked);
         } else if (map.get(start) !== undefined) {
           selected = start;
           inspect(start);

@@ -14,8 +14,9 @@ import { cycle, economy, milestones, tileCost, type Mood } from '../simulation/E
 import { dateAt, hourAt, weekdayAt } from '../simulation/calendar';
 import { traffic } from '../simulation/Traffic';
 import { pollution } from '../simulation/Pollution';
+import { industryAt, industryNames } from '../simulation/Industry';
 import { utilities } from '../simulation/Utilities';
-import { isBig, isFacility, isService, TILES, type Service } from '../simulation/TileMap';
+import { isBig, isFacility, isService, MAP_SIZE, TILES, type Service } from '../simulation/TileMap';
 import { services } from '../simulation/Services';
 import { SimulationClock, type SimulationSpeed } from '../simulation/SimulationClock';
 import { SimulationEngine } from '../simulation/SimulationEngine';
@@ -37,15 +38,17 @@ const speeds = [0, 1, 2, 4] as const;
 /** The build tools, one group per tab of the toolbar. */
 const toolGroups: [string, [Tool, string][]][] = [
   ['道路', [['road', '道路'], ['avenue', '大道'], ['viaduct', '高架']]],
-  ['交通', [['bus', '公車站'], ['metro', '捷運站'], ['gas', '加油站']]],
   ['分區', [['residential', '住宅'], ['commercial', '商業'], ['industrial', '工業']]],
+  ['交通', [['bus', '公車站'], ['metro', '捷運站'], ['gas', '加油站'], ['parking', '停車場']]],
   ['水電', [['power', '電廠'], ['water', '水塔']]],
-  ['服務', [['fire', '消防局'], ['police', '警察局'], ['clinic', '診所'], ['hospital', '醫院']]],
-  ['學校', [['school', '小學'], ['highschool', '高中'], ['university', '大學']]],
-  ['生活', [['park', '公園'], ['farm', '農田'], ['market', '市場'], ['temple', '廟'], ['parking', '停車場']]],
-  ['休閒', [['library', '圖書館'], ['cinema', '電影院'], ['pool', '游泳池'], ['ktv', 'KTV'], ['amusement', '遊樂園']]],
-  ['景點', [['mall', '大型商場'], ['casino', '賭場'], ['museum', '博物館'], ['stadium', '體育場']]],
-  ['其他', [['demolish', '拆除']]],
+  ['公共服務', [['fire', '消防局'], ['police', '警察局'], ['clinic', '診所'], ['hospital', '醫院']]],
+  ['教育', [['daycare', '托兒所'], ['school', '小學'], ['highschool', '高中'], ['university', '大學'], ['library', '圖書館']]],
+  ['市政', [['cityhall', '市政廳'], ['bank', '銀行']]],
+  ['民生', [['farm', '農田'], ['market', '市場'], ['coldstore', '冷鏈倉庫']]],
+  ['環保', [['recycling', '回收站'], ['workshop', '維修工坊']]],
+  ['休閒觀光', [['park', '公園'], ['square', '廣場'], ['temple', '廟'], ['cinema', '電影院'], ['pool', '游泳池'],
+    ['ktv', 'KTV'], ['amusement', '遊樂園'], ['mall', '大型商場'], ['casino', '賭場'],
+    ['museum', '博物館'], ['stadium', '體育場'], ['culture', '文化中心']]],
 ];
 
 /** Where each tool's picture sits in city.png, as [column, row]; the rest are drawn in CSS. */
@@ -53,7 +56,8 @@ const iconAt: Partial<Record<Tool, [number, number]>> = {
   road: [10, 0], avenue: [10, 0], residential: [0, 2], commercial: [0, 3], industrial: [0, 4],
   power: [0, 5], water: [1, 5], fire: [2, 5], police: [3, 5], school: [4, 5], clinic: [5, 5], bus: [6, 5], metro: [7, 5],
   market: [8, 5], highschool: [9, 5], temple: [10, 5], cinema: [11, 5], parking: [12, 5],
-  library: [13, 5], pool: [14, 5], ktv: [15, 5],
+  library: [13, 5], pool: [14, 5], ktv: [15, 5], cityhall: [0, 14], bank: [1, 14], culture: [2, 14], coldstore: [3, 14], square: [4, 14], daycare: [5, 14],
+  recycling: [6, 14], workshop: [7, 14], gas: [8, 14], park: [9, 14], farm: [10, 14], viaduct: [11, 14],
 };
 /** The buildings of two tiles by two, by their place in the row of them; shown at half size. */
 const bigIconAt: Partial<Record<Tool, number>> = { hospital: 1, university: 2, museum: 3, stadium: 4,
@@ -61,14 +65,14 @@ const bigIconAt: Partial<Record<Tool, number>> = { hospital: 1, university: 2, m
 const iconStyle = (tool: Tool) => {
   const big = bigIconAt[tool];
   if (big !== undefined) {
-    return { backgroundImage: `url(${cityUrl})`, backgroundSize: '256px 176px',
+    return { backgroundImage: `url(${cityUrl})`, backgroundSize: '256px auto',
       backgroundPosition: `-${big * 32}px -96px` };
   }
   const at = iconAt[tool];
-  return at && { backgroundImage: `url(${cityUrl})`, backgroundPosition: `-${at[0] * 32}px -${at[1] * 32}px` };
+  return at && { boxShadow: 'none', backgroundImage: `url(${cityUrl})`, backgroundPosition: `-${at[0] * 32}px -${at[1] * 32}px` };
 };
 
-const panelTabs = [['tile', '這格'], ['city', '城市'], ['tasks', '任務'], ['goals', '成就'], ['book', '手冊'], ['lines', '路線'], ['log', '紀錄']] as const;
+const panelTabs = [['tile', '地塊'], ['city', '城市'], ['tasks', '任務'], ['goals', '成就'], ['book', '手冊'], ['lines', '路線'], ['log', '紀錄']] as const;
 type PanelTab = (typeof panelTabs)[number][0];
 
 /** What one tile of a tool costs; nothing for the tool that only looks. */
@@ -105,7 +109,7 @@ function toolTip(tool: Tool): string {
     case 'residential': return '拖曳劃住宅，要貼著路。離工廠遠一點。';
     case 'commercial': return '拖曳劃商業，要貼著路。';
     case 'industrial': return '拖曳劃工業，要貼著路。會污染附近。';
-    case 'park': return '拖曳蓋公園。減少污染、提高地價。';
+    case 'park': return '拖曳蓋公園。橘紅色越深，污染越嚴重。';
     case 'farm': return '拖曳種田，產出民生用品。離水 3 格內收成三倍，太髒長不出來。';
     case 'demolish': return '點一下拆掉。';
     default: return '拖曳移動，點一格看資料，滾輪縮放。';
@@ -137,14 +141,52 @@ const overlays: [Overlay, string, string][] = [
 
 const zones = [['residential', '住宅'], ['commercial', '商業'], ['industrial', '工業']] as const;
 
+const facilityUse: Partial<Record<Tile, string>> = {
+  park: '散步、休息。公園也會降低周邊污染。',
+  culture: '看展覽。搭配市場和公園可形成藝文街區。',
+  library: '閱讀和借書。',
+  school: '家長送孩子上小學。',
+  highschool: '有青少年的家庭會在平日安排上學。',
+  university: '年輕居民可在平日到校上課。',
+  temple: '參拜、與鄰里聚會。',
+  cinema: '傍晚和晚間看電影。',
+  pool: '白天游泳。',
+  ktv: '晚間唱歌。',
+  amusement: '白天出遊、玩遊樂設施。',
+  casino: '晚間娛樂。',
+  museum: '白天參觀展覽。',
+  stadium: '參加運動活動或觀賽。',
+  daycare: '家長接送孩子。家庭生活圈每間托兒所可提供 8 個名額。',
+  clinic: '看診。附近居民生病時可以求助。',
+  bank: '辦理存款。連通銀行的居民每月可領存款利息，也能支援附近商店。',
+  market: '購買民生用品。接上食材配送網後會收貨並顯示庫存。',
+  square: '散步的公共空間。組成廟口夜市後，晚間可以逛攤。',
+  coldstore: '收存農田食材，再配送到市場。',
+  recycling: '向同一路網上的循環工坊提供回收材料。',
+  workshop: '把回收材料交給附近有員工的工廠，再製成商品。',
+  gas: '車輛可以在這裡加油。',
+  mall: '購物和逛街。附近有停車場時，可帶來更多觀光收入。',
+  parking: '附近車主可付費停車，停車費歸城市。靠近景點時也會增加觀光收入。',
+  fire: '向服務範圍內的火警派出消防車。',
+  police: '出勤處理犯罪並改善附近治安。',
+  hospital: '提供一般看診、急診及轉診。需要進一步檢查時，優先轉到醫療園區。',
+  power: '提供附近建築用電。',
+  water: '提供附近建築用水。',
+  bus: '讓居民搭乘已營運的公車路線。',
+  metro: '讓居民搭乘已營運的捷運路線。',
+};
+const visitable: readonly Tile[] = ['park', 'culture', 'library', 'school', 'daycare', 'clinic', 'hospital', 'bank', 'market', 'mall', 'square', 'highschool', 'university', 'temple', 'cinema', 'pool', 'ktv', 'amusement', 'casino', 'museum', 'stadium'];
+
 const issueNames: Record<Issue, string> = {
   'no-road': '沒貼路', 'no-power': '沒電', 'no-water': '沒水',
   'no-jobs': '找不到工作', 'long-commute': '上班太遠', pollution: '太髒', crime: '治安差', scared: '剛出事',
   'no-school': '沒小學', 'no-clinic': '沒診所', 'no-highschool': '沒高中', 'no-hospital': '沒醫院',
-  vacancies: '請不到人',
+  vacancies: '請不到人', 'no-park': '公園太遠', 'no-transit': '缺大眾運輸',
 };
 /** What each problem does and how to put it right, shown when its tag is picked. */
 const issueHelp: Record<Issue, string> = {
+  'no-park': '在住宅附近蓋公園。',
+  'no-transit': '在附近設站，接到一條有營運的公車或捷運路線。',
   'no-road': '旁邊沒有路，蓋不起來。鋪一條路貼著它。',
   'no-power': '沒電只能用一半。12 格內貼著路蓋電廠。',
   'no-water': '沒水只能用一半。12 格內貼著路蓋水塔。',
@@ -166,7 +208,7 @@ const tileNames: Record<Tile, string> = {
   fire: '消防局', police: '警察局', school: '小學', clinic: '診所',
   river: '河流', bridge: '橋', bus: '公車站', metro: '捷運站',
   market: '市場', highschool: '高中', hospital: '醫院', university: '大學', museum: '博物館', stadium: '體育場',
-  annex: '大建築', viaduct: '高架道路', gas: '加油站', farm: '農田', library: '圖書館', pool: '游泳池', ktv: 'KTV', amusement: '遊樂園', temple: '廟', mall: '大型商場', casino: '賭場', cinema: '電影院', parking: '停車場',
+  annex: '大建築', viaduct: '高架道路', gas: '加油站', cityhall: '市政廳', bank: '銀行', culture: '文化中心', coldstore: '冷鏈倉庫', square: '廣場', daycare: '托兒所', recycling: '回收站', workshop: '維修工坊', farm: '農田', library: '圖書館', pool: '游泳池', ktv: 'KTV', amusement: '遊樂園', temple: '廟', mall: '大型商場', casino: '賭場', cinema: '電影院', parking: '停車場',
 };
 
 /** What each kind of home is called, and who tends to live in it. */
@@ -186,11 +228,19 @@ const eventText: Record<CityEvent['kind'], string> = {
   fire: '失火沒人救，燒掉一棟，附近的人會怕一個月',
   'fire-out': '失火了，消防車趕到撲滅了',
   crime: `遭小偷沒人管，損失 $${services.crime.loss}，附近的人會怕一個月`,
+  robbery: `銀行遭搶，城市損失 $${services.robbery.loss}，附近居民受到驚嚇`,
+  'robbery-stopped': '銀行發生搶劫，警方已阻止',
   'crime-stopped': '遭小偷，警車趕到抓到人了',
   sick: '有人生病，附近沒有診所，搬走了',
   'sick-helped': '有人生病，救護車送去診所了',
   flood: '河水淹進來沒人救，附近的人會怕一個月',
   'flood-helped': '河水淹進來，消防隊抽乾了',
+  crash: '發生車禍，現場暫時壅塞',
+  'crash-cleared': '發生車禍，警方到場疏導',
+  'crash-hospital': '車禍有傷者，已派救護車送醫',
+  'crash-no-hospital': '車禍有傷者，附近沒有可到場的醫院',
+  'nightmarket-open': '週末夜市今晚出攤',
+  'market-restocked': '市場已補到食材',
   flu: '流感，附近沒有診所，有人病倒搬走了',
 };
 
@@ -275,6 +325,25 @@ function doingText(doing: Doing, shift: number | undefined, way: Way | undefined
     case 'helping': return '在幫鄰居的忙';
     case 'dining': return '在外面吃大餐';
     case 'home': return '在家休息';
+    case 'nightmarket': return '到廟口逛夜市';
+    case 'school': return '送孩子上小學';
+    case 'highschool': return '送孩子上高中';
+    case 'university': return '到大學上課';
+    case 'cinema': return '到電影院看電影';
+    case 'pool': return '到游泳池游泳';
+    case 'ktv': return '到 KTV 唱歌';
+    case 'amusement': return '到遊樂園遊玩';
+    case 'casino': return '到賭場娛樂';
+    case 'museum': return '參觀博物館';
+    case 'stadium': return '到體育場參加活動';
+    case 'clinic': return '到診所看診';
+    case 'hospital': return '到醫院就醫';
+    case 'referred': return '轉診到醫院';
+    case 'daycare': return '接送孩子';
+    case 'bank': return '到銀行辦事';
+    case 'exhibition': return '在文化中心看展、逛市集';
+    case 'reading': return '在社區圖書館看書';
+    case 'chinatown': return '在唐人街逛街、吃點心';
     case 'temple': return '在附近的廟裡拜拜、跟鄰居聊天';
     case 'online': return '附近沒有店，在家用手機訂日用品';
     case 'outing': return '放假，去附近好玩的地方逛逛';
@@ -369,7 +438,16 @@ const comboNames: Record<Combo, [string, string, string]> = {
   riverpark: ['河濱公園', `大公園（${combos.riverpark.tiles} 格以上）靠著水。旁邊地價 +${combos.riverpark.value.amount}。`, '公園和水…'],
   farmstead: ['農莊', `農田連 ${combos.farmstead.tiles} 格且有一格靠水。收成多五成，旁邊住宅變農家。`, '農田夠大又有水…'],
   arcade: ['商圈', `${combos.arcade.side} × ${combos.arcade.side} 的商店全部 3 級。有遊客收入。`, '一整塊最高級的商店…'],
-  fair: ['廟口夜市', `廟的 ${combos.fair.reach} 格內有市場和公園。有遊客收入。`, '廟的旁邊熱鬧起來…'],
+  arts: ['藝文街區', '文化中心附近有公園和同路網的市場。', '展覽和市集聚在一起…'],
+  coldchain: ['食材配送網', '冷鏈倉庫、市場和農田以道路相連。每天收貨與配送，斷路後市場會消耗庫存。', '冷藏設備把農產品送到市場…'],
+  nightmarket: ['廟口夜市', '廟、廣場和餐飲店接在同一條路網上。傍晚開攤，增加觀光收入。', '廟旁有廣場，也有吃的…'],
+  interchange: ['轉乘商圈', '公車和捷運有步行轉乘點，附近有店家。要有乘客實際轉乘。', '兩種車在這裡交會…'],
+  familyquarter: ['家庭生活圈', '托兒所、公園和住宅相連。每所托兒所有八個名額。', '接完孩子可以去公園…'],
+  localbusiness: ['社區商業街', '銀行和附近住宅、店家相連。貸款支援正常營業的店家升級。', '銀行照顧附近的小店…'],
+  workshop: ['循環工坊', '回收站、維修工坊和工廠相連。有員工上班才會把回收材料做成商品。', '舊東西也能重新利用…'],
+  bookquarter: ['書香街區', '圖書館周圍 4 格內有公園及 2 棟同一路網的住宅，可提升附近地價。', '圖書館旁有住家和綠地…'],
+  chinatown: ['唐人街', '廟宇周圍 5 格內有 3 棟住宅與 2 間店鋪，同一路網相連。', '廟旁逐漸形成住商街區…'],
+  fair: ['廟會', `廟的 ${combos.fair.reach} 格內有市場和公園。有遊客收入。`, '廟的旁邊熱鬧起來…'],
   foodstreet: ['美食街', `市場 ${combos.foodstreet.reach} 格內有 ${combos.foodstreet.shops} 間店。有遊客收入。`, '市場被店家圍起來…'],
   plaza: ['車站商圈', `捷運站 ${combos.plaza.reach} 格內有 ${combos.plaza.shops} 間店。有遊客收入。`, '捷運站出口都是店…'],
   funcity: ['娛樂城', `賭場 ${combos.funcity.reach} 格內有電影院和商場。有大筆遊客收入。`, '好玩的地方蓋在一起…'],
@@ -385,6 +463,7 @@ const nickNames = { cabin: '森林小屋', farmhouse: '農家' };
 const taskNames: Record<TaskId, string> = {
   power: '把電送到每一棟', water: '把水送到每一棟', police: '讓每一棟都有警察照顧', jobs: '讓大家找得到工作',
   commute: '縮短上班路程', air: '把空氣弄乾淨', school: '讓住宅附近有小學', clinic: '讓住宅附近有診所',
+  parks: '讓居民走得到公園', 'transit-cover': '把路線延伸到住宅區',
   highschool: '讓住宅附近有高中', hospital: '讓住宅附近有醫院', staff: '幫店家和工廠找到人',
 };
 /** The seasons, festivals, policies and challenges: what each is called, and what it does or needs. */
@@ -423,7 +502,7 @@ const dilemmaNames: Record<DilemmaId, [string, [string, string], [string, string
 const themeNames: Record<Theme, string> = { classic: '原本', sf: '舊金山', california: '加州', newyork: '紐約' };
 /** The three ready-made cities. */
 const demoList: [DemoSize, string, string, string[]][] = [
-  ['small', '小鎮', '140 人', ['加州風', '棕櫚和海灘', '東岸待開發']],
+  ['small', '小鎮', '140 人', ['加州風', '四種街區組合', '東岸待開發']],
   ['medium', '城鎮', '800 人', ['紐約風', '兩條河中間的島', '中央公園']],
   ['large', '大城市', '2,100 人', ['舊金山風', '海灣和紅色大橋', '金門公園', '纜車']],
 ];
@@ -435,7 +514,7 @@ const moodWord = (mood: number) => mood >= mind.glad ? '開心' : mood >= mind.l
 const serviceNames: Record<Service, string> = { fire: '消防', police: '警察', school: '小學', clinic: '診所',
   market: '市場', highschool: '高中', hospital: '醫院', university: '大學', museum: '博物館', stadium: '體育場',
   temple: '廟', mall: '商場', casino: '賭場', cinema: '電影院', parking: '停車場',
-  library: '圖書館', pool: '游泳池', ktv: 'KTV', amusement: '遊樂園', gas: '加油站' };
+  library: '圖書館', pool: '游泳池', ktv: 'KTV', amusement: '遊樂園', gas: '加油站', cityhall: '市政廳', bank: '銀行', culture: '文化中心', coldstore: '冷鏈倉庫', square: '廣場', daycare: '托兒所', recycling: '回收站', workshop: '維修工坊' };
 
 /** How full a road is, in the words of the traffic view's four colours. */
 const trafficName = (load: number) =>
@@ -518,6 +597,9 @@ export function App() {
   const knownEvent = useRef(0);
   const knownGoals = useRef(0);
   const knownMood = useRef<Mood>('normal');
+  const [buildOpen, setBuildOpen] = useState(true);
+  const [viewsOpen, setViewsOpen] = useState(true);
+  const [sideOpen, setSideOpen] = useState(true);
   const [toolTab, setToolTab] = useState(0);
   const [panelTab, setPanelTab] = useState<PanelTab>('city');
   // The line whose stops are being picked on the map, if any.
@@ -587,7 +669,10 @@ export function App() {
     rendererRef.current?.refresh?.();
     setDemo(false);
     setSaves(undefined);
-    if (rendererRef.current) rendererRef.current.marks = [];
+    if (rendererRef.current) {
+      rendererRef.current.marks = [];
+      rendererRef.current.focus = undefined;
+    }
     setMessage('讀好了。');
   }
 
@@ -658,7 +743,10 @@ export function App() {
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
-      if (rendererRef.current) rendererRef.current.marks = [];
+      if (rendererRef.current) {
+      rendererRef.current.marks = [];
+      rendererRef.current.focus = undefined;
+    }
       activeTool.current = 'inspect';
       editingRef.current = undefined;
       setEditing(undefined);
@@ -684,6 +772,15 @@ export function App() {
     }, cell => {
       setWho(undefined);
       setSelected(cell);
+      const match = /^tools:(\d+)(?::|$)/.exec(spot.current.key);
+      if (!match || !renderer.focus) return;
+      const map = engine.city.map;
+      const anchor = map.anchorOf(cell) ?? cell;
+      if (!renderer.focus(anchor)) return;
+      const index = Number(match[1]);
+      const station = map.hasStation(anchor) && toolGroups[index][1].some(([type]) => type === 'metro');
+      const type = station ? 'metro' : map.get(anchor);
+      if (type) highlightTools(index, type);
     }).catch((error: unknown) => {
       if (lifetime.signal.aborted) return;
       console.error('PixiJS initialization failed', error);
@@ -753,7 +850,7 @@ export function App() {
     if (latest && latest.tick > knownEvent.current) {
       knownEvent.current = latest.tick;
       // Only what went wrong, and fires, interrupt; routine calls just go in the list.
-      if (latest.kind === 'fire' || latest.kind === 'fire-out' || latest.kind === 'crime' || latest.kind === 'sick') {
+      if (latest.kind === 'fire' || latest.kind === 'fire-out' || latest.kind === 'crime' || latest.kind === 'robbery' || latest.kind === 'robbery-stopped' || latest.kind === 'sick') {
         setMessage(`${eventText[latest.kind]}。`);
       }
     }
@@ -761,19 +858,64 @@ export function App() {
   }, [engine, tick]);
 
   /** Frames these tiles on the map and brings one into view; asking again for the same thing moves to the next. */
-  function locate(key: string, cells: Cell[]) {
+  function locate(key: string, cells: Cell[], focus?: (cell: Cell) => boolean) {
     const renderer = rendererRef.current;
     if (!renderer) return;
-    renderer.marks = cells;
+    renderer.marks = focus ? [] : cells;
+    if (!key.startsWith('tools:')) renderer.focus = focus;
     if (!cells.length) {
       renderer.refresh?.();
-      setMessage('地圖上現在沒有。');
+      if (!key.startsWith('tools:')) setMessage('地圖上現在沒有。');
       return;
     }
     const index = spot.current.key === key ? (spot.current.index + 1) % cells.length : 0;
     spot.current = { key, index };
     renderer.lookAt?.(cells[index]);
-    setMessage(`黃框是它，第 ${index + 1} / ${cells.length} 處。再點看下一處，Esc 取消。`);
+    if (!focus && !key.startsWith('tools:')) setMessage(`已定位 ${index + 1} / ${cells.length}。`);
+  }
+
+  function selectMapTool(value: 'inspect' | 'demolish') {
+    const renderer = rendererRef.current;
+    if (renderer) {
+      renderer.focus = undefined;
+      renderer.marks = [];
+    }
+    pick(value);
+    if (value === 'inspect') setMessage('');
+  }
+
+  function selectToolTab(index: number) {
+    setToolTab(index);
+    pick('inspect');
+    highlightTools(index);
+  }
+
+  function highlightTools(index: number, only?: Tile) {
+    const renderer = rendererRef.current;
+    if (!renderer) return;
+    const types = new Set<string>(only ? [only] : toolGroups[index][1].map(([type]) => type));
+    const map = engine.city.map;
+    const matches = (cell: Cell) => {
+      const tile = map.get(cell);
+      return tile !== undefined && (types.has(tile) ||
+        (types.has('avenue') && tile === 'bridge') ||
+        (types.has('metro') && map.hasStation(cell)));
+    };
+    renderer.focus = matches;
+    renderer.marks = [];
+    setMessage('');
+    if (only) {
+      spot.current = { key: `tools:${index}:${only}`, index: 0 };
+      renderer.refresh?.();
+      return;
+    }
+    const cells: Cell[] = [];
+    for (let id = 0; id < MAP_SIZE ** 2; id++) {
+      const cell = { x: id % MAP_SIZE, y: Math.floor(id / MAP_SIZE) };
+      if (matches(cell)) cells.push(cell);
+    }
+    spot.current = cells.length ? spot.current : { key: `tools:${index}`, index: 0 };
+    locate(`tools:${index}`, cells);
   }
 
   /** Runs a command from a button rather than the map, then shows the result. */
@@ -808,7 +950,10 @@ export function App() {
     knownGoals.current = opening.goals.length;
     seenCombos.current = opening.combosSeen;
     knownCombos.current = opening.combosSeen.length;
-    if (rendererRef.current) rendererRef.current.marks = [];
+    if (rendererRef.current) {
+      rendererRef.current.marks = [];
+      rendererRef.current.focus = undefined;
+    }
     knownMood.current = opening.mood;
     void writeSlot(engine.save(), AUTO_SLOT, note()).catch(() => undefined);
     setStats(engine.city.getStats());
@@ -836,6 +981,11 @@ export function App() {
 
   const date = dateAt(tick);
   const info = selected && engine.city.inspect(selected);
+  const monthlyVisits = selected && engine.city.visitCountAt(selected);
+  const visitors = selected && info && panelTab === 'tile' && !who && visitable.includes(info.tile) ?
+    (rendererRef.current?.visitorsAt?.(selected) ?? []).map(visit => ({
+      ...visit, name: engine.city.person(visit.home, visit.slot, hour)?.name,
+    })) : undefined;
   const building = selected && engine.city.getBuilding(selected);
   const demoTile = (cell: Cell) => engine.city.map.get(cell);
   const shift = building && building.zone !== 'residential' ? workShift(building.zone, building.id) : undefined;
@@ -874,7 +1024,7 @@ export function App() {
         <dt>上班</dt><dd>{wayNames[seen.way]} {Math.max(1, Math.round(seen.minutes))} 分鐘</dd>
       </>}
       <dt>錢</dt>
-      <dd className="tags"><Tag label="日薪" value={money(seen.pay)} /><Tag label="存款" value={money(seen.money)} /></dd>
+      <dd className="tags"><Tag label="日薪" value={money(seen.pay)} /><Tag label={seen.bank ? "銀行存款" : "現金"} value={money(seen.money)} /></dd>
       <dt>車子</dt>
       <dd className="tags"><Tag label={vehicleNames[seen.car]} />
         {seen.car > 0 && <Tag label="養車" value={`${money(seen.keep)}/天`}
@@ -890,8 +1040,8 @@ export function App() {
     <p className="said">{spoken ? `「${thoughtNames[spoken]}」` : ''}</p>
   </section>;
   // What happened lately, to buildings and to people, newest first.
-  const happenings = [
-    ...engine.city.getEvents().map(event => ({ tick: event.tick, text: eventText[event.kind] })),
+  const happenings: { tick: number; text: string; cell?: Cell }[] = [
+    ...engine.city.getEvents().map(event => ({ tick: event.tick, text: eventText[event.kind], cell: event.cell })),
     ...engine.city.getNews().map(item => ({ tick: item.tick, text: newsText(item) })),
     ...engine.city.getFeasts().map(item => ({ tick: item.tick,
       text: item.income ? `${festivalNames[item.id][0]}，收入 ${money(item.income)}` : `${festivalNames[item.id][0]}沒辦成` })),
@@ -939,8 +1089,9 @@ export function App() {
   };
   if (rendererRef.current) {
     rendererRef.current.follow = seen && seen.jobId >= 0 ? `${seen.homeId}:${seen.jobId}` : undefined;
-    rendererRef.current.onPerson = (homeId, workId) => {
-      const slot = engine.city.personOn(homeId, workId);
+    rendererRef.current.followVisitor = who;
+    rendererRef.current.onPerson = (homeId, person) => {
+      const slot = 'slot' in person ? person.slot : engine.city.personOn(homeId, person.workId);
       if (slot === undefined) return;
       setWho({ home: homeId, slot });
       setPanelTab('tile');
@@ -958,7 +1109,7 @@ export function App() {
   const group = toolGroups[toolTab];
 
   return (
-    <main className="game">
+    <main className="game" data-side-open={sideOpen}>
       <div className="viewport" ref={viewport} data-tool={tool} role="region" aria-label="城市地圖" />
 
       <header className="hud top">
@@ -972,8 +1123,8 @@ export function App() {
           <b>{stats.population.toLocaleString('en-US')} 人</b>
           <small>{rankNames[stats.rank]}{nextRank && ` → ${nextRank.population.toLocaleString('en-US')}`}</small>
         </div>
-        <div className="stat demand" title="越長越缺">
-          <span>缺什麼</span>
+        <div className="stat demand" title="住宅、商業與工業分區需求">
+          <span>分區需求</span>
           {zones.map(([zone, label]) => (
             <label key={zone}>{label}
               <meter min={0} max={100} value={Math.max(0, stats.demand[zone])} />
@@ -1013,7 +1164,8 @@ export function App() {
         <button type="button" aria-label="關閉訊息" onClick={() => setMessage('')}>×</button>
       </p>
 
-      <aside className="hud side" aria-label="資料">
+      <button type="button" className="hud panel-toggle panel-toggle-side" aria-controls="side-panel" aria-expanded={sideOpen} onClick={() => setSideOpen(open => !open)}>{sideOpen ? '收合資料' : '展開資料'}</button>
+      <aside className="hud side" aria-label="資料" id="side-panel" hidden={!sideOpen}>
         <div className="tabs" role="tablist">
           {panelTabs.map(([value, label]) => (
             <button key={value} type="button" role="tab" aria-selected={panelTab === value}
@@ -1023,20 +1175,69 @@ export function App() {
           ))}
         </div>
 
+        <div className="side-content" key={panelTab}>
+        {panelTab === 'tile' && (info?.tile === 'cityhall' || info?.tile === 'bank') && <section>
+          <h2>{info.tile === 'cityhall' ? '市政廳' : '銀行'}</h2>
+          {info.tile === 'cityhall' ? <>
+            <p>目前稅率 {stats.taxRate}%</p>
+            <button type="button" onClick={() => setTax(stats.taxRate - 1)}>調低稅率</button>
+            <button type="button" onClick={() => setTax(stats.taxRate + 1)}>調高稅率</button>
+            <button type="button" onClick={() => setPanelTab('city')}>城市政策</button>
+          </> : <>
+            <p>同一路網、10 格內的居民可存款，月利率 0.5%。</p>
+            <p>每月還款 {money(stats.budget.loans)} · 月淨收入 {money(stats.budget.net)}</p>
+            {stats.loans.length > 0 && <ul>{stats.loans.map((months, index) =>
+              <li key={index}>第 {index + 1} 筆 · 剩 {months} 期 · {money(months * economy.loan.payment)}</li>)}</ul>}
+            <button type="button" onClick={() => changeLines(() => engine.city.borrow(), `借到 ${money(economy.loan.amount)}。`)}>借 {money(economy.loan.amount)}</button>
+          </>}
+        </section>}
         {panelTab === 'tile' && (personCard ? personCard : selected && info ? <section>
           <h2>{info.brand ? brandNames[info.brand] : info.nick ? nickNames[info.nick] : info.combo && PLACES_OF.includes(info.combo) ? comboNames[info.combo][0] :
-            info.complex ? '集合住宅' : info.bigPark ? '大公園' : info.kind ? homeKindNames[info.kind][0] : tileNames[info.tile]}</h2>
+            info.complex ? '集合住宅' : info.bigPark ? '大公園' : info.kind ? homeKindNames[info.kind][0] : info.tile === 'industrial' && info.building ? industryNames[industryAt(selected)] : info.tile === 'commercial' && building ? workShift('commercial', building.id).title : tileNames[info.tile]}</h2>
           {info.kind && <p className="hint">{homeKindNames[info.kind][1]}</p>}
           <dl>
+            {facilityUse[info.tile] && <>
+              <dt>設施用途</dt>
+              <dd>{facilityUse[info.tile]}</dd>
+            </>}
+            {monthlyVisits !== undefined && <>
+              <dt>本月拜訪人次</dt>
+              <dd>{monthlyVisits.toLocaleString('zh-TW')} 人次</dd>
+            </>}
+            {visitors && <>
+              <dt>目前訪客</dt>
+              <dd className="tags">
+                {visitors.length ? visitors.map(visit => <Tag key={`${visit.home}:${visit.slot}`}
+                  label={visit.name ?? '居民'} value={visit.doing === 'referred' && visit.phase === '前往中' ? '轉診途中' : visit.phase}
+                  tip={doingText(visit.doing, undefined, undefined)}
+                  onPick={() => setWho({ home: visit.home, slot: visit.slot })} />) :
+                  <Tag label="目前無人來訪" tone="dim" />}
+              </dd>
+            </>}
             {info.brand && <>
               <dt>招牌</dt>
               <dd className="tags"><Tag label={brandNames[info.brand]} tone="good" /><Tag label="收入" value={`${money(brands[info.brand])}/月`} tone="good" /></dd>
             </>}
-            {info.combo && <>
+            {engine.city.combosAt(selected).length > 0 && <>
               <dt>組合</dt>
-              <dd className="tags"><Tag label={comboNames[info.combo][0]} tone="good" tip={comboNames[info.combo][1]} />
+              <dd className="tags">{engine.city.combosAt(selected).map(combo =>
+                <Tag key={combo} label={comboNames[combo][0]} tone="good" tip={comboNames[combo][1]} />)}
                 {info.comboEarns ? <Tag label="收入" value={`${money(info.comboEarns)}/月`} tone="good" /> : null}</dd>
             </>}
+            {(() => {
+              const stock = engine.city.foodStockAt(selected);
+              const seats = engine.city.daycareSeatsAt(selected);
+              const riders = engine.city.transferRidersAt(selected);
+              return stock === undefined && seats === undefined && !riders ? null : <>
+                <dt>運作</dt>
+                <dd className="tags">
+                  {stock !== undefined && <Tag label={stock === 0 && info.tile === 'market' ? '食材缺貨' : '食材庫存'}
+                    value={stock} tone={stock ? 'good' : 'dim'} />}
+                  {seats !== undefined && <Tag label="托兒名額" value={seats} />}
+                  {!!riders && <Tag label="轉乘人次" value={riders} tone="good" />}
+                </dd>
+              </>;
+            })()}
             {info.building === false && <>
               <dt>狀況</dt>
               <dd className="tags">{info.roadAccess ? <Tag label="空地" tip="有人需要就會蓋" /> :
@@ -1175,10 +1376,10 @@ export function App() {
                 <Tag label="平均" value={stats.employed ? `${Math.round(stats.commute)} 分` : '—'} />
                 <Tag label="搭車" value={stats.riders} tip="搭公車或捷運上班的人" />
               </dd>
-              <dt>路上</dt>
+              <dt>通勤狀態</dt>
               <dd className="tags"><Tag label={rush[0] ?? '沒有人'} tone={rush.length ? undefined : 'dim'} tip="現在哪一班的人在上下班" /></dd>
               <dt>遲到</dt>
-              <dd className="tags"><Tag label="塞在路上" value={`${stats.late} 人`} tone={stats.late ? 'bad' : 'dim'}
+              <dd className="tags"><Tag label="受壅塞影響" value={`${stats.late} 人`} tone={stats.late ? 'bad' : 'dim'}
                 tip="上班被塞住的人會遲到，當天薪水少一成" /></dd>
               <dt>價格</dt>
               <dd className="tags" title="油價和物資價格會自己波動；物價在城市到過 400 人後，景氣好漲、景氣差跌。">
@@ -1199,7 +1400,7 @@ export function App() {
               </dd>
               <dt>景氣</dt>
               <dd className="tags">{stats.rank < cycle.rank ?
-                <Tag label="還沒開始" tone="dim" tip={`城市到過 ${cycle.population} 人以後，景氣會有好有壞`} /> :
+                <Tag label="尚未啟用" tone="dim" tip={`城市到過 ${cycle.population} 人以後，景氣會有好有壞`} /> :
                 <Tag label={moodNames[stats.mood][0]} tip={moodNames[stats.mood][1]}
                   tone={stats.mood === 'boom' ? 'good' : stats.mood === 'slump' ? 'bad' : undefined} />}</dd>
               <dt>用品</dt>
@@ -1208,7 +1409,7 @@ export function App() {
                   <><Tag label="夠用" tone={stats.goods.needed ? 'good' : 'dim'} /><Tag label="外銷" value={`+${money(stats.goods.trade)}/月`} /></> :
                   <><Tag label="不夠" tone="bad" /><Tag label="進口" value={`−${money(-stats.goods.trade)}/月`} tone="bad" /></>}
                 <Tag label="農田" value={stats.goods.farmed} tone={stats.goods.farmed ? undefined : 'dim'} tip="農田每月種出來的份數" />
-                <Tag label="買不到" value={`${stats.goods.needed - stats.goods.served} 人`}
+                <Tag label="購物需求未滿足" value={`${stats.goods.needed - stats.goods.served} 人`}
                   tone={stats.goods.served < stats.goods.needed ? 'bad' : 'dim'} tip="商店不夠，這麼多人買不到東西" />
               </dd>
               <dt>借款</dt>
@@ -1229,7 +1430,7 @@ export function App() {
             </dl>
           </section>
           <section>
-            <h2>今天</h2>
+            <h2>行事曆</h2>
             <div className="tags">
               <Tag label={seasonNames[stats.season][0]} tip={seasonNames[stats.season][1]} />
               <Tag label={weekendAt(tick) ? '假日' : '平日'} value={`遊客 ×${visitorsToday(tick)}`}
@@ -1394,7 +1595,7 @@ export function App() {
         </ul>}
 
         {panelTab === 'book' && <>
-          <p className="hint count">湊出來過 {stats.combosSeen.length} / {COMBOS.length} 種</p>
+          <p className="hint count">已發現 {stats.combosSeen.length} / {COMBOS.length}</p>
           <ul className="goals">
             {[...COMBOS].sort((a, b) => Number(stats.combosSeen.includes(b)) - Number(stats.combosSeen.includes(a))).map(combo => {
               const known = stats.combosSeen.includes(combo);
@@ -1402,8 +1603,9 @@ export function App() {
               return <li key={combo} className={known ? undefined : 'done'}>
                 <b>{known ? comboNames[combo][0] : '？？？'}</b>
                 <span>{comboNames[combo][known ? 1 : 2]}</span>
-                {known && <span className="tags"><Tag label="現在有" value={count} tone={count ? 'good' : 'dim'}
-                  onPick={count ? () => locate(`combo:${combo}`, engine.city.find({ combo })) : undefined} /></span>}
+                {known && <span className="tags"><Tag label="成立中" value={count} tone={count ? 'good' : 'dim'}
+                  onPick={count ? () => locate(`combo:${combo}`, engine.city.find({ combo }), cell => engine.city.hasCombo(cell, combo)) : undefined} />
+                  {!count && <Tag label="待恢復" tone="dim" />}</span>}
               </li>;
             })}
           </ul>
@@ -1411,11 +1613,20 @@ export function App() {
 
         {panelTab === 'log' && (happenings.length ? <ul>{happenings.map((item, index) => {
           const day = dateAt(item.tick);
-          return <li key={`${item.tick}-${index}`}>{day.month} 月 {day.day} 日：{item.text}</li>;
+          const cell = item.cell;
+          return <li key={`${item.tick}-${index}`}>
+            {day.month} 月 {day.day} 日　{item.text}
+            {cell && <button type="button" className="go" onClick={() => {
+              pick('inspect');
+              locate(`event:${item.tick}:${cell.x},${cell.y}`, [cell]);
+            }}>定位</button>}
+          </li>;
         })}</ul> : <p className="hint">還沒有事情發生。</p>)}
+        </div>
       </aside>
 
-      <div className="hud views" role="group" aria-label="地圖顯示">
+      <button type="button" className="hud panel-toggle panel-toggle-views" aria-controls="views-panel" aria-expanded={viewsOpen} onClick={() => setViewsOpen(open => !open)}>{viewsOpen ? '收合圖層' : '展開圖層'}</button>
+      <div className="hud views" role="group" aria-label="地圖顯示" id="views-panel" hidden={!viewsOpen}>
         <span>地圖顯示</span>
         {overlays.map(([value, label, tip]) => (
           <button key={value} type="button" aria-pressed={overlay === value} onClick={() => {
@@ -1427,13 +1638,17 @@ export function App() {
         ))}
       </div>
 
-      <nav className="hud build" aria-label="工具">
+      <button type="button" className="hud panel-toggle panel-toggle-build" aria-controls="build-panel" aria-expanded={buildOpen} onClick={() => setBuildOpen(open => !open)}>{buildOpen ? '收合建造' : '展開建造'}</button>
+      <nav className="hud build" aria-label="工具" id="build-panel" hidden={!buildOpen}>
         <div className="tray" role="group" aria-label={group[0]}>
           {group[1].map(([value, label]) => {
             // Bigger buildings open up as the city passes its population milestones.
             const locked = isService(value) ? engine.city.lockedUntil(value) : undefined;
             return <button key={value} type="button" data-tool={value} aria-pressed={tool === value}
-              disabled={locked !== undefined} onClick={() => pick(value)}>
+              disabled={locked !== undefined} onClick={() => {
+                pick(value);
+                highlightTools(toolTab, value as Tile);
+              }}>
               <i style={iconStyle(value)} />
               <span>{label}</span>
               <small>{locked !== undefined ? `滿 ${milestones[locked - 1].population.toLocaleString('en-US')} 人` :
@@ -1443,10 +1658,12 @@ export function App() {
         </div>
         <div className="tabs">
           <button type="button" className="look" aria-pressed={tool === 'inspect'} title="快速鍵：Esc"
-            onClick={() => pick('inspect')}>查看</button>
+            onClick={() => selectMapTool('inspect')}>查看</button>
+          <button type="button" className="remove" aria-pressed={tool === 'demolish'}
+            onClick={() => selectMapTool('demolish')}>拆除</button>
           {toolGroups.map(([name], index) => (
             <button key={name} type="button" role="tab" aria-selected={toolTab === index}
-              onClick={() => setToolTab(index)}>{name}</button>
+              onClick={() => selectToolTab(index)}>{name}</button>
           ))}
         </div>
       </nav>

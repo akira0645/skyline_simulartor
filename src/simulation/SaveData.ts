@@ -1,3 +1,4 @@
+import { combos } from './Combos';
 import { isZone, MAP_SIZE, TILES } from './TileMap';
 
 import { economy, milestones } from './Economy';
@@ -87,6 +88,9 @@ export interface SaveData {
   tasks: string[];
   /** The special groups (see Combos.ts) the city has ever had, for the handbook. */
   combos: string[];
+  coldStock?: [number, number][];
+  marketStock?: [number, number][];
+  monthlyVisits?: [number, number][];
   /** The policies that are on, and the challenge under way if there is one. */
   policies: string[];
   challenge?: Challenge;
@@ -97,6 +101,14 @@ export interface SaveData {
   level: number;
   /** The city's look. Saves from before there was a choice load as the first. */
   theme: Theme;
+}
+
+function parseStock(value: unknown, limit: number): [number, number][] {
+  if (value === undefined) return [];
+  if (!Array.isArray(value) || value.length > MAP_SIZE ** 2 || !value.every(entry =>
+    Array.isArray(entry) && entry.length === 2 && isCount(entry[0]) && entry[0] < MAP_SIZE ** 2 &&
+    isCount(entry[1]) && entry[1] <= limit)) throw new Error('存檔資料損壞。');
+  return value;
 }
 
 const zonedCode = (code: number) => isZone(TILES[code]);
@@ -272,6 +284,9 @@ export function parseSave(data: unknown): SaveData {
     loans: parseList((data as Record<string, unknown>).loans, isCount) as number[],
     tasks: parseList((data as Record<string, unknown>).tasks, value => typeof value === 'string') as string[],
     combos: parseList((data as Record<string, unknown>).combos, value => typeof value === 'string') as string[],
+    monthlyVisits: parseStock((data as Record<string, unknown>).monthlyVisits, Number.MAX_SAFE_INTEGER),
+    coldStock: parseStock((data as Record<string, unknown>).coldStock, combos.coldchain.capacity),
+    marketStock: parseStock((data as Record<string, unknown>).marketStock, combos.coldchain.marketPerDay * combos.coldchain.batchDays),
     policies: parseList((data as Record<string, unknown>).policies, value => typeof value === 'string') as string[],
     ...parseChallenge((data as Record<string, unknown>).challenge),
     ...parseDilemma(data as Record<string, unknown>), level: parseLevel((data as Record<string, unknown>).level),

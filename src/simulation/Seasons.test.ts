@@ -42,9 +42,10 @@ it('holds a festival on its day where the city has somewhere for it', () => {
   expect(games.income).toBeGreaterThan(100);
   expect(city.getStats().funds - eve).toBeGreaterThan(games.income);
   expect(eve).toBeGreaterThan(before);
-  // The harvest festival comes next, and a town without farmland has nothing to show.
+  // The demo has cold-chain farmland, so the harvest festival has produce to show.
   engine.advance(70 * DAY);
-  expect(city.getFeasts().at(-1)).toMatchObject({ id: 'harvest', income: 0 });
+  expect(city.getFeasts().at(-1)).toMatchObject({ id: 'harvest', income: expect.any(Number) });
+  expect(city.getFeasts().at(-1)!.income).toBeGreaterThan(0);
 });
 
 it('lets the city set policies, which cost money and are saved', () => {

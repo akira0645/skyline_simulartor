@@ -39,3 +39,22 @@ export function commuterPosition(
   const to = lanePoint(Math.min(steps, start + 1));
   return { x: from.x + (to.x - from.x) * fraction, y: from.y + (to.y - from.y) * fraction };
 }
+
+/** Keep the walker on the near sidewalk until the junction admits their approach. */
+export function advancePedestrian(
+  roads: readonly Cell[], origin: Cell, along: number, advance: number, returning: boolean,
+  canEnter: (junction: Cell, vertical: boolean) => boolean,
+): number {
+  const end = Math.min(roads.length + 1, along + advance);
+  // A stop is slightly before the tile edge to account for the sprite's width.
+  for (let step = Math.max(1, Math.ceil(along + 0.6 - 1e-9)); step <= roads.length; step++) {
+    const stop = step - 0.6;
+    if (end <= stop) break;
+    const index = returning ? roads.length - step : step - 1;
+    const approach = step === 1 ? origin : roads[index + (returning ? 1 : -1)];
+    const entry = roads[index];
+    const vertical = Math.abs(entry.y - approach.y) > Math.abs(entry.x - approach.x);
+    if (!canEnter(entry, vertical)) return Math.max(along, stop);
+  }
+  return end;
+}

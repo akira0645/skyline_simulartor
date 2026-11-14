@@ -9,7 +9,7 @@ export type Road = 'road' | 'avenue' | 'bridge';
 /** Public services, which cover an area without a limit on buildings. */
 export type Service = 'fire' | 'police' | 'school' | 'clinic' |
   'market' | 'highschool' | 'hospital' | 'university' | 'museum' | 'stadium' | 'temple' |
-  'mall' | 'casino' | 'cinema' | 'parking' | 'library' | 'pool' | 'ktv' | 'amusement' | 'gas';
+  'mall' | 'casino' | 'cinema' | 'parking' | 'library' | 'pool' | 'ktv' | 'amusement' | 'gas' | 'cityhall' | 'bank' | 'culture' | 'coldstore' | 'square' | 'daycare' | 'recycling' | 'workshop';
 /**
  * `annex` is the rest of a building that takes two tiles by two: the building's own tile is
  * its top left corner, and the three others are annexes.
@@ -25,7 +25,7 @@ export const TILES: readonly Tile[] =
   ['grass', 'road', 'residential', 'commercial', 'industrial', 'power', 'water', 'avenue', 'park',
     'fire', 'police', 'school', 'clinic', 'river', 'bridge', 'bus', 'metro',
     'annex', 'market', 'highschool', 'hospital', 'university', 'museum', 'stadium', 'temple',
-    'mall', 'casino', 'cinema', 'parking', 'farm', 'library', 'pool', 'ktv', 'amusement', 'viaduct', 'gas'];
+    'mall', 'casino', 'cinema', 'parking', 'farm', 'library', 'pool', 'ktv', 'amusement', 'viaduct', 'gas', 'cityhall', 'bank', 'culture', 'coldstore', 'square', 'daycare', 'recycling', 'workshop'];
 export const isZone = (tile: Tile | undefined): tile is Zone =>
   tile === 'residential' || tile === 'commercial' || tile === 'industrial';
 export const isFacility = (tile: string | undefined): tile is Facility =>
@@ -34,7 +34,8 @@ export const isService = (tile: string | undefined): tile is Service =>
   tile === 'fire' || tile === 'police' || tile === 'school' || tile === 'clinic' || tile === 'market' ||
   tile === 'highschool' || tile === 'hospital' || tile === 'university' || tile === 'museum' || tile === 'stadium' ||
   tile === 'temple' || tile === 'mall' || tile === 'casino' || tile === 'cinema' || tile === 'parking' ||
-  tile === 'library' || tile === 'pool' || tile === 'ktv' || tile === 'amusement' || tile === 'gas';
+  tile === 'library' || tile === 'pool' || tile === 'ktv' || tile === 'amusement' || tile === 'gas' || tile === 'cityhall' || tile === 'bank' || tile === 'culture' || tile === 'coldstore' ||
+  tile === 'square' || tile === 'daycare' || tile === 'recycling' || tile === 'workshop';
 /** The buildings that take two tiles by two. */
 export const isBig = (tile: string | undefined): boolean =>
   tile === 'hospital' || tile === 'university' || tile === 'museum' || tile === 'stadium' || tile === 'mall' ||
@@ -63,6 +64,11 @@ export const DRY_CORNER = { width: 34, height: 16 };
 
 export class TileMap {
   private roadVersion = 0;
+  private layoutVersion = 0;
+
+  get layoutRevision(): number {
+    return this.layoutVersion;
+  }
 
   get roadRevision(): number {
     return this.roadVersion;
@@ -124,6 +130,7 @@ export class TileMap {
 
   /** Turns cells into water, whatever they were. For laying out terrain, not for play. */
   flood(cells: readonly Cell[]): void {
+    this.layoutVersion++;
     for (const cell of cells) if (this.get(cell) !== undefined) this.tiles[cell.y * MAP_SIZE + cell.x] = 'river';
     this.roadVersion++;
   }
@@ -215,6 +222,7 @@ export class TileMap {
       if (this.hasStation(cell)) return { changed: [] };
       const error = approve?.([{ cell, tile: 'metro' }]);
       if (error) return { changed: [], error };
+      this.layoutVersion++;
       this.stations.add(cell.y * MAP_SIZE + cell.x);
       return { changed: [cell], layer: true };
     }
@@ -223,6 +231,7 @@ export class TileMap {
       const cell = { x: command.x, y: command.y };
       const error = approve?.([{ cell, tile: 'grass' }]);
       if (error) return { changed: [], error };
+      this.layoutVersion++;
       this.stations.delete(cell.y * MAP_SIZE + cell.x);
       return { changed: [cell], layer: true };
     }
@@ -285,6 +294,7 @@ export class TileMap {
     const error = changes.length ? approve?.(changes) : undefined;
     if (error) return { changed: [], error };
     if (changes.some(({ cell, tile: next }) => isRoad(next) || isRoad(this.get(cell)))) this.roadVersion++;
+    if (changes.length) this.layoutVersion++;
     for (const { cell: { x, y }, tile: next } of changes) this.tiles[y * MAP_SIZE + x] = next;
     return { changed: changes.map(({ cell }) => cell) };
   }
@@ -295,6 +305,7 @@ export class TileMap {
 
   load(codes: Uint8Array, stations: readonly number[] = [], spans: readonly number[] = []): void {
     this.roadVersion++;
+    this.layoutVersion++;
     this.spans.clear();
     for (const id of spans) this.spans.add(id);
     this.stations.clear();

@@ -19,6 +19,7 @@ it('turns enough park into a forest, and remembers it in the handbook when it is
   expect(city.getStats().combos.forest).toBe(1);
   expect(city.inspect({ x: 11, y: 11 })).toMatchObject({ combo: 'forest' });
   expect(city.find({ combo: 'forest' })).toHaveLength(combos.forest.tiles);
+  expect(block(10, 13, 10, 12).some(cell => city.parkAt(cell).fountain)).toBe(false);
   // A lot beside it is worth more, and a home there is a cabin.
   city.execute({ type: 'SET_ZONE', tiles: [{ x: 14, y: 10 }, { x: 30, y: 10 }], zone: 'residential' });
   expect(city.nickAt({ x: 14, y: 10 })).toBe('cabin');
@@ -26,6 +27,7 @@ it('turns enough park into a forest, and remembers it in the handbook when it is
   // One tile fewer is only a big park again, but the handbook keeps the entry, also in a save.
   city.execute({ type: 'DEMOLISH', x: 10, y: 10 });
   expect(city.getStats()).toMatchObject({ combos: { forest: 0 }, combosSeen: ['forest'] });
+  expect(block(10, 13, 10, 12).some(cell => city.parkAt(cell).fountain)).toBe(true);
   const restored = new SimulationEngine({ version: 1, seed: 0, tick: 0 });
   restored.load(structuredClone(engine.save()));
   expect(restored.city.getStats().combosSeen).toEqual(['forest']);
@@ -71,7 +73,50 @@ it('has a temple fair in the demo town, and gives out tasks that pay when they a
   expect(after.tasks.map(task => task.id)).not.toContain(taskDone!.id);
   expect(after.funds).toBeGreaterThan(before + taskList.find(task => task.id === taskDone!.id)!.reward - 200);
   // What is being worked on is saved.
+
   const restored = new SimulationEngine({ version: 1, seed: 0, tick: 0 });
   restored.load(structuredClone(engine.save()));
   expect(restored.city.getStats().tasks).toEqual(after.tasks);
+});
+
+it('forms Chinatown around connected homes and shops and remembers it after the road is cut', () => {
+  const engine = new SimulationEngine({ version: 1, seed: 3, tick: 0 });
+  const { city } = engine;
+  engine.load({ ...engine.save(), rank: 1 });
+  const temple = { x: 5, y: 4 };
+  const homes = block(2, 4, 4, 4);
+  const shops = [{ x: 6, y: 6 }, { x: 8, y: 6 }];
+  city.execute({ type: 'BUILD_ROAD', path: block(2, 8, 5, 5) });
+  expect(city.execute({ type: 'BUILD_SERVICE', ...temple, service: 'temple' }).error).toBeUndefined();
+  city.execute({ type: 'SET_ZONE', tiles: homes, zone: 'residential' });
+  city.execute({ type: 'SET_ZONE', tiles: shops, zone: 'commercial' });
+  city.found([...homes, ...shops]);
+  expect(city.getStats().combos.chinatown).toBe(1);
+  expect(city.find({ combo: 'chinatown' })).toHaveLength(6);
+  city.execute({ type: 'DEMOLISH', x: 6, y: 5 });
+  expect(city.getStats().combos.chinatown).toBe(0);
+  expect(city.getStats().combosSeen).toContain('chinatown');
+});
+
+it('sends residents to a reachable cultural centre and stops visits when the road is severed', () => {
+  const engine = new SimulationEngine({ version: 1, seed: 3, tick: 0 });
+  const { city } = engine;
+  const home = { x: 3, y: 4 };
+  const culturalCentre = { x: 6, y: 4 };
+  city.execute({ type: 'BUILD_ROAD', path: block(3, 6, 5, 5) });
+  city.execute({ type: 'SET_ZONE', tiles: [home], zone: 'residential' });
+  expect(city.execute({ type: 'BUILD_SERVICE', ...culturalCentre, service: 'culture' }).error).toBeUndefined();
+  city.found([home]);
+  expect(city.facilityVisits(13, () => true)).toMatchObject([
+    { doing: 'exhibition', path: [home, ...block(3, 6, 5, 5), culturalCentre] },
+  ]);
+  expect(city.visitorsAt(culturalCentre, 13)).toMatchObject([{ doing: 'exhibition', name: expect.any(String) }]);
+  engine.advance(3);
+  expect(city.visitCountAt(culturalCentre)).toBe(1);
+  const restored = new SimulationEngine({ version: 1, seed: 0, tick: 0 });
+  restored.load(engine.save());
+  expect(restored.city.visitCountAt(culturalCentre)).toBe(1);
+  city.execute({ type: 'DEMOLISH', x: 5, y: 5 });
+  expect(city.facilityVisits(13, () => true)).toEqual([]);
+  expect(city.visitorsAt(culturalCentre, 13)).toEqual([]);
 });

@@ -32,8 +32,11 @@ it('pays the staff of a shop more when business is good and less when it is quie
         (person.school ? schooling[person.school] : 1)));
     }
     // Business follows customers per member of staff.
-    const share = shop.custom! / (shop.occupants * goods.perClerk);
-    expect(shop.trade).toBe(share >= trade.busy ? 'busy' : share >= trade.good ? 'good' : share < trade.quiet ? 'quiet' : undefined);
+    const capacity = shop.occupants * goods.perClerk;
+    const classify = (share: number) => share >= trade.busy ? 'busy' : share >= trade.good ? 'good' : share < trade.quiet ? 'quiet' : undefined;
+    // Inspection rounds the customer count, while trade uses the unrounded value.
+    const possible = [classify((shop.custom! - 0.5) / capacity), classify((shop.custom! + 0.5) / capacity)];
+    expect(possible).toContain(shop.trade);
   }
   expect(seen.size).toBeGreaterThan(0);
 });

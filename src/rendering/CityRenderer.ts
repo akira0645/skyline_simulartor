@@ -12,6 +12,7 @@ import { drawScene, sceneLength, type Scene } from './emergencyScenes';
 
 /** An emergency older than this many ticks when first seen is not played back. */
 const FRESH_TICKS = 16;
+const CARS_SHOWN = 500;
 import { selection, type Overlay, type Tool } from '../app/tools';
 import { Camera } from './Camera';
 import { DETAIL_ZOOM, TileRenderer } from './TileRenderer';
@@ -207,7 +208,9 @@ export class CityRenderer {
       /** Kerb spots that already show a parked car. */
       const kerbs = new Set<string>();
       const centre = (cell: Cell) => ({ x: (cell.x + 0.5) * TILE_SIZE, y: (cell.y + 0.5) * TILE_SIZE });
-      for (let i = 0; i < Math.min(routes.length, 80); i++) {
+      // Every car on the map is someone's, driven out from their door. A very large city shows
+      // only its first routes, to keep each frame quick.
+      for (let i = 0; i < Math.min(routes.length, CARS_SHOWN); i++) {
         const route = routes[i];
         const tiles = route.path.length;
         const steps = tiles + 1;
@@ -446,42 +449,13 @@ export class CityRenderer {
       const time = animationTime;
       const hour = this.hour();
       const night = hour >= 19 || hour < 5;
-      const rush = rushNow();
       for (let y = top; y <= bottom; y++) {
         for (let x = left; x <= right; x++) {
           const tile = map.get({ x, y });
           const seed = (Math.imul(x, 73856093) ^ Math.imul(y, 19349663)) >>> 0;
           const px = x * TILE_SIZE;
           const py = y * TILE_SIZE;
-          if (isRoad(tile)) {
-            // Where the traffic view says a road is busy or jammed, the road shows it: the
-            // commuters drawn one by one are only a sample, so the rest of the queue is drawn here.
-            // Like the traffic view this goes by the shifts the map shows on the road just now.
-            const load = this.city.congestionOn({ x, y }, rush);
-            if (load <= 0.6) continue;
-            const across = isRoad(map.get({ x: x - 1, y })) || isRoad(map.get({ x: x + 1, y }));
-            const along = isRoad(map.get({ x, y: y - 1 })) || isRoad(map.get({ x, y: y + 1 }));
-            // A junction is left clear.
-            if (across === along) continue;
-            // The queue is one stream along the whole road, not a loop on each tile: every car
-            // has a place in it and rolls from tile to tile, so none appears from nowhere.
-            // There is a place every half tile; the fuller the road, the more of them hold a car,
-            // and a car that is in a thin stretch is in the thick one beside it too.
-            const gap = TILE_SIZE / 2;
-            const full = Math.min(1, (load - 0.6) / 0.6);
-            const from = across ? px : py;
-            for (let lane = 0; lane < 2; lane++) {
-              const shift = (lane ? -1 : 1) * time / 70 + lane * 7;
-              const side = lane ? -6 : 6;
-              for (let place = Math.ceil((from - shift) / gap); place * gap + shift < from + TILE_SIZE; place++) {
-                const at = place * gap + shift;
-                const look = Math.abs(place * 7 + (across ? y : x) * 13 + lane);
-                if ((Math.imul(look + 1, 2654435761) >>> 0) % 100 >= full * 100) continue;
-                if (across) drawCar(at, py + TILE_SIZE / 2 + side, false, look, 2 + look % 2);
-                else drawCar(px + TILE_SIZE / 2 - side, at, true, look, 2 + look % 2);
-              }
-            }
-          } else if (tile === 'river') {
+          if (tile === 'river') {
             // A glint that comes and goes on some of the water.
             if (seed % 2 === 0 && Math.floor(time / 500 + seed % 7) % 3 === 0) {
               effects.rect(px + 4 + seed % 20, py + 6 + (seed >>> 5) % 18, 4, 1).fill({ color: 0xdff3fb, alpha: 0.9 });

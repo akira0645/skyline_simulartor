@@ -52,7 +52,7 @@ const FACILITY_ROOF: Record<Facility | Service | 'bus' | 'metro', number> = {
   bus: 0xf2c94c, metro: 0xe5484d, market: 0xd9423a, highschool: 0x7f8fb8, hospital: 0xe04a3c,
   university: 0xc9735a, museum: 0xe6dfcf, stadium: 0x6fb565, temple: 0xe0782f,
   mall: 0xd9423a, casino: 0x8a5fd0, cinema: 0xc8322e, parking: 0x3f6fb0,
-  library: 0xb98a4a, pool: 0x5bb6ce, ktv: 0xe8799a, amusement: 0xf2c94c,
+  library: 0xb98a4a, pool: 0x5bb6ce, ktv: 0xe8799a, amusement: 0xf2c94c, gas: 0xe5484d,
 };
 const WATER = [0x3f8fc4, 0x6fb4dc, 0x2f78ab];
 const SHORE = 0xd9cfa8;
@@ -287,6 +287,20 @@ export class TileRenderer {
           const anchor = map.anchorOf({ x, y });
           const art = anchor && BIG_ART[map.get(anchor) as Service];
           if (anchor && art !== undefined) bigs.set(anchor.y * MAP_SIZE + anchor.x, art);
+        } else if (tile === 'gas') {
+          // A filling station: a forecourt, a red canopy on posts over two pumps, and a small shop.
+          tileAt(GRASS[0], x, y);
+          const left = x * TILE_SIZE;
+          const top = y * TILE_SIZE;
+          g.rect(left, top, TILE_SIZE, TILE_SIZE).fill(0x84878c).rect(left + 1, top + 1, 30, 30).fill(0x55575b);
+          g.rect(left + 19, top + 3, 11, 12).fill(0x25232b).rect(left + 20, top + 4, 9, 10).fill(0xf4f6f8)
+            .rect(left + 21, top + 8, 7, 6).fill(0x6fa8d0).rect(left + 20, top + 4, 9, 2).fill(0xe5484d);
+          g.rect(left + 3, top + 12, 2, 16).rect(left + 15, top + 12, 2, 16).fill(0xd6dbe6);
+          g.rect(left + 6, top + 20, 3, 8).rect(left + 11, top + 20, 3, 8).fill(0x25232b)
+            .rect(left + 6, top + 21, 3, 3).rect(left + 11, top + 21, 3, 3).fill(0xf2c94c);
+          g.rect(left + 3, top + 10, 16, 8).fill({ color: 0x101114, alpha: 0.3 });
+          g.rect(left + 1, top + 6, 18, 7).fill(0x25232b).rect(left + 2, top + 7, 16, 5).fill(0xe5484d)
+            .rect(left + 2, top + 7, 16, 1).fill(0xff8478).rect(left + 6, top + 9, 8, 1).fill(0xf4f6f8);
         } else if (isFacility(tile) || isService(tile) || tile === 'bus' || tile === 'metro') {
           tileAt(GRASS[0], x, y);
           cityAt(CIVIC_ART[tile]!, CIVIC_ROW, x, y);

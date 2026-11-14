@@ -5,6 +5,7 @@ import { challenges, disasters, festivals, nextFestival, policies, POLICIES, sea
   type Challenge, type FestivalId, type Policy, type Season } from './Seasons';
 import { cycle, economy, milestones, tileCost, type Mood } from './Economy';
 import { goals } from './Goals';
+import { fuelPrice, goodsPrice, prices } from './Prices';
 import { brands, dilemmas, type Answer, type Boost, type Brand, type Dilemma } from './Dilemmas';
 import { comboIncome, combos, comboValue, COMBOS, taskList, tasks, type Combo, type TaskId } from './Combos';
 import { goods } from './Goods';
@@ -112,6 +113,9 @@ export class BuildingSystem {
   private dilemma?: Dilemma;
   private readonly boosts: Boost[] = [];
   private dilemmaEnd?: { id: Dilemma['id']; answer: number; lost: number; tick: number; opened?: Cell };
+  /** The price level (saved), and what the city's share of the fuel its people buy comes to in a month. */
+  private level = 1;
+  private fuelTax = 0;
   /** The policies that are on. Saved. */
   private readonly policiesOn = new Set<Policy>();
   /** The challenge under way (saved), and how the last one ended (not saved). */
@@ -554,6 +558,22 @@ export class BuildingSystem {
     this.dilemma = { id: pick.id as Dilemma['id'], until: tick + dilemmas.days * calendar.ticksPerDay };
   }
 
+  /** What the month's goods bought and sold outside come to at today's prices. */
+  private tradeNow(): number {
+    return Math.round(this.market.trade * goodsPrice(this.clock) * this.level);
+  }
+
+  /** Whether a commute is held up: it takes this much longer than the empty road would. */
+  private heldUp(route: Commute): boolean {
+    return route.minutes > mind.jam * route.path.length * traffic.minutesPerTile;
+  }
+
+  /** What a day's fuel costs someone with a vehicle and this far to drive, and whether a station is in reach of home. */
+  private fuelFor(home: number, tiles: number): { cost: number; local: boolean } {
+    const local = this.covered.gas[home] === 1;
+    return { local, cost: prices.fuel.perTile * 2 * tiles * fuelPrice(this.clock) * this.level * (local ? 1 : prices.fuel.away) };
+  }
+
   /** Turns a policy on or off. */
   setPolicy(policy: Policy, on: boolean): void {
     if (on) this.policiesOn.add(policy);
@@ -927,15 +947,22 @@ export class BuildingSystem {
 
   /** A day's pay and a day's bills for everyone; whoever has saved enough buys the next vehicle up. */
   private payDay(): void {
+    const routes = new Map(this.commutes.map(route => [route.homeId * MAP_SIZE ** 2 + route.workId, route]));
     for (const [id, building] of this.buildings) {
       if (this.map.at(id) !== 'residential') continue;
       for (const person of building.people!) {
         const zone = person.job >= 0 ? this.map.at(person.job) : undefined;
         let money = person.money ?? 0;
         if (zone === 'commercial' || zone === 'industrial') {
-          money += this.payAt(person.job, traitOf(this.seed, id, person.slot, building.kind) === 'rich', id) - pay.living;
+          const route = routes.get(id * MAP_SIZE ** 2 + person.job);
+          // Held up on the road, they are late and docked for it.
+          const share = route && this.heldUp(route) ? 1 - prices.late.dock : 1;
+          money += (this.payAt(person.job, traitOf(this.seed, id, person.slot, building.kind) === 'rich', id) * share -
+            pay.living) * this.level;
+          if (person.car && route) money = Math.max(0, money - this.fuelFor(id, route.path.length).cost);
+          money = Math.round(money);
         } else {
-          money = Math.max(0, money - pay.living / 2);
+          money = Math.max(0, Math.round(money - pay.living / 2 * this.level));
         }
         const next = vehicles[(person.car ?? 0) + 1];
         if (next && money >= next.price) {
@@ -954,11 +981,18 @@ export class BuildingSystem {
   private countCars(): void {
     this.carCounts.fill(0);
     this.licence = 0;
+    this.fuelTax = 0;
+    const routes = new Map(this.commutes.map(route => [route.homeId * MAP_SIZE ** 2 + route.workId, route]));
     for (const [id, building] of this.buildings) {
       if (this.map.at(id) !== 'residential') continue;
       for (const person of building.people!) {
         this.carCounts[person.car ?? 0]++;
         this.licence += vehicles[person.car ?? 0].licence;
+        const route = person.car ? routes.get(id * MAP_SIZE ** 2 + person.job) : undefined;
+        if (!route) continue;
+        // The city's share of the fuel bought at its own stations, as a month's figure.
+        const fuel = this.fuelFor(id, route.path.length);
+        if (fuel.local) this.fuelTax += fuel.cost * prices.fuel.tax * calendar.daysPerMonth;
       }
     }
   }
@@ -1040,7 +1074,9 @@ export class BuildingSystem {
         way: !trip ? undefined : rides ? trip.ride : trip.route.path.length < mind.driveFrom ? 'walk' :
           !person.car ? 'bike' : person.car === 1 ? 'scooter' : 'drive',
         car: person.car ?? 0, jam: trip?.jam ?? false,
-        forest: this.wild[home] === 1,
+        forest: this.wild[home] === 1, gas: this.covered.gas[home] === 1,
+        fuelDear: fuelPrice(this.clock) >= prices.fuel.dear,
+        late: trip?.jam === true && !rides,
         raise: zone !== undefined && ['busy', 'good'].includes(this.tradeOf(person.job) ?? '') };
     };
   }
@@ -1287,6 +1323,7 @@ export class BuildingSystem {
     const result = { ...this.map.execute(command, changes => {
       let price = 0;
       for (const { tile } of changes) price += tileCost(tile);
+      price = Math.round(price * this.level);
       if (price > this.funds) return `錢不夠：要 $${price}，現在只有 $${Math.floor(this.funds)}。`;
       cost = price;
     }), cost };
@@ -1377,6 +1414,9 @@ export class BuildingSystem {
       this.holdFestival(tick);
     }
     // At the end of a month every loan has one payment fewer to go.
+    if (tick % (calendar.ticksPerDay * calendar.daysPerMonth) === 0 && this.rank >= cycle.rank) {
+      this.level *= 1 + prices.level[this.mood()] / calendar.monthsPerYear;
+    }
     if (tick % (calendar.ticksPerDay * calendar.daysPerMonth) === 0 && this.loans.length) {
       const left = this.loans.map(months => months - 1).filter(months => months > 0);
       this.loans.splice(0, this.loans.length, ...left);
@@ -1604,7 +1644,6 @@ export class BuildingSystem {
   private refresh(): void {
     this.circles.clear();
     this.bonds.clear();
-    this.countCars();
     // Who lives here does not change in what follows, and how business is depends on it.
     this.residents = 0;
     for (const [id, building] of this.buildings) {
@@ -1618,6 +1657,8 @@ export class BuildingSystem {
     this.planLines();
     this.assignJobs();
     this.shareCustom();
+    // Vehicles and the fuel they burn, which needs the routes and the stations' reach.
+    this.countCars();
     this.spreadPollution();
     this.residents = 0;
     for (const trait of TRAITS) this.traitCounts[trait] = 0;
@@ -2170,10 +2211,10 @@ export class BuildingSystem {
       lines: this.lines.map(line => ({ ...line, stops: [...line.stops] })),
       goals: [...this.goalsDone], loans: [...this.loans], tasks: [...this.tasksOn],
       combos: [...this.combosSeen], policies: [...this.policiesOn], challenge: this.challenge && { ...this.challenge },
-      dilemma: this.dilemma && { ...this.dilemma }, boosts: this.boosts.map(boost => ({ ...boost })) };
+      dilemma: this.dilemma && { ...this.dilemma }, boosts: this.boosts.map(boost => ({ ...boost })), level: this.level };
   }
 
-  load({ tiles, zones, buildings, funds, rank, taxRate, tick, lines, goals: done, loans, seed, metros, tasks: saved, combos: known, policies: chosen, challenge, spans, dilemma, boosts }: SaveData): void {
+  load({ tiles, zones, buildings, funds, rank, taxRate, tick, lines, goals: done, loans, seed, metros, tasks: saved, combos: known, policies: chosen, challenge, spans, dilemma, boosts, level }: SaveData): void {
     this.seed = seed;
     this.goalsDone.clear();
     for (const goal of done) this.goalsDone.add(goal);
@@ -2187,6 +2228,7 @@ export class BuildingSystem {
     for (const policy of POLICIES) if (chosen.includes(policy)) this.policiesOn.add(policy);
     this.challenge = challenge && { ...challenge };
     this.challengeEnd = undefined;
+    this.level = level;
     this.dilemma = dilemma && { ...dilemma };
     this.dilemmaEnd = undefined;
     this.boosts.splice(0, this.boosts.length, ...boosts.map(boost => ({ ...boost })));
@@ -2261,21 +2303,23 @@ export class BuildingSystem {
   budget() {
     const { population, employed } = this.supply();
     const taxpayers = population + this.traitCounts.rich * (traits.rich.taxTimes - 1);
-    const tax = Math.round((taxpayers * economy.tax.resident + employed * economy.tax.job) *
+    const tax = Math.round((taxpayers * economy.tax.resident + employed * economy.tax.job) * this.level *
       this.taxRate / economy.taxRate.default * (this.mood() === 'boom' ? cycle.boom.tax : 1));
-    let upkeep = this.tileUpkeep;
+    let upkeep = this.tileUpkeep * this.level;
     // Lines cost by the vehicle and earn by the rider.
     let fares = 0;
     for (const plan of this.plans) {
       upkeep += plan.vehicles * transit[plan.kind].vehicleUpkeep;
       if (!this.policiesOn.has('freeride')) fares += plan.riders * transit[plan.kind].fare;
     }
-    const { trade } = this.market;
+    const trade = this.tradeNow();
     for (const policy of this.policiesOn) upkeep += Math.round(policies[policy].fixed + policies[policy].perResident * population);
     const loans = this.loans.length * economy.loan.payment;
     const { visitors, licence } = this;
-    return { tax, fares, trade, visitors, licence, loans, upkeep,
-      net: tax + fares + trade + visitors + licence - upkeep - loans };
+    const fuel = Math.round(this.fuelTax);
+    upkeep = Math.round(upkeep);
+    return { tax, fares, trade, visitors, licence, fuel, loans, upkeep,
+      net: tax + fares + trade + visitors + licence + fuel - upkeep - loans };
   }
 
   /** How many buildings stand at each level, 1 to 4. */
@@ -2317,13 +2361,17 @@ export class BuildingSystem {
       commute: supply.employed ? minutes / supply.employed : 0,
       demand: this.getDemand(supply), funds: this.funds, taxRate: this.taxRate, budget: this.budget(), rank: this.rank,
       complaints, idle: this.idle(), riders: this.riders,
-      goods: this.market, traits: { ...this.traitCounts }, levels: this.levelCounts(),
+      goods: { ...this.market, trade: this.tradeNow() }, traits: { ...this.traitCounts }, levels: this.levelCounts(),
       /** How many residents own each vehicle, by its index in Wealth's `vehicles`. */
       cars: [...this.carCounts],
       bigParks: this.bigParks, complexes: this.complexes(), goals: [...this.goalsDone],
       combos: { ...this.comboCounts }, combosSeen: COMBOS.filter(combo => this.combosSeen.has(combo)),
       /** The tasks being worked on with how many buildings still have the trouble. */
       tasks: this.tasksOn.map(id => ({ id, left: complaints[taskList.find(task => task.id === id)!.issue] })),
+      /** Prices: the level of all of them, fuel and goods as multiples of the usual. */
+      prices: { level: this.level, fuel: fuelPrice(this.clock), goods: goodsPrice(this.clock) },
+      /** Commuters held up on the road, who are late and docked for it. */
+      late: this.commutes.reduce((sum, route) => this.heldUp(route) ? sum + route.workers - route.riders : sum, 0),
       season: seasonAt(this.clock), policies: POLICIES.filter(policy => this.policiesOn.has(policy)),
       /** The next festival, how many days off it is, and whether the city has somewhere to hold it. */
       festival: { ...nextFestival(this.clock), ready: this.venueOf(nextFestival(this.clock).id) > 0 },

@@ -11,13 +11,13 @@ export const economy = {
     fire: 800, police: 800, school: 1200, clinic: 1000, bus: 200, metro: 2000,
     market: 900, highschool: 2500, hospital: 6000, university: 12000, museum: 8000, stadium: 20000,
     temple: 1500, mall: 15000, casino: 25000, cinema: 3000, parking: 400, farm: 15,
-    library: 1800, pool: 2200, ktv: 2500, amusement: 18000, viaduct: 120 },
+    library: 1800, pool: 2200, ktv: 2500, amusement: 18000, viaduct: 120, gas: 1500 },
   /** Monthly upkeep per tile. */
   upkeep: { road: 1, avenue: 3, bridge: 4, power: 150, water: 100, park: 1, fire: 60, police: 60,
     school: 80, clinic: 70, bus: 15, metro: 100,
     market: 50, highschool: 140, hospital: 320, university: 500, museum: 350, stadium: 800, annex: 0,
     temple: 60, mall: 600, casino: 700, cinema: 120, parking: 10, farm: 0,
-    library: 70, pool: 110, ktv: 100, amusement: 650, viaduct: 5,
+    library: 70, pool: 110, ktv: 100, amusement: 650, viaduct: 5, gas: 60,
   } satisfies Record<Road | Facility | Service | 'park' | 'bus' | 'metro' | 'annex' | 'farm' | 'viaduct', number>,
   /** Monthly tax per resident and per filled job at the default tax rate. */
   tax: { resident: 8, job: 5 },

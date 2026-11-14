@@ -87,6 +87,8 @@ export interface SaveData {
   /** The decision waiting for an answer, and what the last answers still do to demand. */
   dilemma?: Dilemma;
   boosts: Boost[];
+  /** The price level: 1 on the city's first day (see Prices.ts). Saves from before there was one load at 1. */
+  level: number;
 }
 
 const zonedCode = (code: number) => isZone(TILES[code]);
@@ -134,6 +136,12 @@ function parseDilemma({ dilemma, boosts }: Record<string, unknown>): { dilemma?:
   const { id, until } = (dilemma ?? {}) as Record<string, unknown>;
   if (!dilemmas.list.some(entry => entry.id === id) || !isCount(until)) throw new Error('存檔資料損壞。');
   return { dilemma: { id: id as Dilemma['id'], until }, boosts: kept };
+}
+
+function parseLevel(value: unknown): number {
+  if (value === undefined) return 1;
+  if (typeof value !== 'number' || !(value > 0.1 && value < 100)) throw new Error('存檔資料損壞。');
+  return value;
 }
 
 function parseChallenge(value: unknown): { challenge?: Challenge } {
@@ -258,5 +266,5 @@ export function parseSave(data: unknown): SaveData {
     combos: parseList((data as Record<string, unknown>).combos, value => typeof value === 'string') as string[],
     policies: parseList((data as Record<string, unknown>).policies, value => typeof value === 'string') as string[],
     ...parseChallenge((data as Record<string, unknown>).challenge),
-    ...parseDilemma(data as Record<string, unknown>) };
+    ...parseDilemma(data as Record<string, unknown>), level: parseLevel((data as Record<string, unknown>).level) };
 }

@@ -36,7 +36,7 @@ const speeds = [0, 1, 2, 4] as const;
 /** The build tools, one group per tab of the toolbar. */
 const toolGroups: [string, [Tool, string][]][] = [
   ['道路', [['road', '道路'], ['avenue', '大道'], ['viaduct', '高架']]],
-  ['交通', [['bus', '公車站'], ['metro', '捷運站']]],
+  ['交通', [['bus', '公車站'], ['metro', '捷運站'], ['gas', '加油站']]],
   ['分區', [['residential', '住宅'], ['commercial', '商業'], ['industrial', '工業']]],
   ['水電', [['power', '電廠'], ['water', '水塔']]],
   ['服務', [['fire', '消防局'], ['police', '警察局'], ['clinic', '診所'], ['hospital', '醫院']]],
@@ -87,6 +87,7 @@ function toolTip(tool: Tool): string {
       tool === 'university' ? '範圍很大。' :
       tool === 'parking' ? '蓋在休閒建築 4 格內，遊客多兩成五。' :
       tool === 'casino' ? '最賺，但附近地價變低、會嫌吵。' :
+      tool === 'gas' ? '範圍內有車的人在這裡加油，城市抽三成；沒有加油站的人要多花五成去外地加。' :
       tool === 'library' ? '附近地價變高，住附近的人放假會來。' :
       tool === 'ktv' ? '會賺錢，但附近地價低一點。' :
       services.visitors[tool] ? '人越多賺越多，假日更多。' : '';
@@ -119,6 +120,8 @@ const moodNames: Record<Mood, [string, string]> = {
 
 /** City ranks, indexed by how many milestones have been reached. */
 const rankNames = ['空地', '小村', '村莊', '小鎮', '城鎮', '城市', '大城市'];
+/** A price as how far it is above or below the usual. */
+const percent = (index: number) => `${index >= 1 ? '+' : '−'}${Math.abs(Math.round((index - 1) * 100))}%`;
 const money = (amount: number) => `${amount < 0 ? '−' : ''}$${Math.abs(Math.round(amount)).toLocaleString('en-US')}`;
 
 const overlays: [Overlay, string, string][] = [
@@ -162,7 +165,7 @@ const tileNames: Record<Tile, string> = {
   fire: '消防局', police: '警察局', school: '小學', clinic: '診所',
   river: '河流', bridge: '橋', bus: '公車站', metro: '捷運站',
   market: '市場', highschool: '高中', hospital: '醫院', university: '大學', museum: '博物館', stadium: '體育場',
-  annex: '大建築', viaduct: '高架道路', farm: '農田', library: '圖書館', pool: '游泳池', ktv: 'KTV', amusement: '遊樂園', temple: '廟', mall: '大型商場', casino: '賭場', cinema: '電影院', parking: '停車場',
+  annex: '大建築', viaduct: '高架道路', gas: '加油站', farm: '農田', library: '圖書館', pool: '游泳池', ktv: 'KTV', amusement: '遊樂園', temple: '廟', mall: '大型商場', casino: '賭場', cinema: '電影院', parking: '停車場',
 };
 
 /** What each kind of home is called, and who tends to live in it. */
@@ -324,6 +327,9 @@ const thoughtNames: Record<Thought, string> = {
   'kids-happy': '小孩上學近，放學還能去公園玩',
   scared: '附近才剛出事，都沒人來處理，住得心驚膽跳',
   'forest-near': '住在森林邊，空氣好又安靜',
+  late: '路上塞住又遲到，被扣了薪水',
+  'no-gas': '附近沒有加油站，加個油要跑好遠',
+  'fuel-dear': '油價好貴，開車上班快開不起了',
   'good-pay': '最近生意好，老闆加薪了',
 };
 
@@ -338,7 +344,7 @@ const thoughtTags: Record<Thought, string> = {
   'love-job': '喜歡工作', 'all-good': '沒煩惱', 'nothing-near': '附近空空', strangers: '不認識鄰居', 'want-car': '想買車',
   online: '靠網購', 'temple-near': '有廟', 'proud-car': '有好車', handy: '生活方便', 'close-knit': '鄰居感情好',
   'kids-nowhere': '小孩沒處玩', 'casino-near': '賭場吵', 'fun-near': '有得玩', 'kids-happy': '小孩開心',
-  scared: '怕怕的', 'good-pay': '加薪了', 'forest-near': '森林邊',
+  scared: '怕怕的', 'good-pay': '加薪了', 'forest-near': '森林邊', late: '遲到', 'no-gas': '沒加油站', 'fuel-dear': '油太貴',
 };
 
 /**
@@ -424,7 +430,7 @@ const moodWord = (mood: number) => mood >= mind.glad ? '開心' : mood >= mind.l
 const serviceNames: Record<Service, string> = { fire: '消防', police: '警察', school: '小學', clinic: '診所',
   market: '市場', highschool: '高中', hospital: '醫院', university: '大學', museum: '博物館', stadium: '體育場',
   temple: '廟', mall: '商場', casino: '賭場', cinema: '電影院', parking: '停車場',
-  library: '圖書館', pool: '游泳池', ktv: 'KTV', amusement: '遊樂園' };
+  library: '圖書館', pool: '游泳池', ktv: 'KTV', amusement: '遊樂園', gas: '加油站' };
 
 /** How full a road is, in the words of the traffic view's four colours. */
 const trafficName = (load: number) =>
@@ -943,7 +949,7 @@ export function App() {
       <div className="viewport" ref={viewport} data-tool={tool} role="region" aria-label="城市地圖" />
 
       <header className="hud top">
-        <div className="stat" title={`每月：稅收 ${money(stats.budget.tax)}，車票 ${money(stats.budget.fares)}，牌照稅 ${money(stats.budget.licence)}，景點 ${money(stats.budget.visitors)}，民生用品買賣 ${money(stats.budget.trade)}，維護費 ${money(stats.budget.upkeep)}，還款 ${money(stats.budget.loans)}。每天進帳一點。`}>
+        <div className="stat" title={`每月：稅收 ${money(stats.budget.tax)}，車票 ${money(stats.budget.fares)}，牌照稅 ${money(stats.budget.licence)}，油稅 ${money(stats.budget.fuel)}，景點 ${money(stats.budget.visitors)}，民生用品買賣 ${money(stats.budget.trade)}，維護費 ${money(stats.budget.upkeep)}，還款 ${money(stats.budget.loans)}。每天進帳一點。`}>
           <span>資金</span>
           <b>{money(stats.funds)}</b>
           <small className={stats.budget.net < 0 ? 'loss' : undefined}>每月 {stats.budget.net >= 0 ? '+' : ''}{money(stats.budget.net)}</small>
@@ -1152,11 +1158,23 @@ export function App() {
               </dd>
               <dt>路上</dt>
               <dd className="tags"><Tag label={rush[0] ?? '沒有人'} tone={rush.length ? undefined : 'dim'} tip="現在哪一班的人在上下班" /></dd>
+              <dt>遲到</dt>
+              <dd className="tags"><Tag label="塞在路上" value={`${stats.late} 人`} tone={stats.late ? 'bad' : 'dim'}
+                tip="上班被塞住的人會遲到，當天薪水少一成" /></dd>
+              <dt>價格</dt>
+              <dd className="tags" title="油價和物資價格會自己波動；物價在城市到過 400 人後，景氣好漲、景氣差跌。">
+                <Tag label="油" value={percent(stats.prices.fuel)} tone={stats.prices.fuel >= 1.2 ? 'bad' : stats.prices.fuel <= 0.85 ? 'good' : undefined}
+                  tip="有車的人每天的油錢；有加油站城市抽三成" />
+                <Tag label="物資" value={percent(stats.prices.goods)} tip="民生用品賣出去和買進來的價錢" />
+                <Tag label="物價" value={percent(stats.prices.level)} tone={stats.prices.level > 1.001 ? 'bad' : stats.prices.level < 0.999 ? 'good' : 'dim'}
+                  tip="蓋東西、維護費、稅收、薪水都跟著物價；錢放著會變薄，借的錢會變輕" />
+              </dd>
               <dt>車子</dt>
               <dd className="tags" title="存夠錢就買車，每台每月繳牌照稅">
                 {stats.cars.slice(1).map((count, index) => <Tag key={index} label={vehicleNames[index + 1]} value={count}
                   tone={count ? undefined : 'dim'} />)}
                 <Tag label="牌照稅" value={`${money(stats.budget.licence)}/月`} tone={stats.budget.licence ? 'good' : 'dim'} />
+                <Tag label="油稅" value={`${money(stats.budget.fuel)}/月`} tone={stats.budget.fuel ? 'good' : 'dim'} tip="要有加油站才收得到" />
               </dd>
               <dt>景氣</dt>
               <dd className="tags">{stats.rank < cycle.rank ?
@@ -1398,7 +1416,7 @@ export function App() {
               <i style={iconStyle(value)} />
               <span>{label}</span>
               <small>{locked !== undefined ? `滿 ${milestones[locked - 1].population.toLocaleString('en-US')} 人` :
-                money(toolCost(value)!)}</small>
+                money(toolCost(value)! * stats.prices.level)}</small>
             </button>;
           })}
         </div>

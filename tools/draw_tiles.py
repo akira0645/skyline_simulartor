@@ -1308,7 +1308,12 @@ def restyle(sheet, style, F):
 
     def repaint(left, top, size, which):
         wall = spec['walls'][which % len(spec['walls'])]
-        for y in range(top, top + size):
+        # Where the building is: its roof is the top of it, its walls the rest.
+        rows = [y for y in range(top, top + size) if any(pixels[x, y][3] == 255 for x in range(left, left + size))]
+        if not rows:
+            return
+        eaves = rows[0] + max(3, round(len(rows) * 0.22))
+        for y in rows:
             for x in range(left, left + size):
                 r, g, b, a = pixels[x, y]
                 if a < 255:
@@ -1318,8 +1323,17 @@ def restyle(sheet, style, F):
                 # Outlines, glass and greenery stay as they are.
                 if val < 0.22 or (185 <= hue <= 235 and sat > 0.22) or (70 <= hue <= 165 and sat > 0.25):
                     continue
-                to = wall if sat < 0.34 and val >= 0.55 else spec['roof']
-                nr, ng, nb = colorsys.hsv_to_rgb(to[0] / 360, to[1], max(0.0, min(1.0, val * to[2])))
+                if y < eaves:
+                    to = spec['roof']
+                    value = val * to[2]
+                else:
+                    # A sign, an awning or a door keeps its own strong colour.
+                    if sat > 0.58 and val > 0.5:
+                        continue
+                    to = wall
+                    # Dark walls and pale ones both come out as the city's wall, a little darker or lighter.
+                    value = (0.62 + 0.38 * val) * to[2]
+                nr, ng, nb = colorsys.hsv_to_rgb(to[0] / 360, to[1], max(0.0, min(1.0, value)))
                 pixels[x, y] = (round(nr * 255), round(ng * 255), round(nb * 255), 255)
 
     def solid(x, y):

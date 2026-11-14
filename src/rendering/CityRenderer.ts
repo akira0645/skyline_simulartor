@@ -498,7 +498,17 @@ export class CityRenderer {
             const width = upright ? wide : long;
             const height = upright ? long : wide;
             people.rect(x - width / 2 - 1, y - height / 2 - 1, width + 2, height + 2).fill(0x1b1d22);
-            people.rect(x - width / 2, y - height / 2, width, height).fill(line.kind === 'metro' ? colour : 0xf2c94c);
+            // A bus is the city's own: a cable car in San Francisco, blue and white in New York, orange in California.
+            const { theme } = this.city;
+            const body = line.kind === 'metro' ? colour : theme === 'sf' ? 0x8a1f2b : theme === 'newyork' ? 0x2f5fa8 :
+              theme === 'california' ? 0xf0862c : 0xf2c94c;
+            people.rect(x - width / 2, y - height / 2, width, height).fill(body);
+            if (line.kind === 'bus' && theme === 'sf') {
+              // Open ends with a cream roof and a gold trim.
+              people.rect(x - width / 2 + (upright ? 0 : 4), y - height / 2 + (upright ? 4 : 0),
+                upright ? width : width - 8, upright ? height - 8 : height).fill(0xf1e3c2);
+              people.rect(x - width / 2, y - height / 2, upright ? width : 1, upright ? 1 : height).fill(0xe0b23e);
+            }
             // A bus wears its line's colour as a stripe; a train as its whole body, with pale windows.
             if (line.kind === 'bus') {
               people.rect(x - width / 2, y - height / 2, upright ? 3 : width, upright ? height : 3).fill(colour);
@@ -588,6 +598,15 @@ export class CityRenderer {
               const wide = tile === 'casino' ? 2 * TILE_SIZE - 16 : TILE_SIZE - 8;
               effects.rect(px + (tile === 'casino' ? 8 : 4), py + (tile === 'casino' ? 40 : 12), wide, 2)
                 .fill({ color: 0xfff4c2, alpha: night ? 0.95 : 0.5 });
+            }
+          } else if (isRoad(tile) && this.city.theme === 'newyork' && seed % 11 === 0) {
+            // Steam rising from a manhole in the street.
+            effects.rect(px + 13, py + 13, 6, 6).fill(0x25232b).rect(px + 14, py + 14, 4, 4).fill(0x55575b);
+            for (let puff = 0; puff < 3; puff++) {
+              const rise = (time / 1800 + puff / 3 + seed % 7 / 7) % 1;
+              const size = 3 + Math.floor(rise * 6);
+              effects.rect(px + 16 - size / 2 + Math.sin(rise * 5 + seed) * 2, py + 12 - rise * 20, size, size)
+                .fill({ color: 0xf4f6f8, alpha: 0.6 * (1 - rise) });
             }
           } else if (tile === 'temple' && this.city.comboAt({ x, y }) === 'fair' && night) {
             // The lanterns of the temple fair glow at night.

@@ -170,7 +170,16 @@ export class TileRenderer {
           tileAt(GRASS[seed % 7 === 0 ? 1 : 0], x, y);
           const roll = (seed >>> 8) % 100;
           // A tree's canopy covers the tile above, so it only grows below open grass.
-          if (roll < 4 && theme === 'california') {
+          if (theme === 'california' && roll >= 8 && roll < 30 &&
+              roadSides.some(([dx, dy]) => map.get({ x: x + dx, y: y + dy }) === 'river')) {
+            // By the water in California: a towel and a striped parasol on the grass.
+            const left = x * TILE_SIZE + 6 + seed % 10;
+            const top = y * TILE_SIZE + 8 + (seed >>> 4) % 10;
+            g.rect(left + 1, top + 9, 9, 4).fill([0x5bb6ce, 0xf2c94c, 0xe8799a][seed % 3]);
+            g.rect(left + 5, top + 3, 1, 8).fill(0x25232b);
+            g.rect(left, top + 1, 11, 3).fill(0xe5484d).rect(left + 2, top + 1, 2, 3).rect(left + 7, top + 1, 2, 3).fill(0xf4f6f8)
+              .rect(left + 2, top, 7, 1).fill(0xe5484d);
+          } else if (roll < 4 && theme === 'california') {
             // A palm: a thin leaning trunk and a crown of fronds.
             const left = x * TILE_SIZE;
             const top = y * TILE_SIZE;
@@ -245,6 +254,21 @@ export class TileRenderer {
             });
             g.fill(MEDIAN);
           }
+          if (theme === 'newyork') {
+            // New York's pavements: a hydrant here and there, and a food cart under an umbrella by the shops.
+            if (seed % 4 === 0) g.rect(left + 2, top + 26, 3, 4).fill(0xc8322e).rect(left + 1, top + 27, 5, 1).fill(0xe5484d);
+            if (seed % 5 === 1 && roadSides.some(([dx, dy]) => map.get({ x: x + dx, y: y + dy }) === 'commercial')) {
+              g.rect(left + 24, top + 24, 7, 5).fill(0x25232b).rect(left + 25, top + 25, 5, 3).fill(0xd6dbe6);
+              g.rect(left + 23, top + 20, 9, 3).fill(0xf2c94c).rect(left + 25, top + 20, 2, 3).rect(left + 29, top + 20, 2, 3).fill(0x3f6fb0);
+              g.rect(left + 27, top + 23, 1, 2).fill(0x25232b);
+            }
+          } else if (theme === 'sf' && tile === 'avenue') {
+            // San Francisco's avenues carry the slot and rails of the cable cars.
+            let ways = 0;
+            for (const [dx, dy, bit] of roadSides) if (isRoad(map.get({ x: x + dx, y: y + dy }))) ways |= bit;
+            if ((ways & 10) && !(ways & 5)) g.rect(left, top + 9, TILE_SIZE, 1).rect(left, top + 22, TILE_SIZE, 1).fill(0x8d9199);
+            else if ((ways & 5) && !(ways & 10)) g.rect(left + 9, top, 1, TILE_SIZE).rect(left + 22, top, 1, TILE_SIZE).fill(0x8d9199);
+          }
           if (map.hasStation({ x, y })) {
             // A metro station under the road: stairs down in one corner of the pavement and
             // a red sign on a post beside them. The road itself stays clear.
@@ -252,7 +276,8 @@ export class TileRenderer {
             g.rect(left + 2, top + 2, 11, 7).fill(0x3a3f47);
             g.rect(left + 3, top + 4, 9, 1).rect(left + 3, top + 6, 9, 1).fill(0x8d98a6);
             g.rect(left + 15, top + 1, 9, 9).fill(0x1b1d22);
-            g.rect(left + 16, top + 2, 7, 7).fill(0xe5484d);
+            // New York's subway wears green; the others red.
+            g.rect(left + 16, top + 2, 7, 7).fill(theme === 'newyork' ? 0x2f8f4a : 0xe5484d);
             g.rect(left + 17, top + 3, 1, 5).rect(left + 21, top + 3, 1, 5).rect(left + 18, top + 4, 1, 1)
               .rect(left + 20, top + 4, 1, 1).rect(left + 19, top + 5, 1, 1).fill(0xffffff);
           }

@@ -24,7 +24,7 @@ export const landValue = {
   /** The value a building needs to reach level 2 and level 3. */
   upgrade: [45, 65],
   /** Chance per growth step that a full building on good enough land upgrades. */
-  chance: 0.04,
+  chance: 0.015,
   /**
    * What a building holds at levels 1, 2 and 3. Homes have a fourth figure: four full level 3
    * homes in a square join into one housing complex, and each then holds that many.

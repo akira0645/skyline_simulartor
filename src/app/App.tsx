@@ -7,21 +7,24 @@ import { transit } from '../simulation/Transit';
 import { landValue } from '../simulation/LandValue';
 import type { Overlay, Tool } from './tools';
 import type { Cell, Tile } from '../simulation/TileMap';
-import { demoCity, powerPlant, waterTower, works } from './demoCity';
+import { demoCity, powerPlant, waterTower, works, type DemoSize } from './demoCity';
 import { workShift, shiftPhase, rushShifts, shifts } from '../simulation/WorkShift';
-import { ISSUES, type CityEvent, type Issue } from '../simulation/BuildingSystem';
-import { economy, milestones, tileCost } from '../simulation/Economy';
-import { dateAt, hourAt } from '../simulation/calendar';
+import { ISSUES, type CityEvent, type Issue, type PersonNews } from '../simulation/BuildingSystem';
+import { cycle, economy, milestones, tileCost, type Mood } from '../simulation/Economy';
+import { dateAt, hourAt, weekdayAt } from '../simulation/calendar';
 import { traffic } from '../simulation/Traffic';
 import { pollution } from '../simulation/Pollution';
 import { utilities } from '../simulation/Utilities';
-import { isFacility, isService, TILES, type Service } from '../simulation/TileMap';
+import { isBig, isFacility, isService, TILES, type Service } from '../simulation/TileMap';
 import { services } from '../simulation/Services';
 import { SimulationClock, type SimulationSpeed } from '../simulation/SimulationClock';
 import { SimulationEngine } from '../simulation/SimulationEngine';
 import { AUTO_SLOT, readSave, writeSave } from '../storage/SaveManager';
 import { goals } from '../simulation/Goals';
-import { TRAITS, type Trait } from '../simulation/Residents';
+import { TRAITS, type HomeKind, type Trait } from '../simulation/Residents';
+import { mind, thoughts as thoughtWeights, type Doing, type Thought, type Way } from '../simulation/Mind';
+import { bond, circle, PLACES, type Place } from '../simulation/Community';
+import { vehicles } from '../simulation/Wealth';
 
 const speeds = [0, 1, 2, 4] as const;
 
@@ -31,16 +34,28 @@ const toolGroups: [string, [Tool, string][]][] = [
   ['交通', [['bus', '公車站'], ['metro', '捷運站']]],
   ['分區', [['residential', '住宅'], ['commercial', '商業'], ['industrial', '工業']]],
   ['水電', [['power', '電廠'], ['water', '水塔']]],
-  ['服務', [['fire', '消防局'], ['police', '警察局'], ['school', '學校'], ['clinic', '診所']]],
-  ['其他', [['park', '公園'], ['demolish', '拆除']]],
+  ['服務', [['fire', '消防局'], ['police', '警察局'], ['clinic', '診所'], ['hospital', '醫院']]],
+  ['學校', [['school', '小學'], ['highschool', '高中'], ['university', '大學']]],
+  ['生活', [['park', '公園'], ['farm', '農田'], ['market', '市場'], ['temple', '廟'], ['parking', '停車場']]],
+  ['休閒', [['cinema', '電影院'], ['mall', '大型商場'], ['casino', '賭場'], ['museum', '博物館'], ['stadium', '體育場']]],
+  ['其他', [['demolish', '拆除']]],
 ];
 
 /** Where each tool's picture sits in city.png, as [column, row]; the rest are drawn in CSS. */
 const iconAt: Partial<Record<Tool, [number, number]>> = {
   road: [10, 0], avenue: [10, 0], residential: [0, 2], commercial: [0, 3], industrial: [0, 4],
   power: [0, 5], water: [1, 5], fire: [2, 5], police: [3, 5], school: [4, 5], clinic: [5, 5], bus: [6, 5], metro: [7, 5],
+  market: [8, 5], highschool: [9, 5], temple: [10, 5], cinema: [11, 5], parking: [12, 5],
 };
+/** The buildings of two tiles by two, by their place in the row of them; shown at half size. */
+const bigIconAt: Partial<Record<Tool, number>> = { hospital: 1, university: 2, museum: 3, stadium: 4,
+  mall: 5, casino: 6 };
 const iconStyle = (tool: Tool) => {
+  const big = bigIconAt[tool];
+  if (big !== undefined) {
+    return { backgroundImage: `url(${cityUrl})`, backgroundSize: '256px 176px',
+      backgroundPosition: `-${big * 32}px -96px` };
+  }
   const at = iconAt[tool];
   return at && { backgroundImage: `url(${cityUrl})`, backgroundPosition: `-${at[0] * 32}px -${at[1] * 32}px` };
 };
@@ -53,30 +68,44 @@ const toolCost = (tool: Tool) =>
   tool === 'pan' || tool === 'inspect' || tool === 'line' ? undefined :
   tileCost(tool === 'demolish' ? 'grass' : tool);
 
-/** One line on how to use each tool, shown when it is picked. */
+/** One short line on how to use each tool, shown when it is picked. */
 function toolTip(tool: Tool): string {
   if (isService(tool)) {
-    const extra = tool === 'fire' ? '範圍內失火會被撲滅。' :
-      tool === 'police' ? '城市超過 100 人後，沒有警察的地方地價會變低。' : '';
-    return `點一下蓋${tileNames[tool]}，要緊貼著路才會運作。框線內是它照顧得到的範圍，裡面的建築地價會提高。${extra}`;
+    const extra = tool === 'fire' ? '沒救到的火會嚇跑附近的人。' :
+      tool === 'police' ? '滿 100 人後，沒警察的地方地價低。' :
+      tool === 'market' ? `讓 ${services.market.shoppers} 人買得到東西。` :
+      tool === 'highschool' ? '滿 700 人後大家會要。' :
+      tool === 'temple' ? '附近鄰居感情變好。' :
+      tool === 'hospital' ? '也算診所。滿 1,200 人後大家會要。' :
+      tool === 'university' ? '範圍很大。' :
+      tool === 'parking' ? '蓋在休閒建築 4 格內，遊客多兩成五。' :
+      tool === 'casino' ? '最賺，但附近地價變低、會嫌吵。' :
+      tool === 'museum' || tool === 'stadium' || tool === 'mall' || tool === 'cinema' ? '人越多賺越多。' : '';
+    return `點一下蓋${tileNames[tool]}，${isBig(tool) ? '佔 2 × 2，一格貼路就行' : '要貼著路'}。框內是照顧範圍。${extra}`;
   }
-  if (isFacility(tool)) {
-    return `點一下蓋${tileNames[tool]}，要緊貼著路才會運作。框線內是送得到的範圍，一座最多供應 ${utilities.capacity[tool]} 棟。綠色的建築已經有了，紅色的還沒有。`;
-  }
+  if (isFacility(tool)) return `點一下蓋${tileNames[tool]}，要貼著路。一座供 ${utilities.capacity[tool]} 棟；綠色有、紅色沒有。`;
   switch (tool) {
-    case 'road': return '按住拖曳鋪一條直線的路。住宅、商店、工廠都要緊貼著路才蓋得起來。鋪過河會變成橋，每格 $80。';
-    case 'bus': return '點一下蓋公車站，要緊貼著路。蓋好站以後，到右邊「路線」分頁把站連成一條路線，公車才會開始跑。';
-    case 'metro': return '點一下蓋捷運站，不用貼著路。捷運走地下，比開車快很多，平常在地面上看不到列車。蓋好站以後，到右邊「路線」分頁把站連成路線。';
-    case 'line': return '照順序點地圖上的站，把它們加進這條路線；再點一次已經加入的站會把它拿掉。弄好了按右邊的「完成」。';
-    case 'avenue': return '大道比道路快一倍，能走三倍的車，可以直接鋪在舊的道路上。';
-    case 'residential': return '按住拖曳劃出住宅區，要緊貼著路。離工廠遠一點，不然沒人想住。';
-    case 'commercial': return '按住拖曳劃出商業區，要緊貼著路。商店提供工作。';
-    case 'industrial': return '按住拖曳劃出工業區，要緊貼著路。工廠提供工作，但會污染附近。';
-    case 'park': return '按住拖曳蓋公園。公園會減少附近的污染，也讓附近地價變高。';
-    case 'demolish': return '點一下拆掉那一格。';
-    default: return '按住拖曳可以移動地圖，點一下任何一格看它的資料，滾輪放大縮小。';
+    case 'road': return `拖曳鋪路。過河變橋，每格 ${money(economy.cost.bridge)}。`;
+    case 'bus': return '點一下蓋站，要貼著路。再到右邊「路線」連起來。';
+    case 'metro': return '蓋在道路或大道上。再到右邊「路線」連起來。';
+    case 'line': return '照順序點站；再點一次拿掉。好了按「完成」。';
+    case 'avenue': return '快一倍、能走三倍的車，可直接鋪在舊路上。';
+    case 'residential': return '拖曳劃住宅，要貼著路。離工廠遠一點。';
+    case 'commercial': return '拖曳劃商業，要貼著路。';
+    case 'industrial': return '拖曳劃工業，要貼著路。會污染附近。';
+    case 'park': return '拖曳蓋公園。減少污染、提高地價。';
+    case 'farm': return '拖曳種田，產出民生用品。離水 3 格內收成三倍，太髒長不出來。';
+    case 'demolish': return '點一下拆掉。';
+    default: return '拖曳移動，點一格看資料，滾輪縮放。';
   }
 }
+
+/** How business is, in a word, and what that does. */
+const moodNames: Record<Mood, [string, string]> = {
+  boom: ['好', '想來的人變多，稅收多一成'],
+  normal: ['普通', '沒有影響'],
+  slump: ['差', '店和工廠少請一成五的人'],
+};
 
 /** City ranks, indexed by how many milestones have been reached. */
 const rankNames = ['空地', '小村', '村莊', '小鎮', '城鎮', '城市', '大城市'];
@@ -84,35 +113,65 @@ const money = (amount: number) => `${amount < 0 ? '−' : ''}$${Math.abs(Math.ro
 
 const overlays: [Overlay, string, string][] = [
   ['none', '一般', ''],
-  ['traffic', '車流', '顯示現在這個時間路上的車：綠色順暢，黃色車多，橘色和紅色是塞車。上下班時間才會變色。'],
-  ['pollution', '污染', '紫色越深污染越重。住宅在太髒的地方不會有人搬進來。'],
-  ['value', '地價', '綠色是好地段，紅色最差。地價夠高、住滿人的建築會升級。'],
-  ['lines', '路線', '顯示公車和捷運的路線，每條路線一個顏色，框起來的是站。捷運在地下，只有在這裡才看得到列車。'],
-  ['power', '供電', '綠色的建築有電，紅色沒有。'],
-  ['water', '供水', '綠色的建築有水，紅色沒有。'],
+  ['traffic', '車流', '綠色順暢，黃色車多，橘紅塞車。'],
+  ['pollution', '污染', '越紫越髒。太髒的住宅沒人搬來。'],
+  ['value', '地價', '綠色好，紅色差。地價夠高才會升級。'],
+  ['lines', '路線', '公車和捷運的路線，框起來的是站。'],
+  ['power', '供電', '綠色有電，紅色沒有。'],
+  ['water', '供水', '綠色有水，紅色沒有。'],
 ];
 
 const zones = [['residential', '住宅'], ['commercial', '商業'], ['industrial', '工業']] as const;
 
 const issueNames: Record<Issue, string> = {
-  'no-road': '旁邊沒有路', 'no-power': '沒有電', 'no-water': '沒有水',
-  'no-jobs': '有人找不到工作', 'long-commute': '上班路程太久', pollution: '污染太重', crime: '治安不好',
-  'no-school': '附近沒有學校', 'no-clinic': '附近沒有診所',
-  vacancies: '找不到員工',
+  'no-road': '沒貼路', 'no-power': '沒電', 'no-water': '沒水',
+  'no-jobs': '找不到工作', 'long-commute': '上班太遠', pollution: '太髒', crime: '治安差', scared: '剛出事',
+  'no-school': '沒小學', 'no-clinic': '沒診所', 'no-highschool': '沒高中', 'no-hospital': '沒醫院',
+  vacancies: '請不到人',
+};
+/** What each problem does and how to put it right, shown when its tag is picked. */
+const issueHelp: Record<Issue, string> = {
+  'no-road': '旁邊沒有路，蓋不起來。鋪一條路貼著它。',
+  'no-power': '沒電只能用一半。12 格內貼著路蓋電廠。',
+  'no-water': '沒水只能用一半。12 格內貼著路蓋水塔。',
+  'no-jobs': '家裡有人沒工作，再多就搬走。多劃商業或工業區。',
+  'long-commute': '上班超過 40 分鐘，沒人搬來。鋪大道、拉捷運，或把工作劃近一點。',
+  pollution: '太髒沒人搬來。蓋公園，或讓工廠、電廠離遠一點。',
+  crime: '沒警察，地價 −10，還會遭小偷。蓋警察局。',
+  scared: '附近失火沒人救或遭小偷沒人管：一個月內沒人搬來、店裡客人變少、學校沒人敢來。補上消防局和警察局。',
+  'no-school': '附近沒小學，地價 −8。蓋小學。',
+  'no-clinic': '附近沒診所，地價 −8。蓋診所或醫院。',
+  'no-highschool': '附近沒高中，地價 −6。蓋高中。',
+  'no-hospital': '附近沒醫院，地價 −6。蓋醫院。',
+  vacancies: '位子沒坐滿。多劃住宅區，或讓人來得了。',
 };
 
 const tileNames: Record<Tile, string> = {
   grass: '草地', road: '道路', avenue: '大道', residential: '住宅區', commercial: '商業區',
   industrial: '工業區', power: '電廠', water: '水塔', park: '公園',
-  fire: '消防局', police: '警察局', school: '學校', clinic: '診所',
+  fire: '消防局', police: '警察局', school: '小學', clinic: '診所',
   river: '河流', bridge: '橋', bus: '公車站', metro: '捷運站',
+  market: '市場', highschool: '高中', hospital: '醫院', university: '大學', museum: '博物館', stadium: '體育場',
+  annex: '大建築', farm: '農田', temple: '廟', mall: '大型商場', casino: '賭場', cinema: '電影院', parking: '停車場',
+};
+
+/** What each kind of home is called, and who tends to live in it. */
+const homeKindNames: Record<HomeKind, [string, string]> = {
+  villa: ['高級住宅', '多有錢人、愛開車'],
+  garden: ['花園住宅', '多綠手指、熱心的人'],
+  worker: ['工人住宅', '多想進工廠、愛搭車'],
+  downtown: ['市區住宅', '多想進店鋪或辦公室'],
+  riverside: ['水岸住宅', '手頭寬，愛種花草'],
+  station: ['車站住宅', '幾乎都愛搭車'],
+  campus: ['學區住宅', '多熱心、想坐辦公室'],
+  suburb: ['郊區住宅', '幾乎都愛開車'],
 };
 
 /** What happened, for the message line and the list of recent events. */
 const eventText: Record<CityEvent['kind'], string> = {
-  fire: '失火了，附近沒有消防局，一棟建築燒掉了',
+  fire: '失火沒人救，燒掉一棟，附近的人會怕一個月',
   'fire-out': '失火了，消防車趕到撲滅了',
-  crime: `遭小偷，附近沒有警察局，損失 $${services.crime.loss}`,
+  crime: `遭小偷沒人管，損失 $${services.crime.loss}，附近的人會怕一個月`,
   'crime-stopped': '遭小偷，警車趕到抓到人了',
   sick: '有人生病，附近沒有診所，搬走了',
   'sick-helped': '有人生病，救護車送去診所了',
@@ -127,7 +186,174 @@ const traitNames: Record<Trait, [string, string]> = {
   gardener: ['綠手指', '讓自己住的地方地價變高'],
 };
 
-const serviceNames: Record<Service, string> = { fire: '消防', police: '警察', school: '學校', clinic: '診所' };
+/** Where the people on each shift work, in the order of `shifts`. */
+const workplaceNames = ['工廠', '工廠', '店鋪', '辦公室'];
+
+/** What happened to a resident, for the list of recent events. */
+function newsText({ kind, name, shift, car }: PersonNews): string {
+  const place = shift === undefined ? '' : workplaceNames[shift];
+  switch (kind) {
+    case 'job-nearer': return `${name}換到離家比較近的${place}上班`;
+    case 'job-liking': return `${name}換到自己比較想做的${place}上班`;
+    case 'job-change': return `${name}想換個環境，改到另一間${place}上班`;
+    case 'job-lost': return `${name}上班的地方沒了，要重新找工作`;
+    case 'left-no-work': return `${name}一直找不到工作，搬走了`;
+    case 'left-no-room': return `${name}家裡住不下，搬走了`;
+    case 'left-unhappy': return `${name}住得很不開心，搬走了`;
+    case 'new-car': return `${name}存夠了錢，買了一台${vehicleNames[car ?? 1]}`;
+  }
+}
+
+/** A length of time in days, said the way people say it. */
+const howLong = (days: number) =>
+  days < 30 ? `${days} 天` : days < 360 ? `${Math.floor(days / 30)} 個月` : `${Math.floor(days / 360)} 年`;
+
+type Person = NonNullable<ReturnType<SimulationEngine['city']['inspect']>>['residents'] extends
+  (infer Item)[] | undefined ? Item : never;
+
+/** One line for a resident: who they are, then what they do. */
+function PersonRow({ person, atWork, onPick }: { person: Person; atWork?: boolean; onPick: (person: Person) => void }) {
+  const wish = person.liking === 'industrial' ? '工廠' : '店鋪或辦公室';
+  return <li role="button" tabIndex={0} title="點一下，看這個人在做什麼、想什麼"
+    onClick={() => onPick(person)} onKeyDown={event => event.key === 'Enter' && onPick(person)}>
+    <b>{person.name}</b>
+    <span>{person.age} 歲</span>
+    {person.trait && <i title={traitNames[person.trait][1]}>{traitNames[person.trait][0]}</i>}
+    <small className="tags">
+      {person.shift === undefined ? <Tag label="找工作中" tone="bad" /> :
+        <Tag label={atWork ? '做了' : workplaceNames[person.shift]} value={howLong(person.workDays ?? 0)}
+          tip={shifts[person.shift].title} />}
+      {!atWork && <Tag label="住了" value={howLong(person.days)} />}
+      {person.content === true && <Tag label="喜歡工作" tone="good" />}
+      {person.content === false && <Tag label="想換工作" tone="bad" tip={`比較想去${wish}上班`} />}
+    </small>
+  </li>;
+}
+
+const wayNames: Record<Way, string> = { walk: '走路', bike: '騎腳踏車', scooter: '騎機車', drive: '開車',
+  bus: '搭公車', metro: '搭捷運' };
+/** What people own, in the order of Wealth's `vehicles`. */
+const vehicleNames = ['腳踏車', '機車', '小車', '房車', '名車'];
+const placeNames: Record<Place, string> = { shops: '商店', market: '市場', park: '公園', school: '學校',
+  clinic: '看病的地方', stop: '車站', temple: '廟', fun: '玩的地方' };
+/** How close-knit a home is, as a word. */
+const bondWord = (value: number) => value >= bond.close ? '很好' : value >= bond.distant ? '普通' : '冷淡';
+
+/** What someone is doing right now, in a sentence. */
+function doingText(doing: Doing, shift: number | undefined, way: Way | undefined): string {
+  const place = shift === undefined ? '' : workplaceNames[shift];
+  const going = wayNames[way ?? 'walk'];
+  switch (doing) {
+    case 'sleeping': return '在睡覺';
+    case 'getting-ready': return '剛起床，吃早餐準備出門';
+    case 'to-work': return `正${going}去${place}上班`;
+    case 'working': return `在${place}上班`;
+    case 'break': return shift === undefined ? '在吃午餐' : '上班到一半，休息吃飯';
+    case 'to-home': return `下班了，正${going}回家`;
+    case 'job-hunting': return '在外面到處找工作';
+    case 'park': return '在家附近的公園散步';
+    case 'shopping': return '在附近逛街買東西';
+    case 'gardening': return '在整理家門口的花草';
+    case 'helping': return '在幫鄰居的忙';
+    case 'dining': return '在外面吃大餐';
+    case 'home': return '在家休息';
+    case 'temple': return '在附近的廟裡拜拜、跟鄰居聊天';
+    case 'online': return '附近沒有店，在家用手機訂日用品';
+    case 'outing': return '放假，去附近好玩的地方逛逛';
+    case 'family': return '在家陪小孩';
+    case 'day-off': return '放假，在家睡到自然醒';
+  }
+}
+
+/** What is on someone's mind, in their own words. */
+const thoughtNames: Record<Thought, string> = {
+  'need-job': '一直找不到工作，再這樣下去只能搬走了',
+  'no-power': '家裡沒有電，晚上黑漆漆的',
+  'no-water': '家裡沒有水，連洗澡都成問題',
+  'air-bad': '空氣好差，窗戶都不敢開',
+  unsafe: '附近沒有警察局，晚上出門怕怕的',
+  'far-commute': '上班太遠了，每天都在趕路',
+  'no-clinic': '附近沒有診所，生病不知道找誰',
+  'no-hospital': '城市這麼大了，附近卻沒有醫院',
+  'no-shops': '店太少了，東西常常買不到',
+  'want-other-job': '現在的工作不是我想做的',
+  'slump-worry': '最近景氣不好，擔心工作保不住',
+  'tax-high': '稅太重了，賺的錢都被收走',
+  jam: '路上好塞，車子動都不動',
+  'no-school': '附近沒有小學，小孩上學很麻煩',
+  'no-highschool': '希望附近有一間高中',
+  'want-ride': '希望家附近有公車或捷運可以搭',
+  'new-here': '剛搬來，還在認識這個地方',
+  'love-car': '開車上班最自在',
+  'garden-proud': '家門口的花草被我顧得很漂亮',
+  neighbours: '有空就去幫鄰居，大家感情很好',
+  'tax-low': '稅很低，住這裡真划算',
+  'ride-glad': '搭車上班很方便，不用自己開車',
+  'old-timer': '住很久了，早就把這裡當成家',
+  'nice-home': '住在好地段，很有面子',
+  'near-commute': '上班很近，早上可以多睡一下',
+  'boom-glad': '最近景氣好，做事特別有勁',
+  'water-near': '住在水邊，風景真好',
+  'park-near': '家附近就有公園，散步很方便',
+  'love-job': '很喜歡現在的工作',
+  'all-good': '日子過得還不錯，沒什麼好抱怨的',
+  'nothing-near': '家附近什麼都沒有，做什麼都要跑很遠',
+  strangers: '住了一陣子，還是不認識鄰居',
+  'want-car': '上班好遠，想存錢買一台車',
+  online: '附近沒有店，買東西都靠網購',
+  'temple-near': '附近有廟，有事沒事都去拜一下',
+  'proud-car': '自己賺錢買的車，開起來真舒服',
+  handy: '走幾步什麼都有，住這裡很方便',
+  'close-knit': '鄰居都認識，感情很好',
+  'kids-nowhere': '附近沒有公園，小孩沒地方玩',
+  'casino-near': '附近開了賭場，晚上有點吵',
+  'fun-near': '附近有好玩的地方，放假不無聊',
+  'kids-happy': '小孩上學近，放學還能去公園玩',
+  scared: '附近才剛出事，都沒人來處理，住得心驚膽跳',
+  'good-pay': '最近生意好，老闆加薪了',
+};
+
+/** The same thoughts as labels of a few characters; the sentence shows when one is picked. */
+const thoughtTags: Record<Thought, string> = {
+  'need-job': '沒工作', 'no-power': '沒電', 'no-water': '沒水', 'air-bad': '空氣差', unsafe: '治安差',
+  'far-commute': '上班遠', 'no-clinic': '沒診所', 'no-hospital': '沒醫院', 'no-shops': '店太少',
+  'want-other-job': '想換工作', 'slump-worry': '怕失業', 'tax-high': '稅太重', jam: '塞車', 'no-school': '沒小學',
+  'no-highschool': '沒高中', 'want-ride': '想搭車', 'new-here': '剛搬來', 'love-car': '愛開車',
+  'garden-proud': '顧花草', neighbours: '幫鄰居', 'tax-low': '稅很低', 'ride-glad': '搭車方便', 'old-timer': '住很久',
+  'nice-home': '好地段', 'near-commute': '上班近', 'boom-glad': '景氣好', 'water-near': '住水邊', 'park-near': '公園近',
+  'love-job': '喜歡工作', 'all-good': '沒煩惱', 'nothing-near': '附近空空', strangers: '不認識鄰居', 'want-car': '想買車',
+  online: '靠網購', 'temple-near': '有廟', 'proud-car': '有好車', handy: '生活方便', 'close-knit': '鄰居感情好',
+  'kids-nowhere': '小孩沒處玩', 'casino-near': '賭場吵', 'fun-near': '有得玩', 'kids-happy': '小孩開心',
+  scared: '怕怕的', 'good-pay': '加薪了',
+};
+
+/**
+ * A fact in a few characters, with a number beside it when there is one. The long version is
+ * the tooltip; a tag that can be picked is a button.
+ */
+function Tag({ label, value, tone, tip, onPick, picked }: { label: string; value?: string | number;
+  tone?: 'good' | 'bad' | 'dim'; tip?: string; onPick?: () => void; picked?: boolean }) {
+  const body = <>{label}{value !== undefined && <b>{value}</b>}</>;
+  const name = `tag${tone ? ` ${tone}` : ''}`;
+  return onPick ? <button type="button" className={name} title={tip} aria-pressed={picked} onClick={onPick}>{body}</button> :
+    <span className={name} title={tip}>{body}</span>;
+}
+/** How business is at a workplace, and what that does to pay. */
+const tradeNames = { busy: ['很好', '客人很多，薪水多五成'], good: ['好', '薪水多兩成五'], quiet: ['冷清', '客人少，薪水照常'] } as const;
+/** The three ready-made cities. */
+const demoList: [DemoSize, string, string, string[]][] = [
+  ['small', '小鎮', '140 人', ['捷運', '電影院', '東岸待開發']],
+  ['medium', '城鎮', '800 人', ['醫院', '博物館', '捷運 2 條']],
+  ['large', '大城市', '2,100 人', ['大學', '商場', '賭場', '三座橋']],
+];
+const thoughtTone = (thought: Thought) => thoughtWeights[thought] < 0 ? 'bad' as const : 'good' as const;
+
+/** A mood from 0 to 100 as a word. */
+const moodWord = (mood: number) => mood >= mind.glad ? '開心' : mood >= mind.low ? '還好' : '不開心';
+
+const serviceNames: Record<Service, string> = { fire: '消防', police: '警察', school: '小學', clinic: '診所',
+  market: '市場', highschool: '高中', hospital: '醫院', university: '大學', museum: '博物館', stadium: '體育場',
+  temple: '廟', mall: '商場', casino: '賭場', cinema: '電影院', parking: '停車場' };
 
 /** How full a road is, in the words of the traffic view's four colours. */
 const trafficName = (load: number) =>
@@ -166,7 +392,7 @@ export function App() {
   const activeTool = useRef<Tool>('inspect');
   const [tool, setTool] = useState<Tool>('inspect');
   const [failed, setFailed] = useState(false);
-  const [message, setMessage] = useState('先用下面的「道路」鋪一條路，再到「分區」在路旁劃住宅、商業、工業，城市就會自己長出來。');
+  const [message, setMessage] = useState('先鋪路，再在路旁劃住宅、商業、工業。');
   const [tick, setTick] = useState(0);
   const [speed, setSpeed] = useState<SimulationSpeed>(1);
   const [engine] = useState(() => freshCity());
@@ -176,6 +402,13 @@ export function App() {
   const lastTime = useRef(0);
   const tickMs = useRef(0);
   const [selected, setSelected] = useState<Cell>();
+  // The resident whose card is open, by home and place in it.
+  const [who, setWho] = useState<{ home: number; slot: number }>();
+  // The thought whose sentence is shown, on a resident's card and in the city's voices.
+  const [said, setSaid] = useState<Thought>();
+  // The problem whose explanation is shown, and whether the list of ready-made cities is open.
+  const [asked, setAsked] = useState<Issue>();
+  const [choosing, setChoosing] = useState(false);
   const [debug, setDebug] = useState(false);
   const [fps, setFps] = useState(0);
   const [hour, setHour] = useState(() => hourAt(0));
@@ -185,6 +418,7 @@ export function App() {
   const knownRank = useRef(0);
   const knownEvent = useRef(0);
   const knownGoals = useRef(0);
+  const knownMood = useRef<Mood>('normal');
   const [toolTab, setToolTab] = useState(0);
   const [panelTab, setPanelTab] = useState<PanelTab>('city');
   // The line whose stops are being picked on the map, if any.
@@ -233,9 +467,10 @@ export function App() {
     setStats(engine.city.getStats());
     knownRank.current = engine.city.getStats().rank;
     knownGoals.current = engine.city.getStats().goals.length;
+    knownMood.current = engine.city.getStats().mood;
     rendererRef.current?.refresh?.();
     setDemo(false);
-    setMessage('已經回到上次存的城市。');
+    setMessage('回到上次存的城市。');
   }
 
   useEffect(() => {
@@ -282,10 +517,11 @@ export function App() {
       const now = engine.city.getStats();
       knownRank.current = now.rank;
       knownGoals.current = now.goals.length;
+      knownMood.current = now.mood;
       setTick(engine.getSnapshot().tick);
       setStats(now);
       rendererRef.current?.refresh?.();
-      setMessage('已經回到你上次離開時的城市。想重新開始可以按上面的「新地圖」。');
+      setMessage('回到上次離開的城市。');
     }).catch(() => undefined);
     // Every quarter of a minute, and when the page is put away.
     const keep = () => void writeSave(engine.save(), AUTO_SLOT).catch(() => undefined);
@@ -324,7 +560,10 @@ export function App() {
     void renderer.mount(host, lifetime.signal, () => activeTool.current, message => {
       setMessage(message);
       setStats(engine.city.getStats());
-    }, setSelected).catch((error: unknown) => {
+    }, cell => {
+      setWho(undefined);
+      setSelected(cell);
+    }).catch((error: unknown) => {
       if (lifetime.signal.aborted) return;
       console.error('PixiJS initialization failed', error);
       setFailed(true);
@@ -347,14 +586,19 @@ export function App() {
       return [...past.slice(-179), { tick, population: next.population, funds: next.funds }];
     });
     if (next.rank > knownRank.current) {
-      setMessage(`城市長大成「${rankNames[next.rank]}」了，拿到獎金 ${money(milestones[next.rank - 1].grant)}。`);
+      setMessage(`升級成「${rankNames[next.rank]}」，獎金 ${money(milestones[next.rank - 1].grant)}。`);
     }
     knownRank.current = next.rank;
     if (next.goals.length > knownGoals.current) {
       const goal = goals.find(candidate => candidate.id === next.goals.at(-1));
-      if (goal) setMessage(`完成目標「${goal.title}」，拿到獎金 ${money(goal.reward)}。`);
+      if (goal) setMessage(`完成「${goal.title}」，獎金 ${money(goal.reward)}。`);
     }
     knownGoals.current = next.goals.length;
+    if (next.mood !== knownMood.current) {
+      setMessage(next.mood === 'boom' ? '景氣變好：想來的人變多，稅收多一成。' :
+        next.mood === 'slump' ? '景氣變差：店和工廠少請人，有人會丟工作。' : '景氣回到普通。');
+    }
+    knownMood.current = next.mood;
     const latest = engine.city.getEvents().at(-1);
     if (latest && latest.tick > knownEvent.current) {
       knownEvent.current = latest.tick;
@@ -381,31 +625,39 @@ export function App() {
     engine.load(next.save());
     clock.reset();
     lastTime.current = performance.now();
-    setTick(0);
-    setHour(hourAt(0));
+    // The demo town opens with some history behind it, so not everything starts from nothing.
+    const opening = engine.city.getStats();
+    setTick(engine.getSnapshot().tick);
+    setHour(hourAt(engine.getSnapshot().tick));
     setDemo(isDemo);
     setSelected(undefined);
+    setWho(undefined);
     rendererRef.current?.deselect?.();
-    knownRank.current = 0;
-    knownEvent.current = 0;
-    knownGoals.current = 0;
+    knownRank.current = opening.rank;
+    knownEvent.current = engine.getSnapshot().tick;
+    knownGoals.current = opening.goals.length;
+    knownMood.current = opening.mood;
     void writeSave(engine.save(), AUTO_SLOT).catch(() => undefined);
     setStats(engine.city.getStats());
     rendererRef.current?.refresh?.();
     setMessage(done);
   }
 
-  function startDemo() {
-    const sample = new SimulationEngine({ version: 1, seed: 42, tick: 0 });
-    sample.city.map.generateTerrain(42);
-    demoCity(sample);
-    replaceCity(sample, '示範小鎮會蓋掉現在的地圖，確定嗎？', true,
-      '這是一座會自己長大的示範小鎮。按 4× 加快時間看它變化，或到右邊「城市」分頁試試出狀況會怎樣。');
+  function startDemo(size: DemoSize) {
+    setChoosing(false);
+    setMessage('正在蓋城市…');
+    // The larger ones take a few seconds to put up, so the message gets on screen first.
+    window.setTimeout(() => {
+      const sample = new SimulationEngine({ version: 1, seed: 42, tick: 0 });
+      demoCity(sample, size);
+      replaceCity(sample, '會蓋掉現在的地圖，確定嗎？', true,
+        size === 'small' ? '交給你了。先過橋，把東岸的水電、警察、消防補上。' :
+          '交給你了。大道最東邊的新街區還沒有水電、警察、消防。');
+    }, 30);
   }
 
   function startNew() {
-    replaceCity(freshCity(), '開一張新地圖會丟掉現在的城市，確定嗎？', false,
-      '這是一張新的地圖，河流和池塘的位置每次都不一樣。');
+    replaceCity(freshCity(), '會丟掉現在的城市，確定嗎？', false, '新地圖。先鋪路，再在路旁劃分區。');
   }
 
   const date = dateAt(tick);
@@ -414,7 +666,56 @@ export function App() {
   const demoTile = (cell: Cell) => engine.city.map.get(cell);
   const shift = building && building.zone !== 'residential' ? workShift(building.zone, building.id) : undefined;
   const nextRank = milestones[stats.rank];
-  const events = [...engine.city.getEvents()].reverse().slice(0, 4);
+  // The resident being looked at. The map moves people slower than the clock runs, so while it
+  // shows them on the road, that is what they are doing.
+  const seen = who && engine.city.person(who.home, who.slot, hour);
+  const trip = seen && seen.jobId >= 0 ? rendererRef.current?.tripOf?.(seen.homeId, seen.jobId) : undefined;
+  const doing = !seen ? undefined : trip === 'to-work' || trip === 'to-home' ? trip :
+    seen.doing === 'to-work' && trip === 'work' ? 'working' :
+    seen.doing === 'to-home' && trip === 'home' ? 'home' : seen.doing;
+  const pickPerson = (person: { homeId: number; slot: number }) => setWho({ home: person.homeId, slot: person.slot });
+  const voices = panelTab === 'city' ? engine.city.voices() : undefined;
+  const worries = voices?.thoughts.filter(([thought]) => thoughtWeights[thought] < 0).slice(0, 3) ?? [];
+  const joys = voices?.thoughts.filter(([thought]) => thoughtWeights[thought] > 0 && thought !== 'new-here').slice(0, 2) ?? [];
+  // The sentence on show: the picked thought if this person has it, or else their first.
+  const spoken = seen && (said && seen.thoughts.includes(said) ? said : seen.thoughts[0]);
+  const personCard = seen && doing && <section className="person">
+    <button type="button" className="back" onClick={() => setWho(undefined)}>← 回上一頁</button>
+    <h2>{seen.name}</h2>
+    <div className="tags">
+      <Tag label={`${seen.age} 歲`} />
+      {seen.trait && <Tag label={traitNames[seen.trait][0]} tip={traitNames[seen.trait][1]} />}
+      <Tag label={moodWord(seen.mood)} tone={seen.mood >= mind.glad ? 'good' : seen.mood < mind.low ? 'bad' : undefined} tip="心情" />
+      {seen.kids > 0 && <Tag label="小孩" value={seen.kids} />}
+    </div>
+    <dl>
+      <dt>現在</dt><dd>{doingText(doing, seen.shift, seen.way)}</dd>
+      <dt>住在</dt><dd>{seen.kind ? homeKindNames[seen.kind][0] : '一般住宅'}，{howLong(seen.days)}</dd>
+      <dt>工作</dt>
+      <dd>{seen.shift === undefined ? '還在找工作' :
+        `${shifts[seen.shift].title} ${shifts[seen.shift].start}–${shifts[seen.shift].end} 點，${howLong(seen.workDays ?? 0)}`}</dd>
+      {seen.way && seen.minutes !== undefined && <>
+        <dt>上班</dt><dd>{wayNames[seen.way]} {Math.max(1, Math.round(seen.minutes))} 分鐘</dd>
+      </>}
+      <dt>錢</dt>
+      <dd className="tags"><Tag label="日薪" value={money(seen.pay)} /><Tag label="存款" value={money(seen.money)} /></dd>
+      <dt>車子</dt>
+      <dd className="tags"><Tag label={vehicleNames[seen.car]} />
+        {vehicles[seen.car + 1] && <Tag label={`${vehicleNames[seen.car + 1]}`} value={money(vehicles[seen.car + 1].price)}
+          tone="dim" tip="存到這麼多就會換車" />}</dd>
+    </dl>
+    <h2 className="sub">心裡在想</h2>
+    <div className="tags">
+      {seen.thoughts.map(thought => <Tag key={thought} label={thoughtTags[thought]} tone={thoughtTone(thought)}
+        picked={thought === spoken} onPick={() => setSaid(thought)} />)}
+    </div>
+    <p className="said">{spoken ? `「${thoughtNames[spoken]}」` : ''}</p>
+  </section>;
+  // What happened lately, to buildings and to people, newest first.
+  const happenings = [
+    ...engine.city.getEvents().map(event => ({ tick: event.tick, text: eventText[event.kind] })),
+    ...engine.city.getNews().map(item => ({ tick: item.tick, text: newsText(item) })),
+  ].sort((a, b) => b.tick - a.tick).slice(0, 14);
   const rush = rushShifts(hour).map(index => shifts[index].title);
   const setTax = (rate: number) => {
     engine.city.setTaxRate(rate);
@@ -457,13 +758,20 @@ export function App() {
     setStats(engine.city.getStats());
   };
   if (rendererRef.current) {
+    rendererRef.current.follow = seen && seen.jobId >= 0 ? `${seen.homeId}:${seen.jobId}` : undefined;
+    rendererRef.current.onPerson = (homeId, workId) => {
+      const slot = engine.city.personOn(homeId, workId);
+      if (slot === undefined) return;
+      setWho({ home: homeId, slot });
+      setPanelTab('tile');
+    };
     rendererRef.current.onLineClick = cell => {
       const id = editingRef.current;
       if (id === undefined) return;
       const result = engine.city.toggleStop(id, cell);
       setStats(engine.city.getStats());
       rendererRef.current?.refresh?.();
-      setMessage(result.error ?? (result.added ? '這一站加進路線了，繼續點下一站，或按「完成」。' : '這一站從路線拿掉了。'));
+      setMessage(result.error ?? (result.added ? '加進路線了。' : '拿掉了。'));
     };
   }
 
@@ -474,7 +782,7 @@ export function App() {
       <div className="viewport" ref={viewport} data-tool={tool} role="region" aria-label="城市地圖" />
 
       <header className="hud top">
-        <div className="stat" title={`每月：稅收 ${money(stats.budget.tax)}，車票 ${money(stats.budget.fares)}，民生用品買賣 ${money(stats.budget.trade)}，維護費 ${money(stats.budget.upkeep)}，還款 ${money(stats.budget.loans)}。每天進帳一點。`}>
+        <div className="stat" title={`每月：稅收 ${money(stats.budget.tax)}，車票 ${money(stats.budget.fares)}，牌照稅 ${money(stats.budget.licence)}，景點 ${money(stats.budget.visitors)}，民生用品買賣 ${money(stats.budget.trade)}，維護費 ${money(stats.budget.upkeep)}，還款 ${money(stats.budget.loans)}。每天進帳一點。`}>
           <span>資金</span>
           <b>{money(stats.funds)}</b>
           <small className={stats.budget.net < 0 ? 'loss' : undefined}>每月 {stats.budget.net >= 0 ? '+' : ''}{money(stats.budget.net)}</small>
@@ -482,9 +790,9 @@ export function App() {
         <div className="stat">
           <span>人口</span>
           <b>{stats.population.toLocaleString('en-US')} 人</b>
-          <small>{rankNames[stats.rank]}{nextRank && `，滿 ${nextRank.population.toLocaleString('en-US')} 人升級`}</small>
+          <small>{rankNames[stats.rank]}{nextRank && ` → ${nextRank.population.toLocaleString('en-US')}`}</small>
         </div>
-        <div className="stat demand" title="哪一種分區現在比較缺。越長越缺，劃了就會有人來蓋；空的代表已經夠了。">
+        <div className="stat demand" title="越長越缺">
           <span>缺什麼</span>
           {zones.map(([zone, label]) => (
             <label key={zone}>{label}
@@ -493,7 +801,10 @@ export function App() {
           ))}
         </div>
         <div className="clock">
-          <b>{date.year} 年 {date.month} 月 {date.day} 日 {String(Math.floor(hour)).padStart(2, '0')}:{String(Math.floor(hour % 1 * 60)).padStart(2, '0')}</b>
+          <div className="when">
+            <b>{date.year} 年 {date.month} 月 {date.day} 日</b>
+            <small>星期{'一二三四五六日'[weekdayAt(tick)]} {String(Math.floor(hour)).padStart(2, '0')}:{String(Math.floor(hour % 1 * 60)).padStart(2, '0')}</small>
+          </div>
           <span role="group" aria-label="時間快慢">
             {speeds.map(value => (
               <button key={value} type="button" aria-pressed={speed === value} onClick={() => {
@@ -506,7 +817,7 @@ export function App() {
         </div>
         <div className="menu" role="group" aria-label="城市">
           <button type="button" onClick={startNew}>新地圖</button>
-          <button type="button" onClick={startDemo}>示範小鎮</button>
+          <button type="button" aria-pressed={choosing} onClick={() => setChoosing(!choosing)}>示範</button>
           <button type="button" onClick={() => void save()}>儲存</button>
           <button type="button" onClick={() => void load()}>讀取</button>
         </div>
@@ -527,83 +838,168 @@ export function App() {
           ))}
         </div>
 
-        {panelTab === 'tile' && (selected && info ? <section>
-          <h2>{info.complex ? '集合住宅' : info.bigPark ? '大公園' : tileNames[info.tile]}</h2>
+        {panelTab === 'tile' && (personCard ? personCard : selected && info ? <section>
+          <h2>{info.complex ? '集合住宅' : info.bigPark ? '大公園' : info.kind ? homeKindNames[info.kind][0] : tileNames[info.tile]}</h2>
+          {info.kind && <p className="hint">{homeKindNames[info.kind][1]}</p>}
           <dl>
             {info.building === false && <>
-              <dt>狀況</dt><dd>{info.roadAccess ? '空地，等有人需要就會蓋' : '旁邊要有路才會蓋'}</dd>
+              <dt>狀況</dt>
+              <dd className="tags">{info.roadAccess ? <Tag label="空地" tip="有人需要就會蓋" /> :
+                <Tag label="沒貼路" tone="bad" tip="旁邊要有路才會蓋" />}</dd>
             </>}
             {info.building && <>
-              <dt>{info.tile === 'residential' ? '住了' : '員工'}</dt><dd>{info.occupants} / {info.capacity} 人</dd>
-              <dt>等級</dt><dd>{info.level}{info.nextLevel === undefined ? '（最高）' : ''}</dd>
+              <dt>{info.tile === 'residential' ? '住戶' : '員工'}</dt>
+              <dd className="tags">
+                <Tag label="人" value={`${info.occupants}/${info.capacity}`} />
+                <Tag label="等級" value={info.complex ? '集合' : info.level} tone={info.nextLevel === undefined ? 'good' : undefined} />
+                {info.tile === 'residential' && <Tag label="有工作" value={info.employed}
+                  tone={info.employed < info.occupants ? 'bad' : undefined} />}
+              </dd>
               {info.tile === 'residential' && <>
-                <dt>有工作</dt><dd>{info.employed} / {info.occupants} 人</dd>
-                <dt>上班路程</dt><dd>{info.commute === undefined ? '—' : `${Math.round(info.commute)} 分鐘`}</dd>
+                <dt>上班</dt>
+                <dd className="tags"><Tag label="平均" value={info.commute === undefined ? '—' : `${Math.round(info.commute)} 分`}
+                  tone={(info.commute ?? 0) > traffic.longCommute ? 'bad' : undefined} /></dd>
               </>}
-              {shift && <><dt>上班時間</dt><dd>{shift.start}:00–{shift.end}:00</dd></>}
-              <dt>水電</dt><dd>{info.power ? '有電' : '沒電'}、{info.water ? '有水' : '沒水'}</dd>
-              <dt>附近有</dt><dd>{[...info.services.map(service => serviceNames[service]), ...(info.transit ? ['公車或捷運'] : [])].join('、') || '沒有服務'}</dd>
+              {shift && <><dt>班別</dt><dd className="tags"><Tag label={shift.title} value={`${shift.start}–${shift.end} 點`} /></dd></>}
+              {info.tile !== 'residential' && <>
+                <dt>生意</dt>
+                <dd className="tags">
+                  <Tag label={info.trade ? tradeNames[info.trade][0] : '普通'} tip={info.trade ? tradeNames[info.trade][1] : '薪水照常'}
+                    tone={info.trade === 'quiet' ? 'bad' : info.trade ? 'good' : undefined} />
+                  {info.custom !== undefined && <Tag label="客人" value={info.custom} tip="住在 6 格內、會來這裡買東西的人" />}
+                </dd>
+              </>}
+              <dt>水電</dt>
+              <dd className="tags"><Tag label={info.power ? '有電' : '沒電'} tone={info.power ? undefined : 'bad'} />
+                <Tag label={info.water ? '有水' : '沒水'} tone={info.water ? undefined : 'bad'} /></dd>
+              <dt>服務</dt>
+              <dd className="tags">{info.services.map(service => <Tag key={service} label={serviceNames[service]} />)}
+                {info.transit && <Tag label="車站" />}
+                {!info.services.length && !info.transit && <Tag label="都沒有" tone="bad" />}</dd>
             </>}
             {info.parkTiles !== undefined && <>
-              <dt>大小</dt><dd>{info.bigPark ? `共 ${info.parkTiles} 格，是一座大公園` :
-                `連在一起的有 ${info.parkTiles} 格，滿 ${landValue.bigPark.tiles} 格會變成大公園`}</dd>
+              <dt>大小</dt>
+              <dd className="tags"><Tag label={info.bigPark ? '大公園' : '公園'} value={`${info.parkTiles} 格`}
+                tone={info.bigPark ? 'good' : undefined} tip={`連滿 ${landValue.bigPark.tiles} 格是大公園`} /></dd>
+            </>}
+            {info.grows !== undefined && <>
+              <dt>收成</dt>
+              <dd className="tags"><Tag label="每月" value={`${info.grows} 份`} tone={info.grows ? undefined : 'bad'} />
+                <Tag label={info.watered ? '靠水' : '離水遠'} tone={info.watered ? 'good' : 'dim'} tip="離水 3 格內收成三倍" /></dd>
             </>}
             {info.value !== undefined && <>
-              <dt>地價</dt><dd>{info.value}{info.building && info.nextLevel !== undefined && `（${info.nextLevel} 以上會升級）`}</dd>
+              <dt>地價</dt>
+              <dd className="tags"><Tag label={String(info.value)} />
+                {info.building && info.nextLevel !== undefined && <Tag label="升級要" value={info.nextLevel} tone="dim" />}</dd>
             </>}
             {info.pollution !== undefined && info.pollution > 0 && <>
-              <dt>污染</dt><dd>{info.pollution}{info.tile === 'residential' && info.pollution > pollution.limit && '（太髒，沒人要搬來）'}</dd>
+              <dt>污染</dt>
+              <dd className="tags"><Tag label={String(info.pollution)} tone={info.pollution > pollution.limit ? 'bad' : undefined}
+                tip={`超過 ${pollution.limit} 沒人要住`} /></dd>
             </>}
             {info.flow !== undefined && <>
-              <dt>路況</dt><dd>{trafficName(info.congestion)}</dd>
-              <dt>最忙時</dt><dd>{info.flow} 人經過（能走 {info.roadCapacity} 人）</dd>
+              <dt>路況</dt>
+              <dd className="tags"><Tag label={trafficName(info.congestion)} tone={info.congestion > 1 ? 'bad' : undefined} />
+                <Tag label="最忙" value={`${info.flow}/${info.roadCapacity}`} tip="最忙時經過的人／能走的人" /></dd>
             </>}
             {info.running === false && <>
-              <dt>狀況</dt><dd>旁邊沒有路，沒有在運作</dd>
+              <dt>狀況</dt><dd className="tags"><Tag label="沒貼路" tone="bad" tip="旁邊沒有路，沒有在運作" /></dd>
             </>}
             {info.lines !== undefined && <>
-              <dt>路線</dt><dd>{info.lines.length ? info.lines.map(id => lineName(lines.find(line => line.id === id)!)).join('、') : '還沒有加進任何路線'}</dd>
+              <dt>路線</dt>
+              <dd className="tags">{info.lines.length ? info.lines.map(id => <Tag key={id} label={lineName(lines.find(line => line.id === id)!)} />) :
+                <Tag label="還沒加進路線" tone="dim" />}</dd>
             </>}
             {info.reaching !== undefined && <>
-              <dt>範圍</dt><dd>{info.radius} 格，裡面有 {info.reaching} 棟建築</dd>
+              <dt>範圍</dt>
+              <dd className="tags"><Tag label="半徑" value={`${info.radius} 格`} /><Tag label="照顧" value={`${info.reaching} 棟`} /></dd>
+            </>}
+            {info.earns !== undefined && <>
+              <dt>遊客</dt>
+              <dd className="tags"><Tag label="收入" value={`${money(info.earns)}/月`} tone="good" />
+                <Tag label={info.parked ? '有停車場' : '沒停車場'} tone={info.parked ? 'good' : 'dim'} tip="4 格內有停車場，遊客多兩成五" /></dd>
+            </>}
+            {info.shoppers !== undefined && <>
+              <dt>買東西</dt><dd className="tags"><Tag label="夠" value={`${info.shoppers} 人`} /></dd>
             </>}
             {info.serving !== undefined && <>
-              <dt>供應</dt><dd>{info.serving} / {info.capacity} 棟</dd>
+              <dt>供應</dt><dd className="tags"><Tag label="棟" value={`${info.serving}/${info.capacity}`} /></dd>
             </>}
             {info.tile !== 'grass' && info.tile !== 'river' && info.building === undefined && <>
-              <dt>維護費</dt><dd>每月 {money(economy.upkeep[info.tile as keyof typeof economy.upkeep])}</dd>
+              <dt>維護</dt>
+              <dd className="tags"><Tag label="每月" value={money(economy.upkeep[info.tile as keyof typeof economy.upkeep])} /></dd>
             </>}
             {info.building && <>
-              <dt>問題</dt><dd>{info.issues.length ? info.issues.map(issue => issueNames[issue]).join('、') : '沒有'}</dd>
+              {info.kids && info.kids.length > 0 && <>
+                <dt>小孩</dt>
+                <dd className="tags">{info.kids.map(kid => <Tag key={kid.name} label={kid.name} value={`${kid.age} 歲`} />)}</dd>
+              </>}
+              {info.circle && info.bond !== undefined && <>
+                <dt title={`走路 ${circle.reach} 格內有什麼；灰色的是沒有的`}>生活圈</dt>
+                <dd className="tags">{PLACES.map(place => <Tag key={place} label={placeNames[place]}
+                  tone={info.circle!.includes(place) ? 'good' : 'dim'} />)}</dd>
+                <dt>鄰居</dt>
+                <dd className="tags">{info.occupants ?
+                  <Tag label={`感情${bondWord(info.bond)}`} tone={info.bond >= bond.close ? 'good' : undefined}
+                    value={info.bond >= bond.close ? `地價 +${bond.value}` : undefined}
+                    tip="住得久、附近有廟或公園、有熱心的住戶，感情就會變好" /> : <Tag label="還沒人住" tone="dim" />}</dd>
+              </>}
+              <dt>問題</dt>
+              <dd className="tags">{info.issues.length ?
+                info.issues.map(issue => <Tag key={issue} label={issueNames[issue]} tone="bad"
+                  picked={issue === asked} onPick={() => setAsked(issue)} />) : <Tag label="沒有" tone="good" />}</dd>
             </>}
           </dl>
+          {info.building && info.issues.length > 0 && <p className="said">
+            {asked && info.issues.includes(asked) ? issueHelp[asked] : '點問題看怎麼解決。'}</p>}
           {info.residents !== undefined && info.residents.length > 0 && <>
             <h2 className="sub">住在這裡的人</h2>
             <ul className="people">
-              {info.residents.slice(0, 8).map((person, place) => <li key={place}>
-                <b>{person.name}</b>
-                <span>{person.shift === undefined ? '找工作中' : shifts[person.shift].title}</span>
-                {person.trait && <i title={traitNames[person.trait][1]}>{traitNames[person.trait][0]}</i>}
-              </li>)}
+              {info.residents.slice(0, 16).map(person => <PersonRow key={`${person.homeId}:${person.slot}`} person={person} onPick={pickPerson} />)}
             </ul>
-            {info.residents.length > 8 && <p className="hint">還有 {info.residents.length - 8} 位。</p>}
+            {info.residents.length > 16 && <p className="hint">還有 {info.residents.length - 16} 位。</p>}
           </>}
-        </section> : <p className="hint">在地圖上點一格，這裡會顯示它的資料。</p>)}
+          {info.staff !== undefined && info.staff.length > 0 && <>
+            <h2 className="sub">在這裡上班的人</h2>
+            <ul className="people">
+              {info.staff.slice(0, 16).map(person => <PersonRow key={`${person.homeId}:${person.slot}`} person={person} atWork onPick={pickPerson} />)}
+            </ul>
+            {info.staff.length > 16 && <p className="hint">還有 {info.staff.length - 16} 位。</p>}
+          </>}
+        </section> : <p className="hint">在地圖上點一格。</p>)}
 
         {panelTab === 'city' && <>
           <section>
+            <h2>概況</h2>
             <dl>
-              <dt>工作</dt><dd>{stats.employed} 人有工作，共 {stats.jobs} 個職位</dd>
-              <dt>上班路程</dt><dd>{stats.employed ? `平均 ${Math.round(stats.commute)} 分鐘` : '—'}</dd>
-              <dt>路上</dt><dd>{rush.length ? `${rush.join('、')}正在上下班` : '現在車少'}</dd>
-              <dt>搭車</dt><dd>{stats.riders} 人搭公車或捷運</dd>
-              <dt>民生用品</dt>
-              <dd>{stats.goods.needed === 0 ? '還沒有人需要' : stats.goods.made >= stats.goods.needed ?
-                `夠用，多的賣出去每月賺 ${money(stats.goods.trade)}` :
-                `不夠，每月花 ${money(-stats.goods.trade)} 從外面買`}</dd>
-              {stats.goods.served < stats.goods.needed && <>
-                <dt>商店</dt><dd className="full">不夠，有 {stats.goods.needed - stats.goods.served} 人買不到東西</dd>
-              </>}
+              <dt>工作</dt>
+              <dd className="tags"><Tag label="有工作" value={stats.employed} /><Tag label="職位" value={stats.jobs} /></dd>
+              <dt>上班</dt>
+              <dd className="tags">
+                <Tag label="平均" value={stats.employed ? `${Math.round(stats.commute)} 分` : '—'} />
+                <Tag label="搭車" value={stats.riders} tip="搭公車或捷運上班的人" />
+                <Tag label="路上" value={rush[0] ?? '—'} tone={rush.length ? undefined : 'dim'} tip="現在哪一班的人在上下班" />
+              </dd>
+              <dt>車子</dt>
+              <dd className="tags" title="存夠錢就買車，每台每月繳牌照稅">
+                {stats.cars.slice(1).map((count, index) => <Tag key={index} label={vehicleNames[index + 1]} value={count}
+                  tone={count ? undefined : 'dim'} />)}
+                <Tag label="牌照稅" value={`${money(stats.budget.licence)}/月`} tone={stats.budget.licence ? 'good' : 'dim'} />
+              </dd>
+              <dt>景氣</dt>
+              <dd className="tags">{stats.rank < cycle.rank ?
+                <Tag label="還沒開始" tone="dim" tip={`城市到過 ${cycle.population} 人以後，景氣會有好有壞`} /> :
+                <Tag label={moodNames[stats.mood][0]} tip={moodNames[stats.mood][1]}
+                  tone={stats.mood === 'boom' ? 'good' : stats.mood === 'slump' ? 'bad' : undefined} />}</dd>
+              <dt>用品</dt>
+              <dd className="tags" title="工廠和農田做民生用品；多的賣掉，不夠要買">
+                {stats.goods.made >= stats.goods.needed ?
+                  <><Tag label="夠用" tone={stats.goods.needed ? 'good' : 'dim'} /><Tag label="外銷" value={`+${money(stats.goods.trade)}/月`} /></> :
+                  <><Tag label="不夠" tone="bad" /><Tag label="進口" value={`−${money(-stats.goods.trade)}/月`} tone="bad" /></>}
+                <Tag label="農田" value={stats.goods.farmed} tone={stats.goods.farmed ? undefined : 'dim'} tip="農田每月種出來的份數" />
+                <Tag label="買不到" value={`${stats.goods.needed - stats.goods.served} 人`}
+                  tone={stats.goods.served < stats.goods.needed ? 'bad' : 'dim'} tip="商店不夠，這麼多人買不到東西" />
+              </dd>
               <dt>借款</dt>
               <dd className="tax" title={`一次借 ${money(economy.loan.amount)}，之後 ${economy.loan.months} 個月每月還 ${money(economy.loan.payment)}。最多同時借 ${economy.loan.max} 筆。`}>
                 {stats.loans.length} 筆
@@ -612,7 +1008,7 @@ export function App() {
                   借 {money(economy.loan.amount)}</button>
               </dd>
               <dt>稅率</dt>
-              <dd className="tax" title="稅率越高每月收入越多，但太高大家就不想來蓋房子；調低則相反。">
+              <dd className="tax" title="越高收入越多，但想來的人越少">
                 <button type="button" aria-label="調低稅率" disabled={stats.taxRate <= economy.taxRate.min}
                   onClick={() => setTax(stats.taxRate - 1)}>−</button>
                 {stats.taxRate}%
@@ -623,36 +1019,53 @@ export function App() {
           </section>
           <section>
             <h2>目前的問題</h2>
-            {trouble ? <ul>
-              {stats.idle > 0 && <li>有 {stats.idle} 座設施旁邊沒有路，沒有在運作</li>}
-              {problems.map(issue => <li key={issue}>{issueNames[issue]}（{stats.complaints[issue]} 棟）</li>)}
-            </ul> : <p className="hint">沒有問題。</p>}
+            <div className="tags two">
+              {stats.idle > 0 && <Tag label="設施沒貼路" value={stats.idle} tone="bad" tip="旁邊沒有路，沒有在運作" />}
+              {problems.map(issue => <Tag key={issue} label={issueNames[issue]} value={`${stats.complaints[issue]} 棟`} tone="bad"
+                picked={issue === asked} onPick={() => setAsked(issue)} />)}
+              {!trouble && <Tag label="沒有問題" tone="good" />}
+            </div>
+            <p className="said">{asked && problems.includes(asked) ? issueHelp[asked] : problems.length ? '點問題看怎麼解決。' : ''}</p>
+          </section>
+          <section>
+            <h2>居民心聲</h2>
+            {voices?.people ? <>
+              <div className="tags two">
+                <Tag label="心情" value={moodWord(voices.mood)} tone={voices.mood >= mind.glad ? 'good' : voices.mood < mind.low ? 'bad' : undefined} />
+                <Tag label="鄰居感情" value={bondWord(voices.bond)} />
+                {[...worries, ...joys].map(([thought, count]) => <Tag key={thought} label={thoughtTags[thought]} value={count}
+                  tone={thoughtTone(thought)} picked={thought === said} onPick={() => setSaid(thought)} />)}
+              </div>
+              <p className="said">{said && [...worries, ...joys].some(([thought]) => thought === said) ?
+                `「${thoughtNames[said]}」` : '點標籤看大家怎麼說。'}</p>
+            </> : <p className="hint">還沒有人住進來。</p>}
           </section>
           <section>
             <h2>城裡的人</h2>
-            {TRAITS.some(trait => stats.traits[trait] > 0) ? <ul>
+            <div className="tags">
               {TRAITS.filter(trait => stats.traits[trait] > 0).map(trait =>
-                <li key={trait}>{traitNames[trait][0]} {stats.traits[trait]} 位：{traitNames[trait][1]}</li>)}
-            </ul> : <p className="hint">大部分人很普通；有些人有自己的個性，會影響城市。</p>}
+                <Tag key={trait} label={traitNames[trait][0]} value={stats.traits[trait]} tip={traitNames[trait][1]} />)}
+              {!TRAITS.some(trait => stats.traits[trait] > 0) && <Tag label="都很普通" tone="dim" />}
+            </div>
           </section>
           <TrendChart title="人口" points={trend(history, 'population')} format={value => `${Math.round(value).toLocaleString('en-US')} 人`} />
           <TrendChart title="資金" points={trend(history, 'funds')} format={money} />
           {demo && <section>
-            <h2>試試看出狀況</h2>
+            <h2>出狀況試試</h2>
             <div className="row">
               {demoTile(powerPlant) === 'power' ?
                 <button type="button" onClick={() => command({ type: 'DEMOLISH', ...powerPlant },
-                  '西邊的電廠關掉了，沒電的建築只能用一半。')}>關掉電廠</button> :
+                  '電廠關了。')}>關掉電廠</button> :
                 <button type="button" onClick={() => command({ type: 'BUILD_FACILITY', ...powerPlant, facility: 'power' },
                   '電廠重新開了。')}>重開電廠</button>}
               {demoTile(waterTower) === 'water' ?
                 <button type="button" onClick={() => command({ type: 'DEMOLISH', ...waterTower },
-                  '西邊的水塔關掉了，沒水的建築只能用一半。')}>關掉水塔</button> :
+                  '水塔關了。')}>關掉水塔</button> :
                 <button type="button" onClick={() => command({ type: 'BUILD_FACILITY', ...waterTower, facility: 'water' },
                   '水塔重新開了。')}>重開水塔</button>}
               {demoTile(works) === 'avenue' ?
                 <button type="button" onClick={() => command({ type: 'DEMOLISH', ...works },
-                  '通往工業區的大道封起來了，工廠的人到不了公司。')}>封閉大道</button> :
+                  '大道封了，工廠的人到不了。')}>封閉大道</button> :
                 <button type="button" onClick={() => command({ type: 'BUILD_ROAD', path: [works], road: 'avenue' },
                   '大道重新開放了。')}>開放大道</button>}
             </div>
@@ -660,7 +1073,7 @@ export function App() {
         </>}
 
         {panelTab === 'lines' && <>
-          {lines.length === 0 && <p className="hint">還沒有路線。先到下面「交通」蓋至少兩個站，再按這裡的按鈕把站連起來。</p>}
+          {lines.length === 0 && <p className="hint">先在「交通」蓋兩個站，再按下面的按鈕連起來。</p>}
           {lines.map(line => {
             const spec = transit[line.kind];
             return <section key={line.id} className="line">
@@ -669,19 +1082,23 @@ export function App() {
                   onClick={() => changeLines(() => {
                     if (editingRef.current === line.id) editLine(undefined);
                     engine.city.removeLine(line.id);
-                  }, '路線刪掉了。站還留著，可以再用。')}>×</button>
+                  }, '路線刪了，站還在。')}>×</button>
               </h2>
               <dl>
-                <dt>站</dt><dd>{line.stops.length} 個{!line.active && (line.stops.length < 2 ? '，至少要兩個才會跑' :
-                  '，但站和站之間沒有路相通')}</dd>
+                <dt>站</dt>
+                <dd className="tags"><Tag label="站" value={line.stops.length} />
+                  {!line.active && <Tag label={line.stops.length < 2 ? '要兩站' : '站不相通'} tone="bad" />}</dd>
                 {line.active && <>
-                  <dt>班次</dt><dd>每 {line.headway < 10 ? line.headway.toFixed(1) : Math.round(line.headway)} 分鐘一班</dd>
-                  <dt>最忙時</dt><dd className={line.busiest >= line.capacity ? 'full' : undefined}>
-                    載 {line.busiest} 人，最多 {line.capacity} 人{line.busiest >= line.capacity && '（客滿）'}</dd>
-                  <dt>每天</dt><dd>{line.riders} 人搭</dd>
+                  <dt>載客</dt>
+                  <dd className="tags">
+                    <Tag label="班距" value={`${line.headway < 10 ? line.headway.toFixed(1) : Math.round(line.headway)} 分`} />
+                    <Tag label="最忙" value={`${line.busiest}/${line.capacity}`} tone={line.busiest >= line.capacity ? 'bad' : undefined}
+                      tip="最忙時載的人／最多能載" />
+                    <Tag label="每天" value={`${line.riders} 人`} />
+                  </dd>
                 </>}
                 <dt>車輛</dt>
-                <dd className="tax" title={`多一輛 ${money(spec.vehicleCost)}，每輛每月維護 ${money(spec.vehicleUpkeep)}。車越多班次越密，載得越多。`}>
+                <dd className="tax" title={`一輛 ${money(spec.vehicleCost)}，每月 ${money(spec.vehicleUpkeep)}`}>
                   <button type="button" aria-label="減少車輛" disabled={line.vehicles <= 1}
                     onClick={() => changeLines(() => engine.city.setVehicles(line.id, line.vehicles - 1), '少了一輛車。')}>−</button>
                   {line.vehicles} 輛
@@ -706,15 +1123,15 @@ export function App() {
             const done = stats.goals.includes(goal.id);
             return <li key={goal.id} className={done ? 'done' : undefined}>
               <b>{done ? '✓' : '□'} {goal.title}</b>
-              <span>{done ? '完成了' : goal.hint} 獎金 {money(goal.reward)}</span>
+              <span>{done ? '' : `${goal.hint} `}獎金 {money(goal.reward)}</span>
             </li>;
           })}
         </ul>}
 
-        {panelTab === 'log' && (events.length ? <ul>{events.map(event => {
-          const day = dateAt(event.tick);
-          return <li key={`${event.tick}-${event.kind}`}>{day.month} 月 {day.day} 日：{eventText[event.kind]}</li>;
-        })}</ul> : <p className="hint">還沒有事情發生。城市超過 {services.fires.population} 人後，偶爾會失火、遭小偷或有人生病。</p>)}
+        {panelTab === 'log' && (happenings.length ? <ul>{happenings.map((item, index) => {
+          const day = dateAt(item.tick);
+          return <li key={`${item.tick}-${index}`}>{day.month} 月 {day.day} 日：{item.text}</li>;
+        })}</ul> : <p className="hint">還沒有事情發生。</p>)}
       </aside>
 
       <div className="hud views" role="group" aria-label="地圖顯示">
@@ -731,13 +1148,17 @@ export function App() {
 
       <nav className="hud build" aria-label="工具">
         <div className="tray" role="group" aria-label={group[0]}>
-          {group[1].map(([value, label]) => (
-            <button key={value} type="button" data-tool={value} aria-pressed={tool === value} onClick={() => pick(value)}>
+          {group[1].map(([value, label]) => {
+            // Bigger buildings open up as the city passes its population milestones.
+            const locked = isService(value) ? engine.city.lockedUntil(value) : undefined;
+            return <button key={value} type="button" data-tool={value} aria-pressed={tool === value}
+              disabled={locked !== undefined} onClick={() => pick(value)}>
               <i style={iconStyle(value)} />
               <span>{label}</span>
-              <small>{money(toolCost(value)!)}</small>
-            </button>
-          ))}
+              <small>{locked !== undefined ? `滿 ${milestones[locked - 1].population.toLocaleString('en-US')} 人` :
+                money(toolCost(value)!)}</small>
+            </button>;
+          })}
         </div>
         <div className="tabs">
           <button type="button" className="look" aria-pressed={tool === 'inspect'} title="快速鍵：Esc"
@@ -749,11 +1170,23 @@ export function App() {
         </div>
       </nav>
 
+      {choosing && <div className="hud over pick" role="dialog" aria-label="示範城市">
+        <h2>示範城市</h2>
+        <div className="cards">
+          {demoList.map(([size, name, people, has]) => <button key={size} type="button" onClick={() => startDemo(size)}>
+            <b>{name}</b>
+            <span>{people}</span>
+            <span className="tags">{has.map(item => <Tag key={item} label={item} />)}</span>
+          </button>)}
+        </div>
+        <button type="button" onClick={() => setChoosing(false)}>取消</button>
+      </div>}
+
       {failed && <p className="hud toast" role="alert">地圖無法顯示。</p>}
 
       {stats.bankrupt && <div className="hud over" role="alertdialog" aria-label="破產">
         <h2>城市破產了</h2>
-        <p>欠的錢超過 {money(-economy.bankrupt)}，什麼都蓋不了。可以借錢撐過去、回到之前存的城市，或是重新開始。</p>
+        <p>欠超過 {money(-economy.bankrupt)}，什麼都蓋不了。</p>
         <div className="row">
           <button type="button" disabled={stats.loans.length >= economy.loan.max}
             onClick={() => changeLines(() => engine.city.borrow(), `借到 ${money(economy.loan.amount)}。`)}>借 {money(economy.loan.amount)}</button>

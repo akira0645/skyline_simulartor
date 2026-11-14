@@ -5,9 +5,26 @@ import type { Service } from './TileMap';
  * distance); unlike power and water there is no limit on how many buildings it serves.
  */
 export const services = {
-  radius: { fire: 12, police: 12, school: 10, clinic: 10 } satisfies Record<Service, number>,
+  radius: { fire: 12, police: 12, school: 10, clinic: 10, market: 8, highschool: 14, hospital: 18,
+    university: 22, museum: 16, stadium: 20, temple: 8, mall: 14, casino: 10, cinema: 8, parking: 3 } satisfies Record<Service, number>,
   /** What each service a tile is covered by adds to its land value. */
-  value: { fire: 5, police: 6, school: 8, clinic: 6 } satisfies Record<Service, number>,
+  value: { fire: 5, police: 6, school: 8, clinic: 6, market: 4, highschool: 5, hospital: 5,
+    university: 6, museum: 6, stadium: 5, temple: 3, mall: 4, casino: -4, cinema: 3, parking: 0 } satisfies Record<Service, number>,
+  /**
+   * The city rank (how many population milestones it has passed) from which each may be
+   * built. Bigger cities get bigger buildings.
+   */
+  unlock: { temple: 1, parking: 1, cinema: 2, mall: 3, casino: 4, market: 1, highschool: 2, hospital: 3, museum: 3, university: 4, stadium: 5 } as
+    Partial<Record<Service, number>>,
+  /** A market lets this many residents do their shopping, on top of what the shops manage. */
+  market: { shoppers: 120 },
+  /** Sights bring visitors: money per resident of the city each month, up to `most`. */
+  visitors: { museum: { perResident: 0.8, most: 1500 }, stadium: { perResident: 1.2, most: 4500 },
+    cinema: { perResident: 0.3, most: 600 }, mall: { perResident: 1, most: 3000 },
+    casino: { perResident: 1.6, most: 5000 } } as
+    Partial<Record<Service, { perResident: number; most: number }>>,
+  /** A car park within `reach` tiles of a sight brings it this many times the visitors. */
+  parking: { reach: 4, boost: 1.25 },
   /** From this population on, buildings without police lose land value and report crime. */
   crime: { population: 100, penalty: 10, loss: 300 },
   /**
@@ -33,9 +50,26 @@ export const emergencies = [
  * What a growing city expects. From each population on, a home out of reach of the service
  * loses `penalty` land value and says so.
  */
-export const expectations: readonly { population: number; service: Service; penalty: number }[] = [
+export const expectations: readonly { population: number; service: 'school' | 'clinic' | 'highschool' | 'hospital';
+  penalty: number }[] = [
   { population: 150, service: 'school', penalty: 8 },
   { population: 400, service: 'clinic', penalty: 8 },
+  { population: 700, service: 'highschool', penalty: 6 },
+  { population: 1200, service: 'hospital', penalty: 6 },
 ];
 
-export const SERVICES: readonly Service[] = ['fire', 'police', 'school', 'clinic'];
+/**
+ * A fire nobody put out or a theft nobody stopped frightens the neighbourhood. For `days` days,
+ * within `reach` tiles of it: nobody moves into the homes, land is worth `value` less, shops keep
+ * only a `shops` share of their jobs because customers stay away, and a school, high school or
+ * university stops serving anyone because parents keep their children at home.
+ */
+export const scare = { reach: 4, days: 30, value: 8, shops: 0.6 };
+export const SCHOOLS: readonly Service[] = ['school', 'highschool', 'university'];
+
+export const SERVICES: readonly Service[] = ['fire', 'police', 'school', 'clinic',
+  'market', 'highschool', 'hospital', 'university', 'museum', 'stadium', 'temple',
+  'mall', 'casino', 'cinema', 'parking'];
+
+/** What else a building does for the tiles in its reach: a hospital is also a clinic. */
+export const alsoServes: Partial<Record<Service, Service>> = { hospital: 'clinic' };

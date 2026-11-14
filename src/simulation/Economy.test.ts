@@ -63,7 +63,7 @@ it('settles tax and upkeep once a month and keeps the balance in the save', () =
   // With no factory, everything the four of them need is bought in.
   const trade = -4 * goods.perResident * goods.importCost;
   const upkeep = 3 * economy.upkeep.road + economy.upkeep.avenue + economy.upkeep.power + economy.upkeep.water;
-  expect(budget).toEqual({ tax, fares: 0, trade, loans: 0, upkeep, net: tax + trade - upkeep });
+  expect(budget).toEqual({ tax, fares: 0, trade, visitors: 0, licence: 0, loans: 0, upkeep, net: tax + trade - upkeep });
   expect(budget.net).toBeLessThan(0);
 
   // A thirtieth of the month's figure is paid each day, at the day's last tick.
@@ -72,11 +72,12 @@ it('settles tax and upkeep once a month and keeps the balance in the save', () =
   engine.advance(1);
   expect(city.getStats().funds).toBeCloseTo(funds + budget.net / 30);
   engine.advance(MONTH - calendar.ticksPerDay);
-  expect(city.getStats().funds).toBeCloseTo(funds + budget.net);
+  // Someone may buy a scooter during the month, which adds a little licence money.
+  expect(Math.abs(city.getStats().funds - funds - budget.net)).toBeLessThan(3);
 
   const restored = start();
   restored.load(structuredClone(engine.save()));
-  expect(restored.city.getStats().funds).toBeCloseTo(funds + budget.net);
+  expect(restored.city.getStats().funds).toBe(city.getStats().funds);
   // A save from before money existed starts with the opening balance.
   const old: Record<string, unknown> = { ...engine.save(), schemaVersion: 3 };
   delete old.funds;

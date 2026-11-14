@@ -6,6 +6,11 @@
 export const goods = {
   /** Goods one factory worker makes. */
   perWorker: 3,
+  /**
+   * Goods one tile of farmland grows: `watered` within reach of water (the same reach that
+   * makes a home a waterfront one), `dry` elsewhere, and nothing where the air is too dirty to live in.
+   */
+  farm: { watered: 3, dry: 1 },
   /** Goods one resident needs. */
   perResident: 1,
   /** Residents one shop or office worker can serve. */

@@ -183,6 +183,9 @@ h2 { margin: 0 0 0.4rem; font-size: 0.9rem; color: var(--sand); }
   background: var(--ink);
 }
 .tray button[aria-pressed="true"] { background: var(--sand); }
+.tray button:disabled { opacity: 0.55; cursor: default; }
+.tray button:disabled i { filter: grayscale(1); }
+.side h2 + .hint { margin-bottom: 0.4rem; }
 .tray small { color: var(--steel); }
 .tray button[aria-pressed="true"] small { color: inherit; }
 /* Tool pictures are tiles of city.png at twice their size; the few without one are drawn here. */
@@ -274,13 +277,22 @@ h2 { margin: 0 0 0.4rem; font-size: 0.9rem; color: var(--sand); }
 .side .tabs i { margin-left: 0.2rem; padding: 0 0.2rem; font-size: 0.75rem; }
 
 /* The sheet of tiles grew two rows taller for the two-by-two buildings. */
-.tray i { background-size: 512px 256px; }
+.tray i { background-size: 512px 352px; }
 
 /* --- People in a home, goals, and the bankruptcy notice */
 .side h2.sub { margin-top: 0.8rem; }
 .side .people { padding: 0; list-style: none; }
-.side .people li { display: flex; align-items: baseline; gap: 0.5rem; }
-.side .people b { font-weight: normal; }
+.side .people li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 0.5rem; margin: 0 0 0.35rem; }
+.side .people small { flex-basis: 100%; color: var(--steel); font-size: 0.8rem; }
+.side .people li { cursor: pointer; padding: 0.1rem 0.2rem; }
+.side .people li:hover, .side .people li:focus-visible { background: var(--ink); }
+.side .people b { font-weight: normal; text-decoration: underline dotted; }
+/* One resident up close. */
+.side .person .back { margin: 0 0 0.5rem; padding: 0.1rem 0.4rem; }
+.side .person .dots { color: var(--sand); letter-spacing: 0.1em; }
+.side .thoughts { padding: 0; list-style: none; }
+.side .thoughts li { margin: 0 0 0.35rem; }
+.side .thoughts li.bad { color: #f0a08a; }
 .side .people span { color: var(--steel); font-size: 0.85rem; }
 .side .people i { margin-left: auto; padding: 0 0.3rem; font-style: normal; font-size: 0.8rem; color: var(--ink); background: var(--sand); }
 .side .goals { padding: 0; list-style: none; }
@@ -300,3 +312,50 @@ h2 { margin: 0 0 0.4rem; font-size: 0.9rem; color: var(--sand); }
 }
 .over p { margin: 0 0 0.9rem; line-height: 1.5; }
 .over .row { display: flex; gap: 0.4rem; }
+
+/* --- Tags: a fact in a few characters, with its number set off beside it */
+.tags { display: flex; flex-wrap: wrap; gap: 0.25rem; align-items: center; align-content: flex-start; }
+.tag { display: inline-flex; gap: 0.3rem; padding: 0 0.4rem; font: inherit; font-size: 0.85rem; line-height: 1.55;
+  color: var(--paper); background: #3b3e46; border: 0; border-left: 3px solid var(--slate); white-space: nowrap; }
+.tag b { font-weight: normal; color: var(--sand); }
+.tag.good { border-left-color: #4fc46b; }
+.tag.bad { border-left-color: var(--loss); background: #55302d; color: #ffd2ca; }
+.tag.dim { opacity: 0.4; }
+button.tag { cursor: pointer; box-shadow: inset 0 -2px 0 rgb(255 255 255 / 0.25); }
+button.tag:hover { background: var(--asphalt); }
+button.tag[aria-pressed="true"] { background: var(--sand); color: var(--ink); }
+button.tag[aria-pressed="true"] b { color: var(--ink); }
+/* Lists whose length changes keep room for two rows, so what is under them stays put. */
+.tags.two { min-height: 3.1rem; }
+.side .people small.tags { flex-basis: 100%; margin-top: 0.15rem; }
+.side .people small.tags .tag { font-size: 0.75rem; }
+/* The sentence behind the picked tag; it keeps its lines so nothing below jumps. */
+.side .said { min-height: 3.9em; margin: 0.4rem 0 0; font-size: 0.9rem; line-height: 1.3; color: var(--paper); }
+
+/* --- The side panel as a set of cards, each with a label on a bar */
+.side section { margin-bottom: 0.6rem; padding: 0 0.5rem 0.5rem; background: rgb(16 17 20 / 0.45); border: 1px solid var(--asphalt); }
+.side section > h2:first-child, .side section > .back + h2 { margin: 0 -0.5rem 0.45rem; padding: 0.15rem 0.5rem; background: var(--asphalt);
+  color: var(--sand); font-size: 0.85rem; letter-spacing: 0.08em; }
+.side section > .back { margin-top: 0.5rem; }
+.side dl { grid-template-columns: 3.4rem 1fr; gap: 0.3rem 0.4rem; align-items: start; }
+.side dt { font-size: 0.85rem; line-height: 1.55; }
+.side .goals .done b { color: #7ed492; }
+
+/* --- The clock: the date over the day and the time, at a width that fits any date */
+.clock .when { display: grid; width: 8.6rem; text-align: right; line-height: 1.2; }
+.clock .when b { width: auto; font-size: 0.95rem; }
+.clock .when small { color: var(--sand); }
+.top { overflow: visible; }
+@media (max-width: 86rem) { .stat.demand label { font-size: 0; gap: 0; } .stat.demand meter { width: 2.2rem; } }
+@media (max-width: 72rem) { .stat.demand { display: none; } }
+
+/* --- Choosing a ready-made city */
+.over.pick { border-color: var(--sand); width: min(34rem, calc(100% - 2rem)); }
+.pick .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; margin-bottom: 0.7rem; }
+.pick .cards button { display: grid; gap: 0.3rem; align-content: start; padding: 0.6rem; text-align: left; background: var(--ink); }
+.pick .cards b { font-weight: normal; font-size: 1.1rem; color: var(--sand); }
+.pick .cards span { color: var(--steel); }
+[data-tool="farm"] i { background: repeating-linear-gradient(#8a6a44 0 4px, #9ccc5a 4px 8px); box-shadow: inset 0 0 0 2px #6e5234; }
+/* Wide enough for three tags in a row. */
+.side .person > .tags { margin-bottom: 0.45rem; }
+.side { width: 21.5rem; }

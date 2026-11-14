@@ -1,12 +1,12 @@
 import { isRoad, type Cell, type Facility, type Road, type Service, type Zone } from '../simulation/TileMap';
 
-export type Tool = 'pan' | 'inspect' | Road | Zone | Facility | Service | 'park' | 'bus' | 'metro' | 'line' | 'demolish';
+export type Tool = 'pan' | 'inspect' | Road | Zone | Facility | Service | 'park' | 'farm' | 'bus' | 'metro' | 'line' | 'demolish';
 /** What the map tints on top of the tiles. */
 export type Overlay = 'none' | 'traffic' | 'pollution' | 'value' | Facility | Service | 'bus' | 'metro' | 'lines';
 
-const dragged = (tool: Tool): tool is Road | Zone | 'park' =>
+const dragged = (tool: Tool): tool is Road | Zone | 'park' | 'farm' =>
   isRoad(tool) || tool === 'residential' || tool === 'commercial' || tool === 'industrial' ||
-  tool === 'park';
+  tool === 'park' || tool === 'farm';
 
 export function selection(tool: Tool, start: Cell, end: Cell): Cell[] {
   if (!dragged(tool)) return [start];

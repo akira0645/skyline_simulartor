@@ -1,14 +1,18 @@
-import { calendar } from './calendar';
-import { economy, milestones, tileCost } from './Economy';
+import { calendar, weekendAt } from './calendar';
+import { bond, circle, PLACES, type Place } from './Community';
+import { dayPay, pay, trade, vehicles, type Trade } from './Wealth';
+import { cycle, economy, milestones, tileCost, type Mood } from './Economy';
 import { goals } from './Goals';
 import { goods } from './Goods';
+import { jobs } from './Jobs';
 import { COMPLEX_LEVEL, landValue, MAX_LEVEL } from './LandValue';
-import { countTrait, residentAt, traitOf, traits, TRAITS, type Trait } from './Residents';
+import { childrenAt, homeSites, residentAt, traitOf, traits, TRAITS, type HomeKind, type Trait } from './Residents';
+import { doingAt, mind, moodOf, thoughtsOf, type Facts, type Thought, type Way } from './Mind';
 import { pollution } from './Pollution';
 import { RoadGraph } from './RoadGraph';
-import type { SaveData, SavedBuilding } from './SaveData';
-import { emergencies, expectations, services, SERVICES } from './Services';
-import { isFacility, isRoad, isService, isZone, MAP_SIZE, type Cell, type Facility, type GameCommand,
+import type { SaveData, SavedBuilding, SavedPerson } from './SaveData';
+import { alsoServes, emergencies, expectations, scare, SCHOOLS, services, SERVICES } from './Services';
+import { footprint, isBig, isFacility, isRoad, isService, isZone, MAP_SIZE, type Cell, type Facility, type GameCommand,
   type Road, type Service, type TileMap, type Zone } from './TileMap';
 import { congestion, tileMinutes, traffic } from './Traffic';
 import { transit, type Line, type SavedLine, type TransitKind } from './Transit';
@@ -43,9 +47,9 @@ export interface Commute {
 
 /** What holds a building back, most pressing first. */
 export type Issue = 'no-road' | 'no-power' | 'no-water' | 'no-jobs' | 'long-commute' | 'pollution' |
-  'crime' | 'no-school' | 'no-clinic' | 'vacancies';
+  'crime' | 'scared' | 'no-school' | 'no-clinic' | 'no-highschool' | 'no-hospital' | 'vacancies';
 export const ISSUES: readonly Issue[] = ['no-road', 'no-power', 'no-water', 'no-jobs', 'long-commute',
-  'pollution', 'crime', 'no-school', 'no-clinic', 'vacancies'];
+  'pollution', 'crime', 'scared', 'no-school', 'no-clinic', 'no-highschool', 'no-hospital', 'vacancies'];
 
 /** Something that happened in the city, newest last. Not saved. */
 export interface CityEvent {
@@ -57,6 +61,24 @@ export interface CityEvent {
   station?: Cell;
 }
 const EVENT_LOG = 20;
+
+/** Something that happened to one resident, newest last. Not saved. */
+export interface PersonNews {
+  tick: number;
+  /**
+   * A move to a job that is nearer, of the kind they like, or just different; a job lost with
+   * its workplace; or leaving town for want of work or of room at home.
+   */
+  kind: 'job-nearer' | 'job-liking' | 'job-change' | 'job-lost' | 'left-no-work' | 'left-no-room' |
+    'left-unhappy' | 'new-car';
+  name: string;
+  home: Cell;
+  /** For a move to another job: the shift of the new workplace, an index into `shifts`. */
+  shift?: number;
+  /** For a new vehicle: which, an index into Wealth's `vehicles`. */
+  car?: number;
+}
+const NEWS_LOG = 30;
 
 /** A deterministic 32-bit roll from the city seed, the tick and a salt. */
 function roll(seed: number, tick: number, salt: number): number {
@@ -81,6 +103,13 @@ export class BuildingSystem {
   /** How many residents have each trait, and how many gardeners each home has. */
   private readonly traitCounts = Object.fromEntries(TRAITS.map(trait => [trait, 0])) as Record<Trait, number>;
   private readonly gardeners = new Map<number, number>();
+  /** How many residents own each vehicle, and what the licences bring in a month. */
+  private readonly carCounts: number[] = vehicles.map(() => 0);
+  private licence = 0;
+  /** What each home has within a walk, kept until the map or the buildings change. */
+  private readonly circles = new Map<number, readonly Place[]>();
+  /** How close-knit each home is, kept only until the clock moves or anyone moves. */
+  private readonly bonds = new Map<number, number>();
   /** For each park tile, how many tiles its park has; the middle tile of each big park. */
   private readonly parkSize = new Uint16Array(MAP_SIZE ** 2);
   private readonly fountains = new Set<number>();
@@ -91,7 +120,20 @@ export class BuildingSystem {
   private tileUpkeep = 0;
   private idleCount = 0;
   /** Goods made and needed, residents the shops can serve, and the month's trade in money. */
-  private market = { made: 0, needed: 0, served: 0, trade: 0 };
+  private market = { made: 0, needed: 0, farmed: 0, served: 0, trade: 0 };
+  /** What the sights bring in a month. */
+  private visitors = 0;
+  /**
+   * Where a fire burned or a thief got away, and the tick until which the neighbourhood stays
+   * frightened (see `scare` in Services.ts). Like the events, they are not saved.
+   */
+  private readonly scares: { id: number; until: number }[] = [];
+  /** Tiles in a frightened neighbourhood. */
+  private readonly scared = new Uint8Array(MAP_SIZE ** 2);
+  /** The customers of each shop: residents in its reach, shared among the shops in theirs. */
+  private readonly custom = new Map<number, number>();
+  /** How business was when the city was last worked out, to notice when it turns. */
+  private lastMood: Mood = 'normal';
 
   // Everything below is derived from the tiles and buildings, so none of it is saved.
   private readonly served: Record<Facility, Set<number>> = { power: new Set(), water: new Set() };
@@ -108,10 +150,8 @@ export class BuildingSystem {
   /** Pollution per tile, 0 to 100. */
   private readonly smog = new Float32Array(MAP_SIZE ** 2);
   /** Whether each tile is within reach of a station of each service. */
-  private readonly covered: Record<Service, Uint8Array> = {
-    fire: new Uint8Array(MAP_SIZE ** 2), police: new Uint8Array(MAP_SIZE ** 2),
-    school: new Uint8Array(MAP_SIZE ** 2), clinic: new Uint8Array(MAP_SIZE ** 2),
-  };
+  private readonly covered = Object.fromEntries(
+    SERVICES.map(service => [service, new Uint8Array(MAP_SIZE ** 2)])) as Record<Service, Uint8Array>;
   /** Everyone living in the city, as of the last refresh. */
   private residents = 0;
   /** Tiles near water. */
@@ -126,6 +166,9 @@ export class BuildingSystem {
   /** Commuters who go by bus or metro, as of the last refresh. */
   private riders = 0;
   private readonly events: CityEvent[] = [];
+  private readonly news: PersonNews[] = [];
+  /** Who works at each workplace, as of the last refresh. */
+  private readonly staff = new Map<number, { home: number; person: SavedPerson }[]>();
   /** The tick of the latest growth call, for showing how recent an event is. */
   private clock = 0;
   /** What nearby parks add to land value, per tile. */
@@ -153,6 +196,43 @@ export class BuildingSystem {
 
   hasRoadAccess(cell: Cell): boolean {
     return this.roadAccess(cell) !== undefined;
+  }
+
+  /** The road a civic building is reached by. A big one may touch a road with any of its four tiles. */
+  private doorOf(cell: Cell): Cell | undefined {
+    if (!isBig(this.map.get(cell))) return this.roadAccess(cell);
+    for (const part of footprint(cell)) {
+      const road = this.roadAccess(part);
+      if (road) return road;
+    }
+  }
+
+  /** The rank from which a service may be built here, if the city has not reached it yet. */
+  lockedUntil(service: Service): number | undefined {
+    const rank = services.unlock[service];
+    return rank !== undefined && rank > this.rank ? rank : undefined;
+  }
+
+  /** What kind of home a lot would get if one were built on it now. */
+  private homeKindAt(id: number): HomeKind | undefined {
+    const { x, y } = cellAt(id);
+    const near = (zone: Zone, reach: number) => {
+      for (let dy = -reach; dy <= reach; dy++) {
+        const span = reach - Math.abs(dy);
+        for (let dx = -span; dx <= span; dx++) if (this.map.get({ x: x + dx, y: y + dy }) === zone) return true;
+      }
+      return false;
+    };
+    if (this.smog[id] > homeSites.worker.smog || near('industrial', homeSites.worker.factoryWithin)) return 'worker';
+    if (this.shore[id]) return 'riverside';
+    if (this.green[id] >= homeSites.garden.green || this.grand[id]) return 'garden';
+    if (this.covered.highschool[id] || this.covered.university[id]) return 'campus';
+    if (this.valueOf(id) >= homeSites.villa.value) return 'villa';
+    if (near('commercial', 1)) return 'downtown';
+    if (this.transitCover[id]) return 'station';
+    if (!SERVICES.some(service => this.covered[service][id]) && !near('commercial', homeSites.suburb.shopsBeyond)) {
+      return 'suburb';
+    }
   }
 
   /** Whether the building on a cell has power or water. False where there is no building. */
@@ -221,13 +301,18 @@ export class BuildingSystem {
     const line = this.lines.find(candidate => candidate.id === id);
     if (!line) return { error: '找不到這條路線。' };
     const name = line.kind === 'bus' ? '公車站' : '捷運站';
-    if (this.map.get(cell) !== line.kind) return { error: `這條路線只能連接${name}，請點地圖上的${name}。` };
+    if (this.stopAt(cell) !== line.kind) return { error: `這條路線只能連接${name}，請點地圖上的${name}。` };
     const stop = indexOf(cell);
     const at = line.stops.indexOf(stop);
     if (at >= 0) line.stops.splice(at, 1);
     else line.stops.push(stop);
     this.refresh();
     return { added: at < 0 };
+  }
+
+  /** The kind of stop on a cell: a bus stop beside the road, or a metro station under it. */
+  private stopAt(cell: Cell): TransitKind | undefined {
+    return this.map.hasStation(cell) ? 'metro' : this.map.get(cell) === 'bus' ? 'bus' : undefined;
   }
 
   /** Buys or sells vehicles so the line has `count` of them. Selling gives nothing back. */
@@ -253,6 +338,42 @@ export class BuildingSystem {
     return this.events;
   }
 
+  /** What happened to residents lately, oldest first. */
+  getNews(): readonly PersonNews[] {
+    return this.news;
+  }
+
+  private tell(kind: PersonNews['kind'], home: number, person: SavedPerson, shift?: number): void {
+    this.news.push({ tick: this.clock, kind,
+      name: residentAt(this.seed, home, person.slot, this.buildings.get(home)?.kind).name,
+      home: cellAt(home), shift, car: kind === 'new-car' ? person.car : undefined });
+    if (this.news.length > NEWS_LOG) this.news.shift();
+  }
+
+  /** A new resident takes the home's next place. */
+  private moveIn(building: SavedBuilding, tick: number): void {
+    this.bonds.clear();
+    building.people!.push({ slot: building.nextSlot!++, job: -1, came: tick, hired: 0 });
+    building.occupants++;
+  }
+
+  /** Someone leaves a home: one without work if there is one, the latest to arrive first. */
+  private moveOut(building: SavedBuilding, why?: 'left-no-work' | 'left-no-room'): void {
+    const people = building.people!;
+    if (!people.length) return;
+    let index = people.length - 1;
+    for (let at = index; at >= 0; at--) {
+      if (people[at].job < 0) {
+        index = at;
+        break;
+      }
+    }
+    this.bonds.clear();
+    const [person] = people.splice(index, 1);
+    building.occupants--;
+    if (why) this.tell(why, building.id, person);
+  }
+
   /** The tick the city last advanced to. */
   get now(): number {
     return this.clock;
@@ -269,7 +390,7 @@ export class BuildingSystem {
   }
 
   /** What a city of this size expects that this home is out of reach of. */
-  private unmet(id: number) {
+  private unmet(id: number): typeof expectations {
     return expectations.filter(need => this.residents >= need.population && !this.covered[need.service][id]);
   }
 
@@ -280,6 +401,7 @@ export class BuildingSystem {
     if (this.served.power.has(id) && this.served.water.has(id)) value += landValue.utilities;
     for (const service of SERVICES) if (this.covered[service][id]) value += services.value[service];
     if (this.unsafe(id)) value -= services.crime.penalty;
+    if (this.scared[id]) value -= scare.value;
     if (zone !== 'industrial') value -= landValue.pollution * this.smog[id];
     if (zone === 'residential') {
       value -= Math.min(landValue.commute.max,
@@ -290,18 +412,340 @@ export class BuildingSystem {
       if (needed > served) value -= goods.shopPenalty * (needed - served) / needed;
       for (const need of this.unmet(id)) value -= need.penalty;
     }
+    if (zone === 'residential' && this.bondOf(id) >= bond.close) value += bond.value;
     return Math.max(0, Math.min(100, value));
   }
 
-  /** The people in a home, in the order they moved in, each with the shift they work if any. */
-  private residentsOf(id: number, occupants: number) {
-    const jobs: (number | undefined)[] = [];
-    for (const commute of this.commutes) {
-      if (commute.homeId !== id) continue;
-      for (let worker = 0; worker < commute.workers; worker++) jobs.push(commute.shift);
+  /** One resident as the panel shows them: who they are, how long here, and their work if any. */
+  private describe(home: number, person: SavedPerson) {
+    const who = residentAt(this.seed, home, person.slot, this.buildings.get(home)?.kind);
+    const year = calendar.ticksPerDay * calendar.daysPerMonth * 12;
+    const zone = person.job >= 0 ? this.map.at(person.job) as Zone : undefined;
+    return { ...who, age: who.age + Math.floor((this.clock - person.came) / year),
+      /** Days since they moved in, and since they started the job they have. */
+      days: Math.floor((this.clock - person.came) / calendar.ticksPerDay),
+      shift: zone ? shiftIndex(zone, person.job) : undefined,
+      workDays: zone ? Math.floor((this.clock - person.hired) / calendar.ticksPerDay) : undefined,
+      /** Whether their job is of the kind they like; undefined if they do not care or have none. */
+      content: who.liking && zone ? who.liking === zone : undefined,
+      home: cellAt(home), work: zone ? cellAt(person.job) : undefined, homeId: home, slot: person.slot,
+      /** What they own, what they have saved and what they earn a day. */
+      car: person.car ?? 0, money: person.money ?? 0,
+      pay: zone ? this.payAt(person.job, who.trait === 'rich') : 0 };
+  }
+
+  /** How business is at a workplace, when it is better or worse than usual (see `trade` in Wealth.ts). */
+  tradeOf(id: number): Trade | undefined {
+    const zone = this.map.at(id);
+    const staff = this.buildings.get(id)?.occupants ?? 0;
+    if (zone === 'industrial') return staff && this.market.made < this.market.needed ? 'good' : undefined;
+    if (zone !== 'commercial' || !staff) return undefined;
+    if (this.scared[id]) return 'quiet';
+    const share = (this.custom.get(id) ?? 0) / (staff * goods.perClerk);
+    return share >= trade.busy ? 'busy' : share >= trade.good ? 'good' : share < trade.quiet ? 'quiet' : undefined;
+  }
+
+  /** A day's pay at a workplace as business there is now. */
+  private payAt(job: number, rich: boolean): number {
+    const state = this.tradeOf(job);
+    return Math.round(dayPay(this.map.at(job) as 'commercial' | 'industrial', this.buildings.get(job)?.level ?? 1, rich) *
+      (state ? trade.times[state] : 1));
+  }
+
+  /** Works out every shop's customers. */
+  private shareCustom(): void {
+    this.custom.clear();
+    const { reach } = trade;
+    for (const [home, building] of this.buildings) {
+      if (this.map.at(home) !== 'residential' || !building.occupants) continue;
+      const { x, y } = cellAt(home);
+      const shops: SavedBuilding[] = [];
+      let staff = 0;
+      for (let dy = -reach; dy <= reach; dy++) {
+        const span = reach - Math.abs(dy);
+        for (let dx = -span; dx <= span; dx++) {
+          const cell = { x: x + dx, y: y + dy };
+          if (this.map.get(cell) !== 'commercial') continue;
+          const shop = this.buildings.get(indexOf(cell));
+          if (!shop?.occupants) continue;
+          shops.push(shop);
+          staff += shop.occupants;
+        }
+      }
+      for (const shop of shops) {
+        this.custom.set(shop.id, (this.custom.get(shop.id) ?? 0) + building.occupants * shop.occupants / staff);
+      }
     }
-    return Array.from({ length: occupants }, (_, place) =>
-      ({ ...residentAt(this.seed, id, place), shift: jobs[place] }));
+  }
+
+  /** Forgets the frights that are over and marks the neighbourhoods still frightened. */
+  private markScares(): void {
+    this.scared.fill(0);
+    for (let index = this.scares.length - 1; index >= 0; index--) {
+      if (this.scares[index].until <= this.clock) this.scares.splice(index, 1);
+    }
+    for (const { id } of this.scares) {
+      const { x, y } = cellAt(id);
+      for (let dy = -scare.reach; dy <= scare.reach; dy++) {
+        const span = scare.reach - Math.abs(dy);
+        for (let dx = -span; dx <= span; dx++) {
+          const cell = { x: x + dx, y: y + dy };
+          if (this.map.get(cell) !== undefined) this.scared[indexOf(cell)] = 1;
+        }
+      }
+    }
+  }
+
+  /** What a tile of farmland grows in a month. */
+  private farmYield(id: number): number {
+    return this.smog[id] > pollution.limit ? 0 : this.shore[id] ? goods.farm.watered : goods.farm.dry;
+  }
+
+  /** Whether a sight has a car park near enough to bring it more visitors. */
+  private parkingBy(id: number, tile: Service): boolean {
+    const { reach } = services.parking;
+    // A big building is measured from the middle of its four tiles.
+    const { x, y } = cellAt(id);
+    const from = isBig(tile) ? 0 : 1;
+    for (let dy = -reach; dy <= reach + 1 - from; dy++) {
+      for (let dx = -reach; dx <= reach + 1 - from; dx++) {
+        if (this.map.get({ x: x + dx, y: y + dy }) === 'parking') return true;
+      }
+    }
+    return false;
+  }
+
+  /** What a sight brings in a month: more with more residents, and more again with a car park by it. */
+  private sightIncome(id: number, tile: Service): number {
+    const sight = services.visitors[tile]!;
+    return Math.round(Math.min(sight.most, this.residents * sight.perResident) *
+      (this.parkingBy(id, tile) ? services.parking.boost : 1));
+  }
+
+  /** The children of a home (see Residents' `childrenAt`). They are not counted as residents. */
+  kidsAt(home: number): { name: string; age: number }[] {
+    const building = this.buildings.get(home);
+    const people = building?.people;
+    if (!building || !people?.length || this.map.at(home) !== 'residential') return [];
+    let first = people[0];
+    for (const person of people) if (person.came < first.came) first = person;
+    const year = calendar.ticksPerDay * calendar.daysPerMonth * calendar.monthsPerYear;
+    return childrenAt(this.seed, home, building.kind, people.length,
+      residentAt(this.seed, home, first.slot, building.kind).name[0], Math.floor((this.clock - first.came) / year));
+  }
+
+  /** The kinds of place a home has within a short walk (see Community.ts). */
+  private circleOf(home: number): readonly Place[] {
+    let found = this.circles.get(home);
+    if (found) return found;
+    const { x, y } = cellAt(home);
+    const seen = new Set<Place>();
+    for (let dy = -circle.reach; dy <= circle.reach; dy++) {
+      const span = circle.reach - Math.abs(dy);
+      for (let dx = -span; dx <= span; dx++) {
+        const cell = { x: x + dx, y: y + dy };
+        let tile = this.map.get(cell);
+        if (tile === 'annex') tile = this.map.get(this.map.anchorOf(cell) ?? cell);
+        if (tile === undefined) continue;
+        if (this.map.hasStation(cell) || tile === 'bus') seen.add('stop');
+        if (tile === 'commercial' ? this.buildings.has(indexOf(cell)) : tile === 'market') seen.add(tile === 'market' ? 'market' : 'shops');
+        else if (tile === 'park' || tile === 'temple') seen.add(tile);
+        else if (tile === 'school' || tile === 'highschool') seen.add('school');
+        else if (tile === 'clinic' || tile === 'hospital') seen.add('clinic');
+        else if (tile === 'cinema' || tile === 'mall' || tile === 'casino' || tile === 'museum' ||
+          tile === 'stadium') seen.add('fun');
+      }
+    }
+    found = PLACES.filter(place => seen.has(place));
+    this.circles.set(home, found);
+    return found;
+  }
+
+  /** How close-knit a home is, 0 to 100 (see Community.ts). An empty home has no bond at all. */
+  private bondOf(home: number): number {
+    const known = this.bonds.get(home);
+    if (known !== undefined) return known;
+    const building = this.buildings.get(home);
+    const people = building?.people;
+    if (!building || !people?.length) return 0;
+    const places = this.circleOf(home);
+    let ticks = 0;
+    let helpers = 0;
+    for (const person of people) {
+      ticks += this.clock - person.came;
+      if (traitOf(this.seed, home, person.slot, building.kind) === 'helper') helpers++;
+    }
+    const months = ticks / people.length / (calendar.ticksPerDay * calendar.daysPerMonth);
+    const value = bond.base + Math.min(bond.months, months * bond.perMonth) + places.length * bond.perPlace +
+      (places.includes('temple') ? bond.temple : 0) + (places.includes('park') ? bond.park : 0) +
+      Math.min(bond.helpers, helpers * bond.helper) + (this.unsafe(home) ? bond.unsafe : 0);
+    const rounded = Math.round(Math.max(0, Math.min(100, value)));
+    this.bonds.set(home, rounded);
+    return rounded;
+  }
+
+  /** A day's pay and a day's bills for everyone; whoever has saved enough buys the next vehicle up. */
+  private payDay(): void {
+    for (const [id, building] of this.buildings) {
+      if (this.map.at(id) !== 'residential') continue;
+      for (const person of building.people!) {
+        const zone = person.job >= 0 ? this.map.at(person.job) : undefined;
+        let money = person.money ?? 0;
+        if (zone === 'commercial' || zone === 'industrial') {
+          money += this.payAt(person.job, traitOf(this.seed, id, person.slot, building.kind) === 'rich') - pay.living;
+        } else {
+          money = Math.max(0, money - pay.living / 2);
+        }
+        const next = vehicles[(person.car ?? 0) + 1];
+        if (next && money >= next.price) {
+          money -= next.price;
+          person.car = (person.car ?? 0) + 1;
+          // A scooter is no news; a car is.
+          if (person.car > 1) this.tell('new-car', id, person);
+        }
+        if (money) person.money = money;
+        else delete person.money;
+      }
+    }
+    this.countCars();
+  }
+
+  private countCars(): void {
+    this.carCounts.fill(0);
+    this.licence = 0;
+    for (const [id, building] of this.buildings) {
+      if (this.map.at(id) !== 'residential') continue;
+      for (const person of building.people!) {
+        this.carCounts[person.car ?? 0]++;
+        this.licence += vehicles[person.car ?? 0].licence;
+      }
+    }
+  }
+
+  /** In a town of some size, people who are miserable may give up and leave. */
+  private leaveUnhappy(tick: number, seed: number): boolean {
+    if (this.residents < mind.leave.population) return false;
+    const routes = new Map<number, Commute>();
+    for (const route of this.commutes) routes.set(route.homeId * MAP_SIZE ** 2 + route.workId, route);
+    let left = false;
+    for (const [id, building] of this.buildings) {
+      if (this.map.at(id) !== 'residential' || !building.people!.length) continue;
+      const facts = this.factsFor(id, building, job => routes.get(id * MAP_SIZE ** 2 + job));
+      const moods = building.people!.map(person => moodOf(thoughtsOf(facts(person))));
+      for (let index = moods.length - 1; index >= 0; index--) {
+        const person = building.people![index];
+        if (moods[index] >= mind.leave.mood ||
+            roll(seed, tick, 40000 + id * 7 + person.slot) / 2 ** 32 >= mind.leave.chance) continue;
+        this.bonds.clear();
+        building.people!.splice(index, 1);
+        building.occupants--;
+        this.tell('left-unhappy', id, person);
+        left = true;
+      }
+    }
+    return left;
+  }
+
+  /** The vehicle of the commuter the map shows going from a home to a workplace. */
+  carOn(homeId: number, workId: number): number {
+    return this.buildings.get(homeId)?.people?.find(person => person.job === workId)?.car ?? 0;
+  }
+
+  /**
+   * The facts the minds of a home's residents are read from (see Mind.ts). What the home has
+   * and lacks is worked out once; the returned function adds what differs from person to person.
+   */
+  private factsFor(home: number, building: SavedBuilding,
+    routeTo = (job: number) => this.commutes.find(route => route.homeId === home && route.workId === job)) {
+    const places = this.circleOf(home);
+    const shared = { troubles: this.issuesOf(home, building),
+      shops: places.includes('shops') || places.includes('market'),
+      park: places.includes('park') || this.grand[home] === 1, water: this.shore[home] === 1,
+      temple: places.includes('temple'), places: places.length, bond: this.bondOf(home),
+      town: this.residents >= circle.population, fun: places.includes('fun'),
+      casino: this.covered.casino[home] === 1, school: places.includes('school'), kids: this.kidsAt(home).length,
+      transit: this.transitCover[home] === 1, shortOfShops: this.market.needed > this.market.served,
+      value: this.valueOf(home), business: this.mood(), tax: this.taxRate - economy.taxRate.default };
+    const trips = new Map<number, { route: Commute; riders: Set<number>; ride?: Way; jam: boolean } | null>();
+    const tripTo = (job: number) => {
+      let trip = trips.get(job);
+      if (trip !== undefined) return trip;
+      const route = routeTo(job);
+      trip = null;
+      if (route) {
+        // The route says how many of the home's workers ride: the keen ones first, drivers never.
+        const rank = (slot: number) => {
+          const trait = traitOf(this.seed, home, slot, building.kind);
+          return trait === 'rider' ? 0 : trait === 'driver' ? 2 : 1;
+        };
+        const riders = building.people!.filter(person => person.job === job).map(person => person.slot)
+          .sort((a, b) => rank(a) - rank(b) || a - b).slice(0, route.riders);
+        trip = { route, riders: new Set(riders), ride: this.plans.find(plan => plan.id === route.line)?.kind,
+          jam: route.minutes > mind.jam * route.path.length * traffic.minutesPerTile };
+      }
+      trips.set(job, trip);
+      return trip;
+    };
+    return (person: SavedPerson): Facts => {
+      const who = residentAt(this.seed, home, person.slot, building.kind);
+      const zone = person.job >= 0 ? this.map.at(person.job) as Zone : undefined;
+      const trip = zone ? tripTo(person.job) : null;
+      const rides = trip?.ride !== undefined && trip.riders.has(person.slot);
+      return { ...shared, slot: person.slot, trait: who.trait,
+        days: Math.floor((this.clock - person.came) / calendar.ticksPerDay),
+        shift: zone ? shiftIndex(zone, person.job) : undefined,
+        content: who.liking && zone ? who.liking === zone : undefined,
+        minutes: trip ? (rides ? trip.route.transitMinutes : undefined) ?? trip.route.minutes : undefined,
+        way: !trip ? undefined : rides ? trip.ride : trip.route.path.length < mind.driveFrom ? 'walk' :
+          !person.car ? 'bike' : person.car === 1 ? 'scooter' : 'drive',
+        car: person.car ?? 0, jam: trip?.jam ?? false,
+        raise: zone !== undefined && ['busy', 'good'].includes(this.tradeOf(person.job) ?? '') };
+    };
+  }
+
+  /**
+   * One resident up close: who they are, what they are doing at this hour of the day and what
+   * is on their mind. Undefined once they have left town.
+   */
+  person(home: number, slot: number, hour: number) {
+    const building = this.buildings.get(home);
+    const person = this.map.at(home) === 'residential' ? building?.people?.find(entry => entry.slot === slot) : undefined;
+    if (!building || !person) return undefined;
+    const facts = this.factsFor(home, building)(person);
+    const list = thoughtsOf(facts);
+    return { ...this.describe(home, person), kind: building.kind, jobId: person.job, way: facts.way,
+      minutes: facts.minutes, thoughts: list, mood: moodOf(list), kids: facts.kids,
+      doing: doingAt(facts, hour, Math.floor(this.clock / calendar.ticksPerDay), weekendAt(this.clock)) };
+  }
+
+  /** The place in a home of someone who lives there and works at `workId`, if anyone does. */
+  personOn(homeId: number, workId: number): number | undefined {
+    return this.buildings.get(homeId)?.people?.find(person => person.job === workId)?.slot;
+  }
+
+  /** What the whole city thinks: the average mood, and how many people have each thought, most first. */
+  voices() {
+    const routes = new Map<number, Commute>();
+    for (const route of this.commutes) routes.set(route.homeId * MAP_SIZE ** 2 + route.workId, route);
+    const counts = new Map<Thought, number>();
+    let people = 0;
+    let mood = 0;
+    let bonds = 0;
+    for (const [id, building] of this.buildings) {
+      if (this.map.at(id) !== 'residential' || !building.people!.length) continue;
+      const facts = this.factsFor(id, building, job => routes.get(id * MAP_SIZE ** 2 + job));
+      bonds += this.bondOf(id) * building.people!.length;
+      for (const person of building.people!) {
+        const list = thoughtsOf(facts(person));
+        for (const thought of list) counts.set(thought, (counts.get(thought) ?? 0) + 1);
+        mood += moodOf(list);
+        people++;
+      }
+    }
+    return { people, mood: people ? Math.round(mood / people) : mind.base,
+      /** How close-knit the homes are, averaged over the people in them. */
+      bond: people ? Math.round(bonds / people) : 0,
+      thoughts: [...counts].sort((a, b) => b[1] - a[1]) };
   }
 
   /** What a park tile looks like: part of a big park or not, and whether the fountain stands on it. */
@@ -331,7 +775,7 @@ export class BuildingSystem {
       building.block = undefined;
       building.level = MAX_LEVEL;
       building.capacity = usual;
-      building.occupants = Math.min(building.occupants, usual);
+      while (building.occupants > usual) this.moveOut(building);
     }
   }
 
@@ -343,7 +787,7 @@ export class BuildingSystem {
     return building.occupants < this.capacityOf(building) &&
       building.occupants - (this.employed.get(id) ?? 0) < JOB_SEEKERS &&
       (this.commuteMinutes.get(id) ?? 0) <= traffic.longCommute &&
-      this.smog[id] <= pollution.limit;
+      this.smog[id] <= pollution.limit && !this.scared[id];
   }
 
   /** What holds the building on a zoned tile back. */
@@ -361,15 +805,34 @@ export class BuildingSystem {
       if (this.smog[id] > pollution.limit) issues.push('pollution');
     }
     if (this.unsafe(id)) issues.push('crime');
-    if (home) for (const need of this.unmet(id)) issues.push(need.service === 'school' ? 'no-school' : 'no-clinic');
+    if (this.scared[id]) issues.push('scared');
+    if (home) for (const need of this.unmet(id)) issues.push(`no-${need.service}`);
     if (!home && roadAccess && building.occupants < this.capacityOf(building)) issues.push('vacancies');
     return issues;
   }
 
-  /** What a building can hold right now: all of its capacity only with both power and water. */
+  /**
+   * How business is today: a slow wave that the city's seed places, felt only by a city of
+   * some size. It changes at most once a day.
+   */
+  mood(): Mood {
+    if (this.rank < cycle.rank) return 'normal';
+    const day = Math.floor(this.clock / calendar.ticksPerDay);
+    const wave = Math.sin(2 * Math.PI * (day / (cycle.months * calendar.daysPerMonth) + (this.seed >>> 0) % 997 / 997));
+    return wave > cycle.turn ? 'boom' : wave < -cycle.turn ? 'slump' : 'normal';
+  }
+
+  /**
+   * What a building can hold right now: all of its capacity only with both power and water,
+   * and a workplace keeps fewer jobs in a slump.
+   */
   private capacityOf({ id, capacity }: SavedBuilding): number {
-    return this.served.power.has(id) && this.served.water.has(id) ? capacity :
+    const room = this.served.power.has(id) && this.served.water.has(id) ? capacity :
       Math.ceil(capacity * utilities.unservedShare);
+    const zone = this.map.at(id);
+    // Customers keep away from a frightened neighbourhood, so its shops need fewer hands.
+    const open = zone === 'commercial' && this.scared[id] ? Math.ceil(room * scare.shops) : room;
+    return zone !== 'residential' && this.mood() === 'slump' ? Math.ceil(open * cycle.slump.jobs) : open;
   }
 
   getBuilding(cell: Cell) {
@@ -380,16 +843,23 @@ export class BuildingSystem {
     return { ...record, ...cell, zone, road: this.roadAccess(cell) };
   }
 
-  inspect(cell: Cell) {
+  inspect(where: Cell) {
+    // Any tile of a big building stands for the whole of it.
+    const cell = this.map.anchorOf(where) ?? where;
     const tile = this.map.get(cell);
     if (!tile) return undefined;
     const id = indexOf(cell);
+    if (tile === 'farm') {
+      return { tile, pollution: Math.round(this.smog[id]), grows: this.farmYield(id), watered: this.shore[id] === 1 };
+    }
     if (tile === 'park') {
       return { tile, pollution: Math.round(this.smog[id]), parkTiles: this.parkSize[id],
         bigPark: this.parkSize[id] >= landValue.bigPark.tiles };
     }
-    if (tile === 'grass' || tile === 'river') return { tile, pollution: Math.round(this.smog[id]) };
-    if (tile === 'bus' || tile === 'metro') {
+    if (tile === 'grass' || tile === 'river' || tile === 'annex') return { tile, pollution: Math.round(this.smog[id]) };
+    const stop = this.stopAt(cell);
+    if (stop) {
+      const tile = stop;
       const radius = transit[tile].radius;
       let reaching = 0;
       for (const building of this.buildings.keys()) {
@@ -415,8 +885,13 @@ export class BuildingSystem {
         const other = cellAt(building);
         if (Math.abs(other.x - cell.x) + Math.abs(other.y - cell.y) <= radius) reaching++;
       }
-      const running = this.hasRoadAccess(cell);
-      return { tile, reaching: running ? reaching : 0, radius, running };
+      const running = this.doorOf(cell) !== undefined;
+      const sight = services.visitors[tile];
+      return { tile, reaching: running ? reaching : 0, radius, running,
+        /** What a sight brings in a month, and how many a market lets do their shopping. */
+        earns: sight && running ? this.sightIncome(id, tile) : undefined,
+        parked: sight ? this.parkingBy(id, tile) : undefined,
+        shoppers: tile === 'market' ? services.market.shoppers : undefined };
     }
 
     const roadAccess = this.hasRoadAccess(cell);
@@ -436,13 +911,24 @@ export class BuildingSystem {
       services: SERVICES.filter(service => this.covered[service][id]), transit: this.transitCover[id] === 1,
       /** The land value the next level needs; undefined at the top level. */
       nextLevel: landValue.upgrade[record.level - 1] as number | undefined,
-      complex: record.block !== undefined,
-      /** Who lives here, with where each works if they have a job. */
-      residents: home ? this.residentsOf(id, record.occupants) : [] };
+      complex: record.block !== undefined, kind: record.kind,
+      /** For a home: the kinds of place within a walk, and how close-knit it is. */
+      circle: home ? this.circleOf(id) : undefined, bond: home ? this.bondOf(id) : undefined,
+      kids: home ? this.kidsAt(id) : undefined,
+      /** For a workplace: business, when it is better or worse than usual, and a shop's customers. */
+      trade: this.tradeOf(id), custom: tile === 'commercial' ? Math.round(this.custom.get(id) ?? 0) : undefined,
+      /** Who lives here, and who works here. */
+      residents: home ? record.people!.map(person => this.describe(id, person)) : [],
+      staff: home ? [] : (this.staff.get(id) ?? []).map(entry => this.describe(entry.home, entry.person)) };
   }
 
   /** Runs a command if the city can pay for it. `cost` is what was charged. */
   execute(command: GameCommand): { changed: Cell[]; error?: string; cost: number } {
+    const locked = command.type === 'BUILD_SERVICE' ? this.lockedUntil(command.service) : undefined;
+    if (locked !== undefined) {
+      return { changed: [], cost: 0,
+        error: `城市還不夠大：人口到過 ${milestones[locked - 1].population} 人以後才能蓋這個。` };
+    }
     let cost = 0;
     const result = { ...this.map.execute(command, changes => {
       let price = 0;
@@ -454,12 +940,15 @@ export class BuildingSystem {
     for (const cell of result.changed) {
       const id = indexOf(cell);
       const tile = this.map.get(cell);
-      this.removeBuilding(id);
+      // A station going in or coming out leaves the road above it, and all else, as it was.
+      const stationOnly = command.type === 'BUILD_METRO' || (command.type === 'DEMOLISH' && isRoad(tile));
+      if (!stationOnly) this.removeBuilding(id);
       // A stop that is gone drops out of its lines.
       for (const line of this.lines) {
         const at = line.stops.indexOf(id);
-        if (at >= 0 && tile !== line.kind) line.stops.splice(at, 1);
+        if (at >= 0 && this.stopAt(cell) !== line.kind) line.stops.splice(at, 1);
       }
+      if (stationOnly) continue;
       this.buildings.delete(id);
       if (isZone(tile)) this.zones.set(id, cell);
       else this.zones.delete(id);
@@ -471,11 +960,61 @@ export class BuildingSystem {
   }
 
   /**
+   * Puts a full building on each of these zoned lots at once, as a city that has stood for
+   * years would have: at the level the land is worth, with people who came at different
+   * times and have saved different amounts. For ready-made cities only; a city that is
+   * played grows through `grow`. Lots without a road, or with a building already, are skipped.
+   */
+  found(cells: readonly Cell[]): void {
+    const made: SavedBuilding[] = [];
+    const chance = (id: number, salt: number) => roll(this.seed, id, salt) / 2 ** 32;
+    const fill = (building: SavedBuilding) => {
+      if (!building.people) return;
+      while (building.occupants < building.capacity) {
+        const slot = building.nextSlot!++;
+        // Most have been here a while; savings run from nothing to a good car's worth.
+        const money = Math.floor(chance(building.id, 300 + slot) ** 3 * 16000);
+        const person: SavedPerson = { slot, job: -1, hired: this.clock,
+          came: Math.floor(this.clock * chance(building.id, 200 + slot) ** 2) };
+        let left = money;
+        while (vehicles[(person.car ?? 0) + 1] && left >= vehicles[(person.car ?? 0) + 1].price) {
+          person.car = (person.car ?? 0) + 1;
+          left -= vehicles[person.car].price;
+        }
+        if (left) person.money = left;
+        building.people.push(person);
+        building.occupants++;
+      }
+    };
+    for (const cell of cells) {
+      const id = indexOf(cell);
+      const zone = this.map.get(cell);
+      if (!isZone(zone) || this.buildings.has(id) || !this.roadAccess(cell)) continue;
+      const building: SavedBuilding = zone === 'residential' ?
+        { id, capacity: growth.capacity[zone], occupants: 0, level: 1, people: [], nextSlot: 0, kind: this.homeKindAt(id) } :
+        { id, capacity: growth.capacity[zone], occupants: 0, level: 1 };
+      fill(building);
+      this.buildings.set(id, building);
+      made.push(building);
+    }
+    this.refresh();
+    // With everyone at work the land shows what it is worth, and the buildings grow to match.
+    for (const building of made) {
+      const value = this.valueOf(building.id);
+      building.level = value >= landValue.upgrade[1] ? 3 : value >= landValue.upgrade[0] ? 2 : 1;
+      building.capacity = landValue.capacity[this.map.at(building.id) as Zone][building.level - 1];
+      fill(building);
+    }
+    this.refresh();
+  }
+
+  /**
    * A growth step: residents move, then each zone type may get one building. Nothing changes
    * between steps, so what is derived from the city is always up to date, also after loading.
    */
   grow(tick: number, seed: number): void {
     this.clock = tick;
+    this.bonds.clear();
     // A day's share of the month's tax and upkeep.
     if (tick % calendar.ticksPerDay === 0) this.funds += this.budget().net / calendar.daysPerMonth;
     // At the end of a month every loan has one payment fewer to go.
@@ -494,12 +1033,17 @@ export class BuildingSystem {
       if (building.occupants > capacity || jobless > JOB_SEEKERS) {
         // Leaving is slower than arriving: once a day.
         if (!daily) continue;
-        building.occupants--;
+        this.moveOut(building, building.occupants > capacity ? 'left-no-room' : 'left-no-work');
       } else if (this.takesNewcomers(id, building) && this.hasRoadAccess(cell)) {
-        building.occupants++;
+        // People arrive one at a time, not every home at once.
+        if (building.occupants && roll(seed, tick, id + 20000) / 2 ** 32 >= growth.moveIn) continue;
+        this.moveIn(building, tick);
       } else continue;
       changed = true;
     }
+    if (daily && this.reviewJobs(tick, seed)) changed = true;
+    if (tick % (calendar.ticksPerDay * mind.leave.days) === 0 && this.leaveUnhappy(tick, seed)) changed = true;
+    if (daily) this.payDay();
 
     // A full building on good enough land grows a level and holds more.
     for (const [id, building] of this.buildings) {
@@ -550,9 +1094,16 @@ export class BuildingSystem {
       const candidates = clean.length ? clean : near.length ? near : open;
       // Seed and tick are saved, so a loaded city picks the same next lot.
       const { id } = candidates[roll(seed, tick, index + zoneOrder.length) % candidates.length];
-      this.buildings.set(id, { id, capacity: growth.capacity[zone], occupants: 0, level: 1 });
+      this.buildings.set(id, zone === 'residential' ?
+        { id, capacity: growth.capacity[zone], occupants: 0, level: 1, people: [], nextSlot: 0,
+          kind: this.homeKindAt(id) } :
+        { id, capacity: growth.capacity[zone], occupants: 0, level: 1 });
       changed = true;
     });
+    // Business turning changes how many jobs there are, so everything is worked out again.
+    if (daily && this.mood() !== this.lastMood) changed = true;
+    // A neighbourhood gets over its fright.
+    if (daily && this.scares.some(({ until }) => until <= tick)) changed = true;
     if (changed) this.refresh();
     if (daily) this.rollEmergencies(tick, seed);
 
@@ -573,7 +1124,7 @@ export class BuildingSystem {
 
   /** The road tile beside a cell, if there is one. Vehicles drive between these. */
   roadBeside(cell: Cell): Cell | undefined {
-    return this.roadAccess(cell);
+    return this.doorOf(cell);
   }
 
   /** The nearest working station of a service that has the cell in reach. */
@@ -581,10 +1132,11 @@ export class BuildingSystem {
     let best: Cell | undefined;
     let bestDistance = services.radius[service] + 1;
     for (let id = 0; id < MAP_SIZE ** 2; id++) {
-      if (this.map.at(id) !== service) continue;
+      const tile = this.map.at(id);
+      if (tile !== service && alsoServes[tile as Service] !== service) continue;
       const station = cellAt(id);
       const distance = Math.abs(station.x - cell.x) + Math.abs(station.y - cell.y);
-      if (distance < bestDistance && this.hasRoadAccess(station)) {
+      if (distance < bestDistance && this.doorOf(station)) {
         best = station;
         bestDistance = distance;
       }
@@ -615,12 +1167,16 @@ export class BuildingSystem {
         station: helped ? this.nearestStation(cell, service) : undefined });
       if (this.events.length > EVENT_LOG) this.events.shift();
       if (helped) return;
+      if (trouble !== 'sick') {
+        this.scares.push({ id, until: tick + scare.days * calendar.ticksPerDay });
+        changed = true;
+      }
       if (trouble === 'fire') {
         this.removeBuilding(id);
-        changed = true;
       } else if (trouble === 'crime') {
         this.funds -= services.crime.loss;
       } else if (this.map.at(id) === 'residential' && building.occupants > 0) {
+        building.people!.pop();
         building.occupants--;
         changed = true;
       }
@@ -651,10 +1207,21 @@ export class BuildingSystem {
 
   /** Recomputes everything derived after tiles or the set of buildings changed. */
   private refresh(): void {
+    this.circles.clear();
+    this.bonds.clear();
+    this.countCars();
+    // Who lives here does not change in what follows, and how business is depends on it.
+    this.residents = 0;
+    for (const [id, building] of this.buildings) {
+      if (this.map.at(id) === 'residential') this.residents += building.occupants;
+    }
+    this.lastMood = this.mood();
+    this.markScares();
     this.connectUtilities();
     this.coverServices();
     this.planLines();
     this.assignJobs();
+    this.shareCustom();
     this.spreadPollution();
     this.residents = 0;
     for (const trait of TRAITS) this.traitCounts[trait] = 0;
@@ -667,24 +1234,36 @@ export class BuildingSystem {
       else if (zone === 'commercial') clerks += building.occupants;
       if (zone !== 'residential') continue;
       this.residents += building.occupants;
-      for (let place = 0; place < building.occupants; place++) {
-        const trait = traitOf(this.seed, id, place);
+      for (const { slot } of building.people!) {
+        const trait = traitOf(this.seed, id, slot, building.kind);
         if (!trait) continue;
         this.traitCounts[trait]++;
         if (trait === 'gardener') this.gardeners.set(id, (this.gardeners.get(id) ?? 0) + 1);
       }
     }
-    this.tileUpkeep = 0;
+    this.tileUpkeep = this.map.stationTiles().length * economy.upkeep.metro;
     this.idleCount = 0;
+    this.visitors = 0;
+    let markets = 0;
+    let farmed = 0;
     for (let id = 0; id < MAP_SIZE ** 2; id++) {
       const tile = this.map.at(id);
       if (tile === 'grass' || tile === 'river' || isZone(tile)) continue;
       this.tileUpkeep += economy.upkeep[tile];
-      if ((isFacility(tile) || isService(tile) || tile === 'bus') && !this.hasRoadAccess(cellAt(id))) this.idleCount++;
+      if (tile === 'farm') farmed += this.farmYield(id);
+      if (!(isFacility(tile) || isService(tile) || tile === 'bus')) continue;
+      if (!this.doorOf(cellAt(id))) {
+        this.idleCount++;
+        continue;
+      }
+      if (tile === 'market') markets++;
+      const sight = services.visitors[tile as Service];
+      if (sight) this.visitors += this.sightIncome(id, tile as Service);
     }
-    const made = factoryHands * goods.perWorker;
+    const made = factoryHands * goods.perWorker + farmed;
     const needed = this.residents * goods.perResident;
-    this.market = { made, needed, served: Math.min(needed, clerks * goods.perClerk),
+    this.market = { made, needed, farmed,
+      served: Math.min(needed, clerks * goods.perClerk + markets * services.market.shoppers),
       trade: made >= needed ? (made - needed) * goods.exportPrice : -(needed - made) * goods.importCost };
   }
 
@@ -771,14 +1350,19 @@ export class BuildingSystem {
       const water = tile === 'river' || tile === 'bridge';
       if (!isService(tile) && !water) continue;
       const { x, y } = cellAt(id);
-      if (!water && !this.hasRoadAccess({ x, y })) continue;
+      if (!water && !this.doorOf({ x, y })) continue;
+      // Nobody sends a child to school in a frightened neighbourhood.
+      if (this.scared[id] && SCHOOLS.includes(tile as Service)) continue;
       const radius = water ? landValue.waterfront.radius : services.radius[tile as Service];
       const field = water ? this.shore : this.covered[tile as Service];
+      const second = water ? undefined : alsoServes[tile as Service];
       for (let dy = -radius; dy <= radius; dy++) {
         const span = radius - Math.abs(dy);
         for (let dx = -span; dx <= span; dx++) {
           const cell = { x: x + dx, y: y + dy };
-          if (this.map.get(cell) !== undefined) field[indexOf(cell)] = 1;
+          if (this.map.get(cell) === undefined) continue;
+          field[indexOf(cell)] = 1;
+          if (second) this.covered[second][indexOf(cell)] = 1;
         }
       }
     }
@@ -908,26 +1492,118 @@ export class BuildingSystem {
   }
 
   /**
+   * Once a day a few homes are looked at, and one person in each may change jobs: to a
+   * workplace that is clearly nearer, to the kind of work they like, or just for a change.
+   * Only workplaces with room count, so nobody is pushed out. Returns whether anyone moved.
+   */
+  private reviewJobs(tick: number, seed: number): boolean {
+    const homes: SavedBuilding[] = [];
+    /** The workplaces reached by each road tile. */
+    const doors = new Map<number, SavedBuilding[]>();
+    for (const [id, building] of this.buildings) {
+      if (this.map.at(id) === 'residential') {
+        if ((this.employed.get(id) ?? 0) > 0) homes.push(building);
+        continue;
+      }
+      const road = this.roadAccess(cellAt(id));
+      if (!road) continue;
+      const sharing = doors.get(indexOf(road));
+      if (sharing) sharing.push(building);
+      else doors.set(indexOf(road), [building]);
+    }
+    if (!homes.length) return false;
+    const { share, min, max } = jobs.review;
+    const looks = Math.min(homes.length, max, Math.max(min, Math.ceil(homes.length * share)));
+    const seen = new Set<number>();
+    let moved = false;
+    for (let look = 0; look < looks; look++) {
+      const home = homes[roll(seed, tick, 100 + 3 * look) % homes.length];
+      if (seen.has(home.id)) continue;
+      seen.add(home.id);
+      const person = home.people![roll(seed, tick, 101 + 3 * look) % home.people!.length];
+      const road = this.roadAccess(cellAt(home.id));
+      const door = person.job >= 0 ? this.roadAccess(cellAt(person.job)) : undefined;
+      if (!road || !door) continue;
+      const own = indexOf(door);
+      const zone = this.map.at(person.job);
+      const { liking } = residentAt(this.seed, home.id, person.slot, home.kind);
+      // Every workplace with room, nearest first, out to a little beyond the job they have.
+      let reach: number | undefined;
+      const offers: { work: SavedBuilding; minutes: number }[] = [];
+      this.roadGraph.explore(road, this.minutesAt, traffic.maxCommute, (at, minutes) => {
+        if (at === own) reach = minutes;
+        if (reach !== undefined && minutes > reach + jobs.extra) return true;
+        for (const work of doors.get(at) ?? []) {
+          if (work.id !== person.job && work.occupants < this.capacityOf(work)) offers.push({ work, minutes });
+        }
+        return false;
+      });
+      if (reach === undefined) continue;
+      const limit: number = reach;
+      const kind = (offer: { work: SavedBuilding }) => this.map.at(offer.work.id);
+      // Someone in the work they like does not leave it for another kind.
+      const fine = (offer: { work: SavedBuilding; minutes: number }) =>
+        offer.minutes <= limit + jobs.extra && (liking !== zone || kind(offer) === liking);
+      let why: PersonNews['kind'] = 'job-nearer';
+      let pick = offers.find(offer => offer.minutes <= limit - jobs.nearer && fine(offer));
+      if (!pick && liking && liking !== zone) {
+        why = 'job-liking';
+        pick = offers.find(offer => kind(offer) === liking && fine(offer));
+      }
+      if (!pick && roll(seed, tick, 102 + 3 * look) / 2 ** 32 < jobs.restless) {
+        why = 'job-change';
+        pick = offers.find(fine);
+      }
+      if (!pick) continue;
+      this.buildings.get(person.job)!.occupants--;
+      pick.work.occupants++;
+      person.job = pick.work.id;
+      person.hired = tick;
+      this.tell(why, home.id, person, shiftIndex(kind(pick) as Zone, pick.work.id));
+      moved = true;
+    }
+    return moved;
+  }
+
+  /**
    * Matches residents to jobs and loads their commutes onto the roads, starting from empty
-   * roads every time. Homes go in the order they were built; each takes the vacancies that are
-   * quickest to reach given the traffic of the homes before it.
+   * roads every time. Whoever has a job keeps it while the workplace stands, has room and can
+   * be reached. Homes go in the order they were built; those in each without work take the
+   * vacancies that are quickest to reach given the traffic of the homes before it.
    */
   private assignJobs(): void {
+    // A job that turns out to be out of reach frees a vacancy that homes already dealt with
+    // could have taken, so the matching runs again until nothing more comes loose.
+    for (let pass = 0; pass < 8 && this.matchJobs(); pass++);
+  }
+
+  /** One round of matching. Returns true if a job came loose and the round must be run again. */
+  private matchJobs(): boolean {
     this.commutes.length = 0;
     this.riders = 0;
     this.flows.fill(0);
     for (const flows of this.shiftFlows) flows.fill(0);
     this.employed.clear();
     this.commuteMinutes.clear();
+    this.staff.clear();
+    for (const plan of this.plans) {
+      plan.riders = 0;
+      plan.loads.fill(0);
+    }
     const homes: { building: SavedBuilding; road: Cell }[] = [];
     const jobsAt = new Map<number, SavedBuilding[]>();
+    /** The road tile each workplace is reached by. */
+    const doorOf = new Map<number, number>();
     let vacancies = 0;
+    let loose = false;
 
     for (const [id, building] of this.buildings) {
       const cell = this.zones.get(id)!;
       const road = this.roadAccess(cell);
       if (this.map.get(cell) === 'residential') {
         if (road && building.occupants > 0) homes.push({ building, road });
+        // Nobody gets to work from a home without a road.
+        else for (const person of building.people!) person.job = -1;
       } else {
         building.occupants = 0;
         if (!road) continue;
@@ -935,33 +1611,93 @@ export class BuildingSystem {
         const sharing = jobsAt.get(at);
         if (sharing) sharing.push(building);
         else jobsAt.set(at, [building]);
+        doorOf.set(id, at);
         vacancies += this.capacityOf(building);
       }
     }
     for (const sharing of jobsAt.values()) sharing.sort((a, b) => a.id - b.id);
 
+    // First everyone who has a job takes their place, while the workplace is there and has room.
+    for (const { building } of homes) {
+      for (const person of building.people!) {
+        if (person.job < 0) continue;
+        const work = this.buildings.get(person.job);
+        if (work && doorOf.has(work.id) && work.occupants < this.capacityOf(work)) {
+          work.occupants++;
+          vacancies--;
+        } else {
+          person.job = -1;
+          this.tell('job-lost', building.id, person);
+        }
+      }
+    }
+
     const { minutesAt } = this;
     for (const { building, road } of homes) {
-      if (!vacancies) break;
-      let remaining = building.occupants;
-      // Residents take jobs in the order they moved in, so each commute is a run of places.
-      let place = 0;
-      const taken: { workId: number; workers: number; at: number }[] = [];
-      this.roadGraph.explore(road, minutesAt, traffic.maxCommute, at => {
-        for (const work of jobsAt.get(at) ?? []) {
-          const workers = Math.min(remaining, this.capacityOf(work) - work.occupants);
-          if (workers <= 0) continue;
-          work.occupants += workers;
-          remaining -= workers;
-          taken.push({ workId: work.id, workers, at });
-          if (!remaining) return true;
+      const people = building.people!;
+      const seekers = people.filter(person => person.job < 0);
+      const kept = new Map<number, SavedPerson[]>();
+      /** The doors of the workplaces people here already work at, until each is reached. */
+      const wanted = new Set<number>();
+      for (const person of people) {
+        if (person.job < 0) continue;
+        const group = kept.get(person.job);
+        if (group) group.push(person);
+        else kept.set(person.job, [person]);
+        wanted.add(doorOf.get(person.job)!);
+      }
+      let placed = 0;
+      const taken: { workId: number; staff: SavedPerson[]; at: number }[] = [];
+      if (wanted.size || (seekers.length && vacancies)) {
+        this.roadGraph.explore(road, minutesAt, traffic.maxCommute, at => {
+          const here = jobsAt.get(at);
+          if (here && wanted.delete(at)) {
+            for (const work of here) {
+              const group = kept.get(work.id);
+              if (group) taken.push({ workId: work.id, staff: group, at });
+            }
+          }
+          if (here && placed < seekers.length && vacancies) {
+            for (const work of here) {
+              const count = Math.min(seekers.length - placed, this.capacityOf(work) - work.occupants);
+              if (count <= 0) continue;
+              const hired = seekers.slice(placed, placed + count);
+              for (const person of hired) {
+                person.job = work.id;
+                person.hired = this.clock;
+              }
+              placed += count;
+              work.occupants += count;
+              vacancies -= count;
+              const group = taken.find(entry => entry.workId === work.id);
+              if (group) group.staff.push(...hired);
+              else taken.push({ workId: work.id, staff: hired, at });
+            }
+          }
+          return !wanted.size && (placed >= seekers.length || !vacancies);
+        });
+      }
+      // A workplace the roads no longer lead to within a bearable commute is a job lost.
+      // Its door was never reached, so nobody was hired there just now.
+      if (wanted.size) {
+        for (const person of people) {
+          if (person.job < 0 || !wanted.has(doorOf.get(person.job)!)) continue;
+          this.buildings.get(person.job)!.occupants--;
+          vacancies++;
+          person.job = -1;
+          this.tell('job-lost', building.id, person);
+          loose = true;
         }
-        return false;
-      });
-      for (const { workId, workers, at } of taken) {
+      }
+      for (const { workId, staff, at } of taken) {
+        const workers = staff.length;
         const path = this.roadGraph.pathTo(at);
         const shift = shiftIndex(this.map.at(workId) as Zone, workId);
         const flows = this.shiftFlows[shift];
+        const entries = staff.map(person => ({ home: building.id, person }));
+        const list = this.staff.get(workId);
+        if (list) list.push(...entries);
+        else this.staff.set(workId, entries);
         // The quickest ride on one line with a stop near home and another near work, if any.
         let ride: { plan: Line & { loads: number[] }; minutes: number } | undefined;
         for (const from of this.stopsNear.get(building.id) ?? []) {
@@ -979,15 +1715,15 @@ export class BuildingSystem {
           const share = ride.minutes <= drive ? transit.share.faster :
             ride.minutes <= drive * transit.closeFactor ? transit.share.close : 0;
           // Some never ride and some always do; the share applies to everyone else.
-          const drivers = countTrait(this.seed, building.id, place, place + workers, 'driver');
-          const keen = countTrait(this.seed, building.id, place, place + workers, 'rider');
-          const willing = Math.floor((workers - drivers - keen) * share) + keen;
+          const having = (trait: Trait) =>
+            staff.filter(person => traitOf(this.seed, building.id, person.slot, building.kind) === trait).length;
+          const keen = having('rider');
+          const willing = Math.floor((workers - having('driver') - keen) * share) + keen;
           riders = Math.max(0, Math.min(willing, ride.plan.capacity - ride.plan.loads[shift]));
           ride.plan.loads[shift] += riders;
           ride.plan.riders += riders;
         }
         this.riders += riders;
-        place += workers;
         for (const cell of path) {
           const tile = indexOf(cell);
           flows[tile] += workers - riders;
@@ -996,9 +1732,9 @@ export class BuildingSystem {
         this.commutes.push({ homeId: building.id, workId, workers, path, minutes: 0, shift, riders,
           line: riders ? ride!.plan.id : undefined, transitMinutes: riders ? ride!.minutes : undefined });
       }
-      vacancies -= building.occupants - remaining;
-      this.employed.set(building.id, building.occupants - remaining);
+      this.employed.set(building.id, people.filter(person => person.job >= 0).length);
     }
+    if (loose) return true;
 
     for (const plan of this.plans) plan.busiest = Math.max(...plan.loads);
 
@@ -1017,17 +1753,19 @@ export class BuildingSystem {
       this.commuteMinutes.set(commute.homeId, (this.commuteMinutes.get(commute.homeId) ?? 0) +
         commute.minutes * commute.workers / this.employed.get(commute.homeId)!);
     }
+    return false;
   }
 
   save(): Omit<SaveData, 'schemaVersion' | 'seed' | 'tick'> {
-    return { tiles: this.map.save(), zones: [...this.zones.keys()],
-      buildings: [...this.buildings.values()].map(building => ({ ...building })),
+    return { tiles: this.map.save(), metros: this.map.stationTiles(), zones: [...this.zones.keys()],
+      buildings: [...this.buildings.values()].map(building => building.people ?
+        { ...building, people: building.people.map(person => ({ ...person })) } : { ...building }),
       funds: this.funds, rank: this.rank, taxRate: this.taxRate,
       lines: this.lines.map(line => ({ ...line, stops: [...line.stops] })),
       goals: [...this.goalsDone], loans: [...this.loans] };
   }
 
-  load({ tiles, zones, buildings, funds, rank, taxRate, tick, lines, goals: done, loans, seed }: SaveData): void {
+  load({ tiles, zones, buildings, funds, rank, taxRate, tick, lines, goals: done, loans, seed, metros }: SaveData): void {
     this.seed = seed;
     this.goalsDone.clear();
     for (const goal of done) this.goalsDone.add(goal);
@@ -1035,21 +1773,34 @@ export class BuildingSystem {
     this.lines.length = 0;
     for (const line of lines) this.lines.push({ ...line, stops: [...line.stops] });
     this.events.length = 0;
+    this.scares.length = 0;
     this.clock = tick;
     this.funds = funds;
     this.rank = rank;
     this.taxRate = taxRate;
-    this.map.load(tiles);
+    this.map.load(tiles, metros);
     this.zones.clear();
     this.buildings.clear();
     this.facilities.clear();
     for (const id of zones) this.zones.set(id, cellAt(id));
-    for (const building of buildings) this.buildings.set(building.id, { ...building });
+    for (const building of buildings) {
+      const record: SavedBuilding = { ...building };
+      delete record.people;
+      delete record.nextSlot;
+      if (this.map.at(building.id) === 'residential') {
+        // A save from before people were kept: the first places, all yet to find their work.
+        record.people = building.people?.map(person => ({ ...person })) ??
+          Array.from({ length: building.occupants }, (_, slot) => ({ slot, job: -1, came: tick, hired: tick }));
+        record.nextSlot = building.nextSlot ?? building.occupants;
+      }
+      this.buildings.set(building.id, record);
+    }
     for (let id = 0; id < MAP_SIZE ** 2; id++) {
       const tile = this.map.get(cellAt(id));
       if (isFacility(tile)) this.facilities.set(id, tile);
     }
     this.refresh();
+    this.news.length = 0;
   }
 
   private supply() {
@@ -1076,7 +1827,9 @@ export class BuildingSystem {
   /** Demand per zone, -100 to 100: what the city lacks, shifted by how heavy the tax is. */
   getDemand(supply = this.supply()): Demand {
     const { default: usual, above, below } = economy.taxRate;
-    const shift = this.taxRate > usual ? (usual - this.taxRate) * above : (usual - this.taxRate) * below;
+    const mood = this.mood();
+    const shift = (this.taxRate > usual ? (usual - this.taxRate) * above : (usual - this.taxRate) * below) +
+      (mood === 'boom' ? cycle.boom.demand : mood === 'slump' ? cycle.slump.demand : 0);
     const demand = zoneDemand(supply);
     for (const zone of zoneOrder) demand[zone] = Math.max(-100, Math.min(100, demand[zone] + shift));
     return demand;
@@ -1087,7 +1840,7 @@ export class BuildingSystem {
     const { population, employed } = this.supply();
     const taxpayers = population + this.traitCounts.rich * (traits.rich.taxTimes - 1);
     const tax = Math.round((taxpayers * economy.tax.resident + employed * economy.tax.job) *
-      this.taxRate / economy.taxRate.default);
+      this.taxRate / economy.taxRate.default * (this.mood() === 'boom' ? cycle.boom.tax : 1));
     let upkeep = this.tileUpkeep;
     // Lines cost by the vehicle and earn by the rider.
     let fares = 0;
@@ -1097,7 +1850,9 @@ export class BuildingSystem {
     }
     const { trade } = this.market;
     const loans = this.loans.length * economy.loan.payment;
-    return { tax, fares, trade, loans, upkeep, net: tax + fares + trade - upkeep - loans };
+    const { visitors, licence } = this;
+    return { tax, fares, trade, visitors, licence, loans, upkeep,
+      net: tax + fares + trade + visitors + licence - upkeep - loans };
   }
 
   /** How many buildings stand at each level, 1 to 4. */
@@ -1139,7 +1894,9 @@ export class BuildingSystem {
       demand: this.getDemand(supply), funds: this.funds, taxRate: this.taxRate, budget: this.budget(), rank: this.rank,
       complaints: this.complaints(), idle: this.idle(), riders: this.riders,
       goods: this.market, traits: { ...this.traitCounts }, levels: this.levelCounts(),
+      /** How many residents own each vehicle, by its index in Wealth's `vehicles`. */
+      cars: [...this.carCounts],
       bigParks: this.bigParks, complexes: this.complexes(), goals: [...this.goalsDone],
-      loans: [...this.loans], bankrupt: this.funds < economy.bankrupt };
+      loans: [...this.loans], bankrupt: this.funds < economy.bankrupt, mood: this.mood() };
   }
 }

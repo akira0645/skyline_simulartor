@@ -45,11 +45,15 @@ it('grows a blank map into a small town and then settles', () => {
   expect(row(8, 5, 24).some(cell => engine.city.hasBuilding(cell))).toBe(false);
   expect(dateAt(engine.getSnapshot().tick)).toEqual({ year: 1, month: 7, day: 1 });
 
-  // Once every reachable lot is built, more time changes nothing but the balance.
+  // Once every reachable lot is built the town stays the size it is. People still change
+  // jobs now and then, so commutes and which workplaces are short of staff keep shifting.
   engine.advance(12 * MONTH);
   const later = engine.city.getStats();
-  expect({ ...later, funds: 0 }).toEqual({ ...grown, funds: 0 });
-  expect(later.funds).toBeCloseTo(grown.funds + 12 * grown.budget.net);
+  const size = ({ population, housing, jobs, employed, buildings, levels }: typeof later) =>
+    ({ population, housing, jobs, employed, buildings, levels });
+  expect(size(later)).toEqual(size(grown));
+  expect(later.budget.tax).toBe(grown.budget.tax);
+  expect(later.funds).toBeGreaterThan(grown.funds);
 });
 
 it('plays out identically from the same plan, and from a save made part-way', () => {

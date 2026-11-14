@@ -21,3 +21,11 @@ export function dateAt(tick: number): GameDate {
 export function hourAt(tick: number, tickProgress = 0): number {
   return hoursAt(tick, tickProgress) % 24;
 }
+
+/** The day of the week at a tick, 0 for Monday to 6 for Sunday; the city is founded on a Monday. */
+export function weekdayAt(tick: number): number {
+  return Math.floor(hoursAt(tick, 0) / 24) % 7;
+}
+
+/** Saturday and Sunday. Offices and factories are shut; shops are not. */
+export const weekendAt = (tick: number) => weekdayAt(tick) >= 5;

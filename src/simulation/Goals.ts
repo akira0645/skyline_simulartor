@@ -1,6 +1,8 @@
 /** What a goal can look at: the city's figures as `BuildingSystem.getStats()` reports them. */
 export interface GoalView {
   population: number;
+  /** The average commute in minutes. */
+  commute: number;
   employed: number;
   buildings: number;
   riders: number;
@@ -43,4 +45,8 @@ export const goals: readonly { id: string; title: string; hint: string; reward: 
     done: city => city.population >= 500 },
   { id: 'city', title: '人口達到 1,500 人', hint: '往河的另一邊發展需要橋。', reward: 10000,
     done: city => city.population >= 1500 },
+  { id: 'smooth', title: '1,000 人以上，平均上班不到 20 分鐘', hint: '大道、公車和捷運，還有讓住的地方離工作近一點。', reward: 8000,
+    done: city => city.population >= 1000 && city.commute < 20 },
+  { id: 'metropolis', title: '人口達到 3,000 人', hint: '大城市要更多醫院、高中和過河的路。', reward: 20000,
+    done: city => city.population >= 3000 },
 ];

@@ -1,7 +1,7 @@
 import { Application, Assets, Graphics, type Texture } from 'pixi.js';
 import cityUrl from '../assets/city.png';
 import tilesUrl from '../assets/tiles.png';
-import { isFacility, isRoad, isService, MAP_SIZE, TILE_SIZE, type Cell } from '../simulation/TileMap';
+import { footprint, isBig, isFacility, isRoad, isService, MAP_SIZE, TILE_SIZE, type Cell } from '../simulation/TileMap';
 import { services } from '../simulation/Services';
 import { transit } from '../simulation/Transit';
 import { lineColour } from '../app/lineColours';
@@ -14,10 +14,12 @@ import { drawScene, sceneLength, type Scene } from './emergencyScenes';
 const FRESH_TICKS = 16;
 import { selection, type Overlay, type Tool } from '../app/tools';
 import { Camera } from './Camera';
-import { TileRenderer } from './TileRenderer';
+import { DETAIL_ZOOM, TileRenderer } from './TileRenderer';
 import { commuterPosition } from './commuterPosition';
-import { workShift } from '../simulation/WorkShift';
+import { shiftIndex, workShift } from '../simulation/WorkShift';
+import { weekendAt } from '../simulation/calendar';
 import { utilities } from '../simulation/Utilities';
+import { mind, SHOP_SHIFT } from '../simulation/Mind';
 
 /**
  * How long a commuter takes per tile, in milliseconds at 1× speed. Trips start by the game
@@ -25,6 +27,10 @@ import { utilities } from '../simulation/Utilities';
  * would be over in a blink.
  */
 const PACE = { walk: 900, drive: 450 };
+/** The same for each vehicle, in the order of Wealth's `vehicles`: a bicycle is slow, a car quick. */
+const VEHICLE_PACE = [700, 520, 450, 450, 430];
+/** How long a traffic light stays green each way, in milliseconds at 1× speed. */
+const LIGHT = 2600;
 /** Commuters set out this many game hours before their shift. */
 const HEAD_START = 2;
 
@@ -36,6 +42,12 @@ export class CityRenderer {
   onLineClick?: (cell: Cell) => void;
   /** Clears the inspected tile. */
   deselect?: () => void;
+  /** Called when a commuter on the map is clicked, with their home and workplace. */
+  onPerson?: (homeId: number, workId: number) => void;
+  /** The commuter to point out on the map, as `home:workplace`. */
+  follow?: string;
+  /** Where the map shows a commuter: settled at home or at work, or on the way to either. */
+  tripOf?: (homeId: number, workId: number) => 'home' | 'work' | 'to-work' | 'to-home' | undefined;
 
   constructor(private readonly city: BuildingSystem, private readonly speed: () => number,
     private readonly hour: () => number, private readonly overlay: () => Overlay) {}
@@ -81,63 +93,254 @@ export class CityRenderer {
       const tool = getTool();
       return this.overlay() === 'lines' || tool === 'line' || tool === 'bus' || tool === 'metro';
     };
-    // Where each commuter is, by home and workplace: settled at one end, or since when on the way.
-    const trips = new Map<string, { at: 'home' | 'work'; since?: number }>();
-    const drawPeople = () => {
+    // Where each commuter is, by home and workplace: settled at one end, or how far along the
+    // way to the other, counted in tiles from the end they left.
+    const trips = new Map<string, { at: 'home' | 'work'; along?: number; wait: number }>();
+    /** The cars that were on the road in the last frame, for the ones behind to keep clear of. */
+    let cars: { x: number; y: number; hx: number; hy: number; index: number }[] = [];
+    /** Where each commuter in sight was last drawn, for clicking on them. */
+    let spots: { x: number; y: number; homeId: number; workId: number }[] = [];
+    this.tripOf = (homeId, workId) => {
+      const trip = trips.get(`${homeId}:${workId}`);
+      if (!trip) return undefined;
+      return trip.along === undefined || trip.wait > 0 ? trip.at : trip.at === 'home' ? 'to-work' : 'to-home';
+    };
+    const cellOf = (id: number): Cell => ({ x: id % MAP_SIZE, y: Math.floor(id / MAP_SIZE) });
+    /** How long and how wide each vehicle is drawn, in the order of Wealth's `vehicles`. */
+    const SIZES = [[8, 3], [9, 5], [13, 9], [16, 10], [18, 10]];
+    const drawCar = (cx: number, cy: number, vertical: boolean, index: number, tier: number) => {
+      const [long, wide] = SIZES[tier];
+      const width = vertical ? wide : long;
+      const height = vertical ? long : wide;
+      const left = Math.round(cx - width / 2);
+      const top = Math.round(cy - height / 2);
+      people.rect(left, top, width, height).fill(0x232831);
+      if (tier < 2) {
+        // A bicycle or a scooter: a thin frame and the rider's head.
+        if (tier) people.rect(left + 1, top + 1, width - 2, height - 2).fill([0xd87856, 0x5bb6ce, 0xe6c15a][index % 3]);
+        people.rect(Math.round(cx) - 1, Math.round(cy) - 1, 3, 3).fill(0xffd1a0);
+        return;
+      }
+      people.rect(left + 1, top + 1, width - 2, height - 2).fill(tier === 4 ? [0x2b2f3a, 0x8a1f2b, 0xf4f6f8][index % 3] :
+        [0x5bb6ce, 0xd87856, 0xe6c15a, 0x8fbf6a, 0xd6d9de][index % 5]);
+      people.rect(left + (vertical ? 2 : 4), top + (vertical ? 4 : 2), width - (vertical ? 4 : 8), height - (vertical ? 8 : 4))
+        .fill(0xa9d8de);
+      if (camera.scale >= DETAIL_ZOOM) {
+        // Close up: tyres at the corners.
+        for (const end of [2, long - 4]) {
+          for (const side of [0, wide - 0.5]) {
+            people.rect(left + (vertical ? side : end), top + (vertical ? end : side), vertical ? 0.5 : 2, vertical ? 2 : 0.5)
+              .fill(0x0c0d10);
+          }
+        }
+      }
+      // The dearest cars carry a gold trim.
+      if (tier === 4) people.rect(left + 1, top + 1, vertical ? width - 2 : 2, vertical ? 2 : height - 2).fill(0xe0b23e);
+    };
+    /** Road tiles where three or four roads meet, which get traffic lights; looked up again now and then. */
+    let junctions = new Set<number>();
+    let junctionsAt = -Infinity;
+    const findJunctions = () => {
+      if (performance.now() - junctionsAt < 500) return;
+      junctionsAt = performance.now();
+      junctions = new Set();
+      for (let y = 0; y < MAP_SIZE; y++) {
+        for (let x = 0; x < MAP_SIZE; x++) {
+          if (!isRoad(map.get({ x, y }))) continue;
+          let roads = 0;
+          for (const [dx, dy] of [[0, -1], [1, 0], [0, 1], [-1, 0]]) if (isRoad(map.get({ x: x + dx, y: y + dy }))) roads++;
+          if (roads >= 3) junctions.add(y * MAP_SIZE + x);
+        }
+      }
+    };
+    /** Whether the light at a junction is green for traffic going up and down; otherwise for across. */
+    const greenUpright = (x: number, y: number) => (Math.floor(animationTime / LIGHT) + x + y) % 2 === 0;
+    const drawWalker = (cx: number, cy: number, index: number) => {
+      // A person is small beside a house: three pixels across and nine tall.
+      const x = Math.round(cx) - 1;
+      const y = Math.round(cy) - 4;
+      const stride = Math.floor(animationTime / 140 + index) % 2;
+      people.rect(x - 1, y - 1, 5, 10).fill(0x25232b);
+      people.rect(x, y, 3, 3).fill(0xffd1a0);
+      people.rect(x, y + 3, 3, 3).fill([0x7edbed, 0xf6ba67, 0xe8799a, 0x8fbf6a, 0xd6d9de][index % 5]);
+      people.rect(x, y + 6, 1, 1 + stride).rect(x + 2, y + 6, 1, 2 - stride).fill(0xece6dd);
+      if (camera.scale < DETAIL_ZOOM) return;
+      // Close up: hair, eyes, arms, and a bag for some.
+      people.rect(x, y, 3, 1).rect(x, y, 0.5, 2).fill([0x3a2a1c, 0x1b1d22, 0x8a5a3a, 0xd9c08a][index % 4]);
+      people.rect(x + 0.5, y + 1.5, 0.5, 0.5).rect(x + 2, y + 1.5, 0.5, 0.5).fill(0x25232b);
+      people.rect(x - 0.5, y + 3, 0.5, 2 + stride * 0.5).rect(x + 3, y + 3, 0.5, 2.5 - stride * 0.5).fill(0xffd1a0);
+      if (index % 3 === 0) people.rect(x + 3, y + 4.5, 1, 1.5).fill(0x8a5a3a);
+    };
+    const drawPeople = (elapsed = 0) => {
       people.clear();
       people.position.set(camera.x, camera.y);
       people.scale.set(camera.scale);
       const routes = this.city.getCommutes();
+      findJunctions();
+      const moving: typeof cars = [];
+      spots = [];
+      /** Where the commuter being followed is: on the way, or the building they are in. */
+      let pin: { x: number; y: number } | undefined;
+      /** Kerb spots that already show a parked car. */
+      const kerbs = new Set<string>();
+      const centre = (cell: Cell) => ({ x: (cell.x + 0.5) * TILE_SIZE, y: (cell.y + 0.5) * TILE_SIZE });
       for (let i = 0; i < Math.min(routes.length, 80); i++) {
         const route = routes[i];
-        const driving = route.path.length >= 5;
-        const time = animationTime + i * 185;
-        const mode = driving ? 'drive' : 'walk';
-        const workplace = { x: route.workId % MAP_SIZE, y: Math.floor(route.workId / MAP_SIZE) };
+        const tiles = route.path.length;
+        const steps = tiles + 1;
+        const driving = tiles >= mind.driveFrom;
+        const home = cellOf(route.homeId);
+        const workplace = cellOf(route.workId);
         const zone = this.city.map.get(workplace);
         if (zone !== 'commercial' && zone !== 'industrial') continue;
         const { start, end } = workShift(zone, route.workId);
+        const tier = this.city.carOn(route.homeId, route.workId);
         const sinceStart = (this.hour() - start + 24) % 24;
-        const wanted = sinceStart < end - start || sinceStart >= 24 - HEAD_START ? 'work' : 'home';
+        // At the weekend only the shops are open, so only their people go to work.
+        const dayOff = weekendAt(this.city.now) && shiftIndex(zone, route.workId) !== SHOP_SHIFT;
+        const wanted = !dayOff && (sinceStart < end - start || sinceStart >= 24 - HEAD_START) ? 'work' : 'home';
         const key = `${route.homeId}:${route.workId}`;
         let trip = trips.get(key);
-        if (!trip) trips.set(key, trip = { at: 'home' });
-        const duration = (route.path.length + 1) * PACE[mode];
-        if (trip.since !== undefined && animationTime - trip.since >= duration) {
-          trip = { at: trip.at === 'home' ? 'work' : 'home' };
-          trips.set(key, trip);
-        }
-        if (trip.since === undefined) {
-          if (trip.at === wanted) continue;
-          // Stagger departures a little so a household does not leave as one stack.
-          trip.since = animationTime + (i % 5) * 120;
-        }
-        const elapsed = animationTime - trip.since;
-        if (elapsed < 0) continue;
-        const returning = trip.at === 'work';
-        const progress = returning ? 1 - elapsed / duration : elapsed / duration;
-        const position = commuterPosition(route, time, mode, progress, returning);
-        if (!position) continue;
-        const x = Math.round(position.x * TILE_SIZE + 12);
-        const y = Math.round(position.y * TILE_SIZE + 11);
-        if (driving) {
-          const next = commuterPosition(route, time, mode, Math.max(0, progress - 0.01), returning);
-          const vertical = next && Math.abs(next.y - position.y) > Math.abs(next.x - position.x);
+        if (!trip) trips.set(key, trip = { at: 'home', wait: 0 });
+        const followed = key === this.follow;
+        if (followed) pin = centre(trip.at === 'home' ? home : workplace);
+        /** Notes where this commuter is drawn. */
+        const seenAt = (spot: { x: number; y: number }) => {
+          spots.push({ x: spot.x, y: spot.y, homeId: route.homeId, workId: route.workId });
+          if (followed) pin = spot;
+        };
 
-          const left = x + 4 - (vertical ? 5 : 8);
-          const top = y + 5 - (vertical ? 8 : 5);
-          people.rect(left, top, vertical ? 10 : 16, vertical ? 16 : 10).fill(0x232831);
-          people.rect(left + 1, top + 1, vertical ? 8 : 14, vertical ? 14 : 8)
-            .fill(i % 2 ? 0x5bb6ce : 0xd87856);
-          people.rect(left + (vertical ? 2 : 4), top + (vertical ? 4 : 2), vertical ? 6 : 8, vertical ? 8 : 6)
-            .fill(0xa9d8de);
+        // A car waits at the kerb in front of the building its driver is in: on the edge of
+        // the road tile, on the building's side, lined up with the road.
+        const kerb = (at: 'home' | 'work') => {
+          const road = at === 'home' ? route.path[0] : route.path[tiles - 1];
+          const next = at === 'home' ? route.path[1] : route.path[tiles - 2];
+          const building = at === 'home' ? home : workplace;
+          const spot = centre({ x: road.x + (building.x - road.x) * 0.3, y: road.y + (building.y - road.y) * 0.3 });
+          return { ...spot, vertical: next.x === road.x, key: `${road.x},${road.y},${building.x - road.x},${building.y - road.y}` };
+        };
+        const park = (at: 'home' | 'work') => {
+          const spot = kerb(at);
+          if (kerbs.has(spot.key)) return;
+          kerbs.add(spot.key);
+          drawCar(spot.x, spot.y, spot.vertical, i, tier);
+        };
+
+        if (trip.along === undefined) {
+          if (trip.at === wanted) {
+            if (driving) park(trip.at);
+            continue;
+          }
+          // Stagger departures a little so a household does not leave as one.
+          trip.along = 0;
+          trip.wait = (i % 7) * 260;
+        }
+        if (trip.wait > 0) {
+          trip.wait -= elapsed;
+          if (driving) park(trip.at);
           continue;
         }
-        const stride = Math.floor(animationTime / 140 + i) % 2;
-        people.rect(x - 1, y - 1, 9, 13).fill(0x25232b);
-        people.rect(x + 2, y, 4, 4).fill(0xffd1a0);
-        people.rect(x + 1, y + 4, 6, 4).fill(i % 2 ? 0x7edbed : 0xf6ba67);
-        people.rect(x + 1, y + 8, 2, 2 + stride).rect(x + 5, y + 8, 2, 3 - stride).fill(0xece6dd);
+        const returning = trip.at === 'work';
+        const from = trip.at;
+        const to = from === 'home' ? 'work' : 'home';
+        /** Where on the road the commuter is after `along` tiles of the trip. */
+        const onRoad = (along: number) => {
+          const index = returning ? steps - along : along;
+          const position = commuterPosition(route, 0, driving ? 'drive' : 'walk', index / steps, returning)!;
+          return centre(position);
+        };
+        const along = trip.along;
+        let speed = 1 / PACE.walk;
+
+        if (!driving) {
+          const spot = onRoad(along);
+          drawWalker(spot.x, spot.y, i);
+          seenAt(spot);
+        } else if (along < 1) {
+          // Out of the door and over to the car.
+          const door = centre(from === 'home' ? home : workplace);
+          const car = kerb(from);
+          park(from);
+          const spot = { x: door.x + (car.x - door.x) * along, y: door.y + (car.y - door.y) * along };
+          drawWalker(spot.x, spot.y, i);
+          seenAt(spot);
+        } else if (along > steps - 1) {
+          // Parked; the last few steps are on foot.
+          const door = centre(to === 'home' ? home : workplace);
+          const car = kerb(to);
+          const part = along - (steps - 1);
+          park(to);
+          const spot = { x: car.x + (door.x - car.x) * part, y: car.y + (door.y - car.y) * part };
+          drawWalker(spot.x, spot.y, i);
+          seenAt(spot);
+        } else {
+          // On the road: pulling out from the kerb, driving in lane, pulling in at the other end.
+          let spot = onRoad(along);
+          const ahead = onRoad(Math.min(steps - 1, along + 0.1));
+          const behind = onRoad(Math.max(1, along - 0.1));
+          const dx = ahead.x - behind.x;
+          const dy = ahead.y - behind.y;
+          const vertical = Math.abs(dy) > Math.abs(dx);
+          const hx = vertical ? 0 : Math.sign(dx);
+          const hy = vertical ? Math.sign(dy) : 0;
+          const out = along - 1;
+          const inn = steps - 1 - along;
+          let inLane = true;
+          if (out < 0.5 || inn < 0.5) {
+            const car = kerb(out < 0.5 ? from : to);
+            const part = Math.min(out, inn) / 0.5;
+            spot = { x: car.x + (spot.x - car.x) * part, y: car.y + (spot.y - car.y) * part };
+            inLane = part > 0.6;
+          }
+          // Keep clear of the car in front. Two cars side by side on one spot: the earlier one goes first.
+          const tileX = spot.x / TILE_SIZE;
+          const tileY = spot.y / TILE_SIZE;
+          const blocked = cars.some(other => {
+            if (other.index === i || other.hx !== hx || other.hy !== hy) return false;
+            const offX = other.x - tileX;
+            const offY = other.y - tileY;
+            if (Math.abs(offX * hy - offY * hx) > 0.2) return false;
+            const forward = offX * hx + offY * hy;
+            return (forward > 0.03 && forward < 0.68) || (Math.abs(forward) <= 0.03 && other.index < i);
+          });
+          // A red light ahead: wait at the edge of the junction. Whoever is in it already goes on.
+          const aheadX = Math.floor(tileX + hx * 0.55);
+          const aheadY = Math.floor(tileY + hy * 0.55);
+          const red = (aheadX !== Math.floor(tileX) || aheadY !== Math.floor(tileY)) &&
+            junctions.has(aheadY * MAP_SIZE + aheadX) && greenUpright(aheadX, aheadY) !== vertical;
+          speed = blocked || red ? 0 : 1 / VEHICLE_PACE[tier];
+          drawCar(spot.x, spot.y, vertical, i, tier);
+          seenAt(spot);
+          if (inLane) moving.push({ x: tileX, y: tileY, hx, hy, index: i });
+        }
+
+        trip.along = along + elapsed * speed;
+        if (trip.along >= steps) trips.set(key, { at: to, wait: 0 });
+      }
+      if (elapsed > 0) cars = moving;
+      if (pin) {
+        // A yellow arrow bobbing over the one being followed.
+        const x = Math.round(pin.x);
+        const y = Math.round(pin.y) - 13 - Math.floor(animationTime / 300) % 2;
+        people.rect(x - 5, y - 8, 11, 6).rect(x - 3, y - 2, 7, 2).rect(x - 1, y, 3, 2).fill(0x25232b);
+        people.rect(x - 4, y - 7, 9, 4).rect(x - 2, y - 3, 5, 2).rect(x, y - 1, 1, 2).fill(0xffd95a);
+      }
+
+      // Traffic lights at the junctions in sight: one lamp for each way, green or red.
+      const viewLeft = -camera.x / camera.scale / TILE_SIZE - 1;
+      const viewTop = -camera.y / camera.scale / TILE_SIZE - 1;
+      const viewRight = viewLeft + app.screen.width / camera.scale / TILE_SIZE + 2;
+      const viewBottom = viewTop + app.screen.height / camera.scale / TILE_SIZE + 2;
+      for (const id of junctions) {
+        const x = id % MAP_SIZE;
+        const y = Math.floor(id / MAP_SIZE);
+        if (x < viewLeft || x > viewRight || y < viewTop || y > viewBottom) continue;
+        const upright = greenUpright(x, y);
+        const left = x * TILE_SIZE;
+        const top = y * TILE_SIZE;
+        people.rect(left + 1, top + 1, 5, 5).rect(left + 26, top + 26, 5, 5).fill(0x1b1d22);
+        people.rect(left + 2, top + 2, 3, 3).fill(upright ? 0x4fc46b : 0xe5484d);
+        people.rect(left + 27, top + 27, 3, 3).fill(upright ? 0xe5484d : 0x4fc46b);
       }
 
       // Each line's vehicles, evenly spread, running to the far end and back.
@@ -204,7 +407,7 @@ export class CityRenderer {
       const speed = this.speed();
       if (!speed || !this.city.getCommutes().length) return;
       animationTime += ticker.deltaMS * speed;
-      drawPeople();
+      drawPeople(ticker.deltaMS * speed);
       drawEffects();
     });
     app.start();
@@ -218,7 +421,7 @@ export class CityRenderer {
     const draw = () => {
       // Placing a plant or tower shows what it would reach, and which buildings are served now.
       const tool = getTool();
-      const inspected = selected && map.get(selected);
+      const inspected = selected && (map.hasStation(selected) ? 'metro' : map.get(selected));
       const reach = (kind: string | undefined, centre: Cell | undefined) =>
         !centre ? undefined :
         isFacility(kind) ? { centre, radius: utilities.radius, kind } :
@@ -263,7 +466,7 @@ export class CityRenderer {
       event.preventDefault();
       canvas.setPointerCapture(event.pointerId);
       drag = { id: event.pointerId, tool, start, x, y, fromX: x, fromY: y };
-      preview = looking ? [] : [start];
+      preview = looking ? [] : isBig(tool) ? footprint(start) : [start];
       draw();
     }, { signal });
 
@@ -285,7 +488,7 @@ export class CityRenderer {
       // With the look tool a press that moves is a drag of the map; one that stays put is a click.
       if (drag.tool === 'inspect' && Math.hypot(x - drag.fromX, y - drag.fromY) > 4) drag.tool = 'pan';
       if (drag.tool === 'pan') camera.pan(x - drag.x, y - drag.y, app.screen.width, app.screen.height);
-      else if (drag.tool !== 'inspect') preview = selection(drag.tool, drag.start, boundedCell(x, y));
+      else if (drag.tool !== 'inspect' && !isBig(drag.tool)) preview = selection(drag.tool, drag.start, boundedCell(x, y));
       drag.x = x;
       drag.y = y;
       draw();
@@ -302,7 +505,18 @@ export class CityRenderer {
       const { tool, start } = drag;
       const { x, y } = position(event);
       if (tool === 'inspect') {
-        if (map.get(start) !== undefined) {
+        // A click on someone out on the road picks them; anywhere else picks the tile.
+        const worldX = (x - camera.x) / camera.scale;
+        const worldY = (y - camera.y) / camera.scale;
+        let reach = 14;
+        let picked: (typeof spots)[number] | undefined;
+        for (const spot of spots) {
+          const distance = Math.hypot(spot.x - worldX, spot.y - worldY);
+          if (distance < reach) [reach, picked] = [distance, spot];
+        }
+        if (picked && this.onPerson) {
+          this.onPerson(picked.homeId, picked.workId);
+        } else if (map.get(start) !== undefined) {
           selected = start;
           inspect(start);
         }
@@ -317,9 +531,10 @@ export class CityRenderer {
           tool === 'bus' ? { type: 'BUILD_BUS_STOP', ...start } :
           tool === 'metro' ? { type: 'BUILD_METRO', ...start } :
           tool === 'park' ? { type: 'BUILD_PARK', tiles: cells } :
+          tool === 'farm' ? { type: 'BUILD_FARM', tiles: cells } :
           { type: 'SET_ZONE', tiles: cells, zone: tool });
         const stranded = result.changed.length > 0 && (isFacility(tool) || isService(tool) || tool === 'bus') &&
-          !this.city.hasRoadAccess(start);
+          !this.city.roadBeside(start);
         report(result.error ?? (stranded ? `蓋好了，花了 $${result.cost}。但是旁邊沒有路，要接上道路才會開始運作。` :
           result.changed.length ? `完成，花了 $${result.cost}。` : '這裡已經是這樣了，沒有變動。'));
       }

@@ -10,8 +10,10 @@ Sheet layout (in tiles), mirrored by src/rendering/TileRenderer.ts:
              all of them so that neighbours of one level do not look alike. Which column
              belongs to which level is the BUILDING_ART table in TileRenderer.ts.
   row 5      civic buildings: power plant, water tower, fire station, police station,
-             school, clinic, bus stop, metro station (CIVIC_ART in TileRenderer.ts)
-  rows 6-7   buildings two tiles wide and two tall: the housing complex
+             school, clinic, bus stop, metro station, market, high school
+             (CIVIC_ART in TileRenderer.ts)
+  rows 6-7   buildings two tiles wide and two tall: the housing complex, hospital,
+             university, museum, stadium (BIG_ART in TileRenderer.ts)
 Buildings are transparent around their footprint and are drawn over their lot.
 Light comes from the top left; shadows fall to the bottom right.
 """
@@ -605,7 +607,487 @@ def housing_complex():
     return t
 
 
-BIG = [housing_complex()]
+def market():
+    """Three striped stalls under one roof, with crates of produce out front."""
+    t = Tile()
+    t.shadow(1, 2, 14, 13)
+    t.slab(1, 2, 14, 5, '#f1e3c2', '#d8c59c', '#ad9a70')    # roof
+    for x in range(1, 15, 4):              # striped awning
+        t.rect(x, 6, x + 1, 8, '#d9423a')
+        t.rect(x + 2, 6, x + 3, 8, PAPER)
+    t.rect(1, 9, 14, 13, '#8a5a3a')        # stalls
+    t.rect(1, 9, 14, 9, '#6b432b')
+    for x, colour in ((2, '#e8a23c'), (6, '#6fb565'), (10, '#d9423a')):
+        t.rect(x, 10, x + 2, 12, colour)   # oranges, greens, tomatoes
+        t.rect(x, 10, x + 2, 10, PAPER)
+    return t
+
+
+def high_school():
+    """A long two-storey block with a clock and a sports court."""
+    t = Tile()
+    t.shadow(1, 1, 14, 11)
+    t.slab(1, 1, 14, 4, '#7f8fb8', '#5f6f98', '#414e70')    # roof
+    t.rect(1, 5, 14, 11, '#efe6d2')        # wall
+    t.rect(14, 5, 14, 11, '#c9bfa8')
+    for x in (2, 4, 10, 12):               # two rows of windows
+        t.window(x, 6, x, 7)
+        t.window(x, 9, x, 10)
+    t.rect(6, 5, 9, 8, '#5f6f98')          # entrance block with a clock
+    t.rect(7, 6, 8, 7, PAPER)
+    t.rect(7, 9, 8, 11, WOOD_DARK)
+    t.rect(1, 12, 14, 14, '#c8755a')       # court
+    t.rect(7, 12, 7, 14, PAPER)
+    t.rect(1, 13, 14, 13, '#d98f76')
+    return t
+
+
+def cinema():
+    """A cinema: a marquee with lights over glass doors, and a poster either side."""
+    t = Tile()
+    t.shadow(1, 1, 14, 14)
+    t.slab(1, 1, 14, 5, '#5a4a7a', '#44365f', '#2f2445')
+    t.rect(1, 6, 14, 14, '#e9e2d0')
+    t.rect(14, 6, 14, 14, '#c2baa5')
+    t.rect(1, 6, 14, 8, '#c8322e')         # marquee
+    for x in range(2, 14, 2):
+        t.rect(x, 7, x, 7, '#f6e27a')
+    t.window(6, 10, 9, 14)
+    t.rect(2, 10, 4, 13, '#3f6fb0')        # posters
+    t.rect(3, 11, 3, 12, '#f6e27a')
+    t.rect(11, 10, 13, 13, '#5f9a6a')
+    t.rect(12, 11, 12, 12, PAPER)
+    return t
+
+
+def parking():
+    """A car park: bays marked on asphalt, a few cars and a blue P sign."""
+    t = Tile()
+    t.rect(0, 0, 15, 15, KERB)
+    t.rect(1, 1, 14, 14, ASPHALT)
+    for x in (5, 10):
+        t.rect(x, 1, x, 5, PAPER)
+        t.rect(x, 10, x, 14, PAPER)
+    for x, y, colour in ((1, 1, '#d87856'), (6, 1, '#5bb6ce'), (11, 10, '#e6c15a'), (1, 10, '#d6d9de')):
+        t.rect(x, y, x + 3, y + 4, '#232831')
+        t.rect(x + 1, y + 1, x + 2, y + 3, colour)
+        t.rect(x + 1, y + 2, x + 2, y + 2, '#a9d8de')
+    t.rect(11, 1, 14, 5, '#3f6fb0')        # sign
+    t.rect(12, 2, 12, 4, PAPER)
+    t.rect(13, 2, 13, 3, PAPER)
+    return t
+
+
+def mall():
+    """A shopping mall: a long glass front under a red sign, with its own car park."""
+    t = Tile(size=2 * T)
+    t.shadow(2, 2, 29, 22)
+    t.slab(2, 2, 29, 9, '#e8ecef', '#cfd6dc', '#a3adb6')
+    t.rect(5, 4, 12, 7, STEEL)
+    t.rect(5, 4, 12, 4, STEEL_LIGHT)
+    t.rect(18, 3, 26, 8, GLASS)            # skylight
+    t.rect(18, 3, 26, 3, GLASS_LIGHT)
+    for x in (20, 23):
+        t.rect(x, 3, x, 8, GLASS_DARK)
+    t.rect(2, 10, 29, 22, '#f1ece0')
+    t.rect(29, 10, 29, 22, '#cfc9bb')
+    t.rect(2, 10, 29, 12, '#d9423a')       # sign
+    t.rect(9, 11, 22, 11, PAPER)
+    for x in range(4, 28, 6):
+        t.window(x, 14, x + 3, 16)
+    t.rect(2, 18, 29, 18, '#3f6fb0')       # canopy
+    for x in (4, 8, 21, 25):
+        t.window(x, 19, x + 2, 21)
+    t.rect(13, 19, 18, 22, '#22344d')
+    t.rect(15, 19, 16, 22, GLASS_LIGHT)
+    t.rect(2, 23, 29, 30, ASPHALT)         # car park
+    for x in range(4, 29, 5):
+        t.rect(x, 24, x, 29, PAPER)
+    for x, colour in ((5, '#5bb6ce'), (15, '#d87856'), (20, '#e6c15a')):
+        t.rect(x, 24, x + 3, 29, '#232831')
+        t.rect(x + 1, 25, x + 2, 28, colour)
+        t.rect(x + 1, 26, x + 2, 26, '#a9d8de')
+    return t
+
+
+def casino():
+    """A casino: a dark hall full of lights, a gold marquee, palms and a red carpet."""
+    t = Tile(size=2 * T)
+    t.shadow(4, 1, 27, 26)
+    t.slab(4, 1, 27, 6, '#5a4a7a', '#352850', '#231a38')
+    t.rect(11, 2, 20, 5, '#e0b23e')        # roof sign
+    t.rect(12, 3, 19, 4, '#c8322e')
+    t.rect(4, 7, 27, 26, '#2b2140')
+    t.rect(27, 7, 27, 26, '#1b1429')
+    for y in range(9, 19, 3):
+        for x in range(6, 26, 3):
+            t.rect(x, y, x + 1, y + 1, '#f6e27a' if (x + y) % 2 else '#e0782f')
+    t.rect(4, 20, 27, 21, '#e0b23e')       # marquee
+    for x in range(5, 27, 2):
+        t.rect(x, 20, x, 20, '#fff4c2')
+    t.rect(12, 22, 19, 26, '#7d2a22')
+    t.rect(14, 22, 17, 26, '#f6e27a')
+    t.rect(15, 23, 16, 26, '#3a1512')
+    t.rect(13, 27, 18, 30, '#c8322e')      # red carpet
+    for x in (7, 24):                      # palms
+        t.rect(x, 24, x, 29, WOOD_DARK)
+        t.rect(x - 2, 23, x + 2, 23, LEAF)
+        t.rect(x - 1, 22, x + 1, 22, LEAF_LIGHT)
+        t.rect(x - 2, 24, x - 2, 24, LEAF_DARK)
+        t.rect(x + 2, 24, x + 2, 24, LEAF_DARK)
+    return t
+
+
+def temple():
+    """A sweeping orange roof on red pillars, with an incense burner out front."""
+    t = Tile()
+    t.shadow(2, 3, 13, 12)
+    t.rect(1, 3, 14, 6, '#e0782f')         # roof
+    t.rect(1, 3, 14, 3, '#f2a65a')
+    t.rect(1, 6, 14, 6, '#b3561c')
+    t.rect(0, 2, 1, 3, '#f2a65a')          # upturned eaves
+    t.rect(14, 2, 15, 3, '#f2a65a')
+    t.rect(4, 4, 11, 4, '#e0b23e')
+    t.rect(7, 1, 8, 2, '#e0b23e')
+    t.rect(2, 7, 13, 12, '#f1e3c2')        # hall
+    t.rect(13, 7, 13, 12, '#cdb994')
+    for x in (2, 5, 10, 13):
+        t.rect(x, 7, x, 12, '#c8322e')
+    t.rect(6, 8, 9, 12, '#7d2a22')
+    t.rect(7, 9, 8, 12, '#3a1512')
+    t.rect(6, 7, 9, 7, '#e0b23e')
+    t.rect(6, 14, 9, 14, '#e0b23e')        # incense burner
+    t.rect(7, 15, 8, 15, STEEL_DARK)
+    return t
+
+
+def hospital():
+    """A white block with a red cross on the roof, a helipad and an ambulance bay."""
+    t = Tile(size=2 * T)
+    t.shadow(2, 2, 29, 29)
+    t.slab(2, 2, 29, 16, '#f4f6f8', '#dfe4e8', '#b3bcc4')   # roof
+    t.rect(6, 5, 13, 12, '#b3bcc4')        # helipad
+    t.rect(7, 6, 12, 11, '#7f8a94')
+    t.rect(8, 7, 8, 10, PAPER)
+    t.rect(11, 7, 11, 10, PAPER)
+    t.rect(8, 8, 11, 9, PAPER)
+    t.rect(19, 5, 26, 12, '#f4f6f8')       # red cross
+    t.rect(21, 5, 24, 12, '#e04a3c')
+    t.rect(19, 7, 26, 10, '#e04a3c')
+    t.rect(2, 17, 29, 29, '#ecf1f4')       # wall
+    t.rect(29, 17, 29, 29, '#bcc6ce')
+    t.rect(2, 17, 29, 17, '#7fc6b8')
+    for y in (19, 23):
+        for x in range(4, 28, 4):
+            t.window(x, y, x + 1, y + 1)
+    t.rect(11, 25, 20, 29, '#7fc6b8')      # entrance canopy and doors
+    t.rect(13, 26, 18, 29, GLASS_LIGHT)
+    t.rect(15, 26, 16, 29, '#7fc6b8')
+    t.rect(4, 27, 8, 29, '#e04a3c')        # ambulance bay
+    t.rect(5, 27, 7, 27, PAPER)
+    return t
+
+
+def university():
+    """A domed hall between two wings, with a lawn and a path up to the door."""
+    t = Tile(size=2 * T)
+    t.shadow(2, 3, 29, 22)
+    for x0, x1 in ((2, 10), (21, 29)):     # wings
+        t.slab(x0, 6, x1, 11, '#c9735a', '#b05a44', '#84402f')
+        t.rect(x0, 12, x1, 22, '#f1e3c2')
+        t.rect(x1, 12, x1, 22, '#cdbd98')
+        for x in range(x0 + 1, x1, 3):
+            t.window(x, 14, x + 1, 15)
+            t.window(x, 18, x + 1, 19)
+    t.slab(11, 8, 20, 12, '#c9735a', '#b05a44', '#84402f')  # hall
+    t.rect(11, 13, 20, 22, '#f6ecd2')
+    t.rect(13, 2, 18, 8, '#8fb8c9')        # dome
+    t.rect(12, 5, 19, 8, '#8fb8c9')
+    t.rect(13, 2, 18, 2, '#c5e0ea')
+    t.rect(12, 5, 12, 8, '#c5e0ea')
+    t.rect(19, 5, 19, 8, '#5f8a9b')
+    t.rect(15, 0, 16, 2, '#f4ca65')        # spire
+    for x in (12, 15, 18):                 # columns
+        t.rect(x, 13, x + 1, 22, PAPER)
+    t.rect(14, 17, 17, 22, WOOD_DARK)
+    t.rect(2, 23, 29, 29, '#6fb565')       # lawn
+    t.rect(2, 23, 29, 23, '#4f9a55')
+    t.rect(14, 23, 17, 29, '#d9cfa8')      # path
+    for x in (5, 9, 22, 26):
+        t.rect(x, 25, x + 1, 26, LEAF_DARK)
+        t.rect(x, 25, x, 25, LEAF_LIGHT)
+    return t
+
+
+def museum():
+    """A stone temple front: steps, columns and a pediment, with banners either side."""
+    t = Tile(size=2 * T)
+    t.shadow(3, 3, 28, 27)
+    t.slab(3, 3, 28, 10, '#e6dfcf', '#cfc6b2', '#a59c88')   # roof
+    for step in range(5):                  # pediment
+        t.rect(6 + 2 * step, 9 - step, 25 - 2 * step, 9 - step, '#f4efe2')
+    t.rect(14, 7, 17, 8, '#f4ca65')
+    t.rect(3, 11, 28, 24, '#efe8d8')       # front
+    t.rect(28, 11, 28, 24, '#bfb6a2')
+    t.rect(3, 11, 28, 12, '#a59c88')
+    for x in range(5, 27, 4):              # columns
+        t.rect(x, 13, x + 1, 24, PAPER)
+        t.rect(x + 1, 13, x + 1, 24, '#bfb6a2')
+    t.rect(13, 16, 18, 24, '#5a4636')      # door
+    t.rect(15, 17, 16, 24, '#3d2f24')
+    for x, colour in ((7, '#d9423a'), (23, '#3f6fb0')):     # banners
+        t.rect(x, 14, x + 1, 20, colour)
+    for row, inset in enumerate((0, 1, 2)):                 # steps
+        t.rect(3 + inset, 25 + row, 28 - inset, 25 + row, ('#d6cdb9', '#c4bba7', '#b0a793')[row])
+    t.rect(3, 28, 28, 29, '#8f97a1')
+    return t
+
+
+def stadium():
+    """An oval of stands round a green pitch, with floodlights at the corners."""
+    t = Tile(size=2 * T)
+    t.shadow(1, 3, 30, 28)
+    for inset, colour in ((0, '#55575b'), (1, '#a6a9ae'), (2, '#c5c8ce')):
+        t.rect(3 + inset, 3 + inset, 28 - inset, 28 - inset, colour)
+        t.rect(1 + inset, 6 + inset, 30 - inset, 25 - inset, colour)
+    for x in range(4, 28, 3):              # seats in two colours
+        t.rect(x, 5, x + 1, 7, '#d9423a')
+        t.rect(x, 24, x + 1, 26, '#3f6fb0')
+    for y in range(9, 23, 3):
+        t.rect(3, y, 5, y + 1, '#3f6fb0')
+        t.rect(26, y, 28, y + 1, '#d9423a')
+    t.rect(7, 9, 24, 22, '#6fb565')        # pitch
+    for x in range(7, 25, 4):
+        t.rect(x, 9, x + 1, 22, '#7cc070')
+    t.rect(7, 9, 24, 9, PAPER)
+    t.rect(7, 22, 24, 22, PAPER)
+    t.rect(7, 9, 7, 22, PAPER)
+    t.rect(24, 9, 24, 22, PAPER)
+    t.rect(15, 9, 16, 22, PAPER)
+    t.rect(14, 14, 17, 17, PAPER)
+    t.rect(15, 15, 16, 16, '#6fb565')
+    for x, y in ((1, 2), (29, 2), (1, 27), (29, 27)):       # floodlights
+        t.rect(x, y, x + 1, y + 2, STEEL_DEEP)
+        t.rect(x, y, x + 1, y, '#f6e27a')
+    return t
+
+
+# --- Homes of a kind: who lives in a home shows in what it looks like
+def townhouse(wall='#c98b74', shade='#a86f5b', trim='#f1e3c2'):
+    """Downtown: a narrow two-floor house with a shop window."""
+    t = Tile()
+    t.shadow(3, 1, 12, 14)
+    t.slab(3, 1, 12, 4, '#9aa5ae', '#7f8a94', '#5d6872')
+    t.rect(3, 5, 12, 14, wall)
+    t.rect(12, 5, 12, 14, shade)
+    t.rect(3, 5, 12, 5, trim)
+    for x in (4, 7, 10):
+        t.window(x, 7, x + 1, 8)
+    t.rect(3, 10, 12, 10, trim)
+    t.window(4, 12, 7, 13)
+    t.rect(9, 11, 10, 14, WOOD_DARK)
+    return t
+
+
+def villa(roof=('#6b7686', '#465060', '#343c4a'), wall='#f1ece0', shade='#cfc9bb'):
+    """A fine house with a garage and a pool."""
+    t = Tile()
+    t.shadow(1, 2, 10, 13)
+    t.rect(1, 2, 10, 8, roof[1])
+    t.rect(1, 2, 10, 2, roof[0])
+    t.rect(1, 5, 10, 5, roof[2])
+    t.rect(1, 8, 10, 8, roof[2])
+    t.rect(1, 9, 10, 13, wall)
+    t.rect(10, 9, 10, 13, shade)
+    t.window(2, 10, 3, 11)
+    t.rect(5, 11, 6, 13, WOOD_DARK)
+    t.rect(7, 10, 9, 13, STEEL)
+    t.rect(7, 10, 9, 10, STEEL_LIGHT)
+    t.rect(7, 12, 9, 12, STEEL_DARK)
+    t.rect(12, 2, 15, 8, '#e6e1d3')        # pool
+    t.rect(13, 3, 14, 7, '#6fc7e0')
+    t.rect(13, 3, 14, 3, '#bfeaf5')
+    t.rect(12, 11, 15, 13, LEAF)           # hedge
+    t.rect(12, 11, 15, 11, LEAF_LIGHT)
+    t.rect(12, 13, 15, 13, LEAF_DARK)
+    return t
+
+
+def row_house(roof=(STEEL_LIGHT, STEEL, STEEL_DARK), wall='#b98a6a', shade='#96694d'):
+    """Workers' homes: two doors under one tin roof."""
+    t = Tile()
+    t.shadow(1, 4, 14, 14)
+    t.rect(1, 4, 14, 9, roof[1])
+    t.rect(1, 4, 14, 4, roof[0])
+    t.rect(1, 9, 14, 9, roof[2])
+    for x in (3, 6, 9, 12):
+        t.rect(x, 5, x, 8, roof[2])
+    t.rect(4, 2, 5, 4, '#7d4a3e')
+    t.rect(4, 2, 5, 2, STEEL_DEEP)
+    t.rect(1, 10, 14, 14, wall)
+    t.rect(14, 10, 14, 14, shade)
+    t.rect(7, 10, 7, 14, shade)
+    t.rect(2, 12, 3, 14, WOOD_DARK)
+    t.window(5, 11, 6, 12)
+    t.rect(12, 12, 13, 14, WOOD_DARK)
+    t.window(9, 11, 10, 12)
+    return t
+
+
+def garden_house(roof=('#e8ad5a', '#d08a3c', '#a9682a'), flower='#e8799a'):
+    """A cottage with a tree and flower beds."""
+    t = Tile()
+    t.shadow(1, 3, 9, 13)
+    t.rect(1, 3, 9, 8, roof[1])
+    t.rect(1, 3, 9, 3, roof[0])
+    t.rect(1, 8, 9, 8, roof[2])
+    t.rect(1, 9, 9, 13, '#ead9b5')
+    t.rect(9, 9, 9, 13, '#cdb994')
+    t.rect(3, 11, 4, 13, WOOD)
+    t.window(6, 10, 7, 11)
+    t.rect(12, 7, 13, 8, WOOD_DARK)        # tree
+    t.rect(11, 2, 14, 6, LEAF)
+    t.rect(12, 1, 13, 1, LEAF)
+    t.rect(11, 2, 12, 3, LEAF_LIGHT)
+    t.rect(11, 6, 14, 6, LEAF_DARK)
+    t.rect(11, 10, 14, 13, LEAF)           # flowering bush
+    t.rect(12, 11, 12, 11, flower)
+    t.rect(14, 12, 14, 12, flower)
+    t.rect(11, 13, 14, 13, LEAF_DARK)
+    t.rect(1, 15, 9, 15, LEAF_DARK)        # flower bed
+    for x in (2, 4, 6, 8):
+        t.rect(x, 15, x, 15, flower)
+    return t
+
+
+def lake_house(roof=('#7fd0c8', '#4fa9a2', '#357f7a'), wall='#f4f6f8', shade='#cdd3d8'):
+    """By the water: a white house with a wooden deck and a parasol."""
+    t = Tile()
+    t.shadow(2, 1, 13, 10)
+    t.rect(2, 1, 13, 6, roof[1])
+    t.rect(2, 1, 13, 1, roof[0])
+    t.rect(2, 6, 13, 6, roof[2])
+    t.rect(2, 7, 13, 10, wall)
+    t.rect(13, 7, 13, 10, shade)
+    t.window(3, 8, 6, 9)
+    t.window(8, 8, 9, 9)
+    t.rect(11, 8, 12, 10, WOOD_DARK)
+    t.rect(1, 11, 14, 14, WOOD)            # deck
+    t.rect(1, 11, 14, 11, '#a87650')
+    for x in (1, 4, 7, 10, 13):
+        t.rect(x, 12, x, 14, WOOD_DARK)
+    t.rect(3, 12, 5, 14, '#e5484d')        # parasol
+    t.rect(4, 13, 4, 13, '#f4f6f8')
+    return t
+
+
+def walkup(wall='#d9dde2', shade='#aab1ba', accent='#e5484d'):
+    """By a stop: small flats over a covered doorway."""
+    t = Tile()
+    t.shadow(2, 1, 13, 14)
+    t.slab(2, 1, 13, 4, '#c3ccd3', '#a3adb6', '#7f8a94')
+    t.rect(2, 5, 13, 14, wall)
+    t.rect(13, 5, 13, 14, shade)
+    for y in (6, 11):
+        for x in (3, 6):
+            t.window(x, y, x + 1, y + 1)
+    t.rect(2, 9, 13, 9, accent)
+    t.rect(9, 6, 12, 14, shade)            # stairwell
+    t.rect(10, 6, 11, 7, GLASS_DARK)
+    t.rect(9, 10, 12, 10, accent)
+    t.rect(10, 12, 11, 14, WOOD_DARK)
+    return t
+
+
+def study_house(roof=('#7f97c7', '#465f96', '#33487a'), wall='#f0e2b8', shade='#cdbf95'):
+    """By a school: a wide house with dormers, ivy and a pennant."""
+    t = Tile()
+    t.shadow(1, 2, 14, 14)
+    t.rect(1, 2, 14, 7, roof[1])
+    t.rect(1, 2, 14, 2, roof[0])
+    t.rect(1, 7, 14, 7, roof[2])
+    t.window(4, 4, 5, 5)
+    t.window(10, 4, 11, 5)
+    t.rect(1, 8, 14, 14, wall)
+    t.rect(14, 8, 14, 14, shade)
+    t.rect(6, 10, 9, 10, roof[1])
+    t.rect(7, 11, 8, 14, WOOD_DARK)
+    t.window(3, 10, 4, 11)
+    t.window(11, 10, 12, 11)
+    t.rect(1, 8, 1, 13, LEAF)              # ivy
+    t.rect(2, 8, 2, 9, LEAF)
+    t.rect(1, 12, 2, 13, LEAF_DARK)
+    t.rect(13, 0, 13, 2, STEEL_DEEP)       # pennant
+    t.rect(10, 0, 12, 1, '#e0b23e')
+    return t
+
+
+def country_house(roof=('#b07a5a', '#8f5f43', '#6b432b'), car='#d87856'):
+    """Out of town: a small house, a fence and a car in the drive."""
+    t = Tile()
+    t.shadow(1, 2, 8, 10)
+    t.rect(1, 2, 8, 6, roof[1])
+    t.rect(1, 2, 8, 2, roof[0])
+    t.rect(1, 6, 8, 6, roof[2])
+    t.rect(1, 7, 8, 10, '#efe9dc')
+    t.rect(8, 7, 8, 10, '#c9c2b2')
+    t.rect(2, 8, 3, 10, WOOD)
+    t.window(5, 8, 6, 9)
+    t.rect(10, 3, 14, 14, PAVEMENT)        # drive
+    t.rect(10, 5, 14, 12, '#232831')       # car
+    t.rect(11, 6, 13, 11, car)
+    t.rect(11, 8, 13, 9, '#a9d8de')
+    t.rect(0, 13, 8, 13, '#f4f6f8')        # fence
+    for x in range(0, 9, 2):
+        t.rect(x, 12, x, 14, '#f4f6f8')
+    return t
+
+
+# Wall, its shaded side and a trim colour for each kind, for its bigger buildings. The order
+# is the one TileRenderer's KIND_ART uses.
+KIND_PAINT = [
+    ('#c98b74', '#a86f5b', '#f1e3c2'),     # downtown
+    ('#f1ece0', '#cfc9bb', '#465060'),     # villa
+    ('#b98a6a', '#96694d', '#787a7e'),     # worker
+    ('#ead9b5', '#cdb994', '#5f9a6a'),     # garden
+    ('#f4f6f8', '#cdd3d8', '#4fa9a2'),     # riverside
+    ('#d9dde2', '#aab1ba', '#e5484d'),     # station
+    ('#f0e2b8', '#cdbf95', '#465f96'),     # campus
+    ('#efe9dc', '#c9c2b2', '#8f5f43'),     # suburb
+]
+# Two looks of each kind's house.
+KIND_HOUSES = [
+    [townhouse(), townhouse('#d9c7a0', '#b5a47e', '#8e3d35')],
+    [villa(), villa(('#d77c67', '#b9584a', '#8e3d35'))],
+    [row_house(), row_house(('#c98b74', '#a86f5b', '#7d4a3e'), '#c9c2b2', '#a39d8f')],
+    [garden_house(), garden_house(('#86bd8f', '#5f9a6a', '#3f744a'), '#f6e27a')],
+    [lake_house(), lake_house(('#8fb2d6', '#5f86b5', '#46689a'), '#f1ece0', '#cfc9bb')],
+    [walkup(), walkup('#cfe3ea', '#a3bcc6', '#3f6fb0')],
+    [study_house(), study_house(('#c98480', '#964646', '#7a3333'), '#efe9dc', '#c9c2b2')],
+    [country_house(), country_house(('#8fb39a', '#6f9a7d', '#527a5f'), '#5bb6ce')],
+]
+
+
+def kind_flats(wall, shade, trim):
+    """Level 2 of a kind: the two blocks of flats in its paint."""
+    return [apartments().recolour({'#c98b74': wall, '#a86f5b': shade, '#bfa981': trim}),
+            condo().recolour({'#e9e2d0': wall, '#c2baa5': shade, '#d0705a': trim})]
+
+
+def kind_towers(wall, shade, trim):
+    """Level 3 of a kind: the tower in its paint, with a plain roof or one in its trim."""
+    return [tower().recolour({'#d98f6f': wall, '#b06f54': shade, '#d0705a': trim}),
+            tower().recolour({'#d98f6f': wall, '#b06f54': shade, '#d0705a': trim, '#d8c59c': trim})]
+
+
+# Three rows under the big buildings: a kind's houses, flats and towers, two looks side by side.
+HOME_ROWS = [
+    [tile for houses in KIND_HOUSES for tile in houses],
+    [tile for paint in KIND_PAINT for tile in kind_flats(*paint)],
+    [tile for paint in KIND_PAINT for tile in kind_towers(*paint)],
+]
+
+BIG = [housing_complex(), hospital(), university(), museum(), stadium(), mall(), casino()]
 
 ROWS = [
     [road(mask) for mask in range(16)],
@@ -639,15 +1121,18 @@ ROWS = [
      heavy_plant().recolour({'#9a5b4d': '#6d7379', '#5a332b': '#3f4347', '#8d8f96': '#a8907d',
                              '#e0b23e': '#d98838', '#c4962c': '#b06a22', '#96701c': '#7f4a14'})],
     [power_plant(), water_tower(), fire_station(), police_station(), school(), clinic(), bus_stop(),
-     metro_station()],
+     metro_station(), market(), high_school(), temple(), cinema(), parking()],
 ]
 
 if __name__ == '__main__':
-    sheet = Image.new('RGBA', (16 * T, (len(ROWS) + 2) * T), (0, 0, 0, 0))
+    sheet = Image.new('RGBA', (16 * T, (len(ROWS) + 2 + len(HOME_ROWS)) * T), (0, 0, 0, 0))
     for row, tiles in enumerate(ROWS):
         for column, tile in enumerate(tiles):
             sheet.paste(tile.image, (column * T, row * T))
     for column, tile in enumerate(BIG):
         sheet.paste(tile.image, (column * 2 * T, len(ROWS) * T))
+    for row, tiles in enumerate(HOME_ROWS):
+        for column, tile in enumerate(tiles):
+            sheet.paste(tile.image, (column * T, (len(ROWS) + 2 + row) * T))
     sheet.save(OUT)
     print(f'wrote {OUT}')

@@ -76,7 +76,7 @@ it('makes goods in factories, sells them in shops, and trades the difference', (
 
   // Ten in the shop serve fifty of the hundred; thirty in the factory make ninety of the hundred goods.
   const short = town(30);
-  expect(short.getStats().goods).toEqual({ made: 30 * goods.perWorker, needed: 100,
+  expect(short.getStats().goods).toEqual({ made: 30 * goods.perWorker, needed: 100, farmed: 0,
     served: 10 * goods.perClerk, trade: -(100 - 90) * goods.importCost });
   expect(short.getStats().budget).toMatchObject({ trade: -30 });
   // Half the town cannot shop, which takes half the penalty off the home's land value.

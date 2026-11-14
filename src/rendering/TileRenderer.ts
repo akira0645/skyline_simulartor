@@ -1,6 +1,7 @@
 import { Container, Graphics, Rectangle, Texture, type TextureSource } from 'pixi.js';
-import { isFacility, isRoad, isService, MAP_SIZE, TILE_SIZE, type Cell, type Facility, type Service,
+import { isBig, isFacility, isRoad, isService, MAP_SIZE, TILE_SIZE, type Cell, type Facility, type Service,
   type Zone } from '../simulation/TileMap';
+import type { HomeKind } from '../simulation/Residents';
 import type { Overlay } from '../app/tools';
 import { Camera } from './Camera';
 
@@ -47,7 +48,9 @@ const UNSERVED = 0xd9423a;
 // The colour each civic building's reach is outlined in, and its column in the civic row.
 const FACILITY_ROOF: Record<Facility | Service | 'bus' | 'metro', number> = {
   power: 0xf4ca65, water: 0x74c7ed, fire: 0xe36a55, police: 0x6f8fd0, school: 0xf0a55a, clinic: 0xf4f6f8,
-  bus: 0xf2c94c, metro: 0xe5484d,
+  bus: 0xf2c94c, metro: 0xe5484d, market: 0xd9423a, highschool: 0x7f8fb8, hospital: 0xe04a3c,
+  university: 0xc9735a, museum: 0xe6dfcf, stadium: 0x6fb565, temple: 0xe0782f,
+  mall: 0xd9423a, casino: 0x8a5fd0, cinema: 0xc8322e, parking: 0x3f6fb0,
 };
 const WATER = [0x3f8fc4, 0x6fb4dc, 0x2f78ab];
 const SHORE = 0xd9cfa8;
@@ -57,8 +60,20 @@ const CIVIC_ROW = 5;
 const BIG_ROW = 6;
 const COMPLEX_ART = 0;
 const FOUNTAIN = [0x8f97a1, 0x74c7ed, 0xdff3fb];
-const CIVIC_ART: Record<Facility | Service | 'bus' | 'metro', number> =
-  { power: 0, water: 1, fire: 2, police: 3, school: 4, clinic: 5, bus: 6, metro: 7 };
+const CIVIC_ART: Partial<Record<Facility | Service | 'bus' | 'metro', number>> =
+  { power: 0, water: 1, fire: 2, police: 3, school: 4, clinic: 5, bus: 6, metro: 7, market: 8, highschool: 9, temple: 10, cinema: 11,
+    parking: 12 };
+// The buildings of two tiles by two, by their place in the row of them.
+const BIG_ART: Partial<Record<Service, number>> = { hospital: 1, university: 2, museum: 3, stadium: 4,
+  mall: 5, casino: 6 };
+// Homes of a kind have their own pictures, so a street tells you who lives on it: three rows
+// from HOME_ROW, one per level, with two looks of each kind side by side. Ordinary homes take
+// any of the level's pictures in the residential row.
+const HOME_ROW = 8;
+/** From this zoom on, small details are drawn that would only be noise from further away. */
+export const DETAIL_ZOOM = 1.75;
+const KIND_ART: Record<HomeKind, number> =
+  { downtown: 0, villa: 1, worker: 2, garden: 3, riverside: 4, station: 5, campus: 6, suburb: 7 };
 
 
 const hash = (x: number, y: number) =>
@@ -124,6 +139,8 @@ export class TileRenderer {
 
     // Housing complexes in view, by their top left tile. They are drawn after the lots they cover.
     const complexes = new Set<number>();
+    // Big civic buildings in view, by their top left tile, with their picture.
+    const bigs = new Map<number, number>();
 
     // One extra row below so trees rooted just off-screen still show their tops.
     for (let y = Math.max(0, start.y); y <= Math.min(MAP_SIZE - 1, end.y + 1); y++) {
@@ -188,6 +205,27 @@ export class TileRenderer {
             });
             g.fill(MEDIAN);
           }
+          if (map.hasStation({ x, y })) {
+            // A metro station under the road: stairs down in one corner of the pavement and
+            // a red sign on a post beside them. The road itself stays clear.
+            g.rect(left + 1, top + 1, 13, 9).fill(0x1b1d22);
+            g.rect(left + 2, top + 2, 11, 7).fill(0x3a3f47);
+            g.rect(left + 3, top + 4, 9, 1).rect(left + 3, top + 6, 9, 1).fill(0x8d98a6);
+            g.rect(left + 15, top + 1, 9, 9).fill(0x1b1d22);
+            g.rect(left + 16, top + 2, 7, 7).fill(0xe5484d);
+            g.rect(left + 17, top + 3, 1, 5).rect(left + 21, top + 3, 1, 5).rect(left + 18, top + 4, 1, 1)
+              .rect(left + 20, top + 4, 1, 1).rect(left + 19, top + 5, 1, 1).fill(0xffffff);
+          }
+        } else if (tile === 'farm') {
+          // Ploughed earth with rows of crops; some fields are green, some ripe.
+          const left = x * TILE_SIZE;
+          const top = y * TILE_SIZE;
+          g.rect(left, top, TILE_SIZE, TILE_SIZE).fill(0x8a6a44);
+          const crop = [0x6fb565, 0x9ccc5a, 0xe2c65a][(Math.floor(x / 3) + Math.floor(y / 2) * 2) % 3];
+          for (let row = 3; row < TILE_SIZE; row += 6) {
+            g.rect(left, top + row, TILE_SIZE, 3).fill(crop);
+            g.rect(left, top + row + 3, TILE_SIZE, 1).fill(0x6e5234);
+          }
         } else if (tile === 'park') {
           tileAt(GRASS[1], x, y);
           const left = x * TILE_SIZE;
@@ -217,9 +255,16 @@ export class TileRenderer {
             if (seed % 3) tileAt(BUSHES[(seed >>> 16) % BUSHES.length], x, y);
             else g.rect(left + 11, top + 11, 10, 10).fill(0xe8799a).rect(left + 14, top + 14, 4, 4).fill(0xf6e27a);
           }
+        } else if (tile === 'annex' || isBig(tile)) {
+          // Paving under the whole building; its picture goes on once all four tiles are down.
+          tileAt(GRASS[0], x, y);
+          g.rect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE).fill(0xb3b6bc);
+          const anchor = map.anchorOf({ x, y });
+          const art = anchor && BIG_ART[map.get(anchor) as Service];
+          if (anchor && art !== undefined) bigs.set(anchor.y * MAP_SIZE + anchor.x, art);
         } else if (isFacility(tile) || isService(tile) || tile === 'bus' || tile === 'metro') {
           tileAt(GRASS[0], x, y);
-          cityAt(CIVIC_ART[tile], CIVIC_ROW, x, y);
+          cityAt(CIVIC_ART[tile]!, CIVIC_ROW, x, y);
         } else {
           cityAt(zoneIndex[tile], LOT_ROW, x, y);
           const building = city.getBuilding({ x, y });
@@ -227,7 +272,20 @@ export class TileRenderer {
             complexes.add(building.block);
           } else if (building) {
             const art = BUILDING_ART[tile][building.level - 1];
-            cityAt(art[(seed >>> 4) % art.length], BUILDING_ROW + zoneIndex[tile], x, y);
+            if (building.kind) cityAt(KIND_ART[building.kind] * 2 + (seed >>> 4) % 2, HOME_ROW + building.level - 1, x, y);
+            else cityAt(art[(seed >>> 4) % art.length], BUILDING_ROW + zoneIndex[tile], x, y);
+            // Close up, a house shows the small things of the life in it.
+            if (tile === 'residential' && building.level === 1 && camera.scale >= DETAIL_ZOOM) {
+              const left = x * TILE_SIZE;
+              const top = y * TILE_SIZE;
+              g.rect(left + 1, top + 26, 1, 4).fill(0x55575b).rect(left, top + 25, 3, 2).fill(0xd9423a);
+              if (seed % 3 === 0) g.rect(left + 24, top + 2, 7, 0.5).fill(0xf4f6f8).rect(left + 25, top + 2.5, 1.5, 2).fill(0x6fa8d0)
+                .rect(left + 27.5, top + 2.5, 1.5, 2.5).fill(0xe8799a);
+              if (city.kidsAt(y * MAP_SIZE + x).length) {
+                g.rect(left + 27, top + 28, 2, 2).fill(0xe5484d).rect(left + 27.5, top + 28.5, 1, 1).fill(0xf4f6f8);
+                g.rect(left + 21, top + 28, 4, 3).fill(0xb98a4a).rect(left + 21.5, top + 28.5, 3, 2).fill(0xf0dc9a);
+              }
+            }
             // One gold pip per level above the first, in the top right corner of the lot.
             for (let pip = 1; pip < building.level; pip++) {
               const left = x * TILE_SIZE + TILE_SIZE - 7 * pip;
@@ -239,6 +297,10 @@ export class TileRenderer {
       }
     }
 
+    for (const [anchor, art] of bigs) {
+      g.texture(this.bigFrame(art), 0xffffff, anchor % MAP_SIZE * TILE_SIZE,
+        Math.floor(anchor / MAP_SIZE) * TILE_SIZE, 2 * TILE_SIZE, 2 * TILE_SIZE);
+    }
     for (const anchor of complexes) {
       g.texture(this.bigFrame(COMPLEX_ART), 0xffffff, anchor % MAP_SIZE * TILE_SIZE,
         Math.floor(anchor / MAP_SIZE) * TILE_SIZE, 2 * TILE_SIZE, 2 * TILE_SIZE);

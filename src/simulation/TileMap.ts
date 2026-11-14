@@ -7,18 +7,39 @@ export type Facility = 'power' | 'water';
 /** A street, an avenue that is faster and carries more, or a bridge that takes a street over water. */
 export type Road = 'road' | 'avenue' | 'bridge';
 /** Public services, which cover an area without a limit on buildings. */
-export type Service = 'fire' | 'police' | 'school' | 'clinic';
-export type Tile = 'grass' | Road | Zone | Facility | 'park' | Service | 'river' | 'bus' | 'metro';
-/** Save files store tiles as indices into this list, so only append to it. */
+export type Service = 'fire' | 'police' | 'school' | 'clinic' |
+  'market' | 'highschool' | 'hospital' | 'university' | 'museum' | 'stadium' | 'temple' |
+  'mall' | 'casino' | 'cinema' | 'parking';
+/**
+ * `annex` is the rest of a building that takes two tiles by two: the building's own tile is
+ * its top left corner, and the three others are annexes.
+ */
+export type Tile = 'grass' | Road | Zone | Facility | 'park' | Service | 'river' | 'bus' | 'metro' | 'annex' | 'farm';
+/**
+ * Save files store tiles as indices into this list, so only append to it. `metro` is no longer
+ * a tile on the map: a metro station lies under a road tile, which stays a road. Old saves
+ * that have the tile are turned into a road with a station under it when they are read.
+ */
 export const TILES: readonly Tile[] =
   ['grass', 'road', 'residential', 'commercial', 'industrial', 'power', 'water', 'avenue', 'park',
-    'fire', 'police', 'school', 'clinic', 'river', 'bridge', 'bus', 'metro'];
+    'fire', 'police', 'school', 'clinic', 'river', 'bridge', 'bus', 'metro',
+    'annex', 'market', 'highschool', 'hospital', 'university', 'museum', 'stadium', 'temple',
+    'mall', 'casino', 'cinema', 'parking', 'farm'];
 export const isZone = (tile: Tile | undefined): tile is Zone =>
   tile === 'residential' || tile === 'commercial' || tile === 'industrial';
 export const isFacility = (tile: string | undefined): tile is Facility =>
   tile === 'power' || tile === 'water';
 export const isService = (tile: string | undefined): tile is Service =>
-  tile === 'fire' || tile === 'police' || tile === 'school' || tile === 'clinic';
+  tile === 'fire' || tile === 'police' || tile === 'school' || tile === 'clinic' || tile === 'market' ||
+  tile === 'highschool' || tile === 'hospital' || tile === 'university' || tile === 'museum' || tile === 'stadium' ||
+  tile === 'temple' || tile === 'mall' || tile === 'casino' || tile === 'cinema' || tile === 'parking';
+/** The buildings that take two tiles by two. */
+export const isBig = (tile: string | undefined): boolean =>
+  tile === 'hospital' || tile === 'university' || tile === 'museum' || tile === 'stadium' || tile === 'mall' ||
+  tile === 'casino';
+/** The four tiles of a big building whose top left corner is `cell`. */
+export const footprint = ({ x, y }: Cell): Cell[] =>
+  [{ x, y }, { x: x + 1, y }, { x, y: y + 1 }, { x: x + 1, y: y + 1 }];
 export const isRoad = (tile: string | undefined): tile is Road =>
   tile === 'road' || tile === 'avenue' || tile === 'bridge';
 export type GameCommand =
@@ -27,6 +48,7 @@ export type GameCommand =
   | { type: 'SET_ZONE'; tiles: Cell[]; zone: Zone }
   | { type: 'BUILD_FACILITY'; x: number; y: number; facility: Facility }
   | { type: 'BUILD_PARK'; tiles: Cell[] }
+  | { type: 'BUILD_FARM'; tiles: Cell[] }
   | { type: 'BUILD_SERVICE'; x: number; y: number; service: Service }
   | { type: 'BUILD_BUS_STOP'; x: number; y: number }
   | { type: 'BUILD_METRO'; x: number; y: number }
@@ -43,6 +65,18 @@ export class TileMap {
   }
 
   private readonly tiles: Tile[] = Array<Tile>(MAP_SIZE ** 2).fill('grass');
+  /** The road tiles with a metro station under them. */
+  private readonly stations = new Set<number>();
+
+  /** Whether there is a metro station under a cell. */
+  hasStation({ x, y }: Cell): boolean {
+    return this.stations.has(y * MAP_SIZE + x);
+  }
+
+  /** The tiles with a metro station under them, in order. */
+  stationTiles(): number[] {
+    return [...this.stations].sort((a, b) => a - b);
+  }
 
   get({ x, y }: Cell): Tile | undefined {
     if (!Number.isInteger(x) || !Number.isInteger(y) ||
@@ -53,6 +87,22 @@ export class TileMap {
   /** The tile at a cell index that is known to be on the map. */
   at(id: number): Tile {
     return this.tiles[id];
+  }
+
+  /**
+   * The top left corner of the big building a cell is part of, if it is. An annex belongs to
+   * the big building to its left, above it or up and to the left; buildings never overlap, so
+   * only one of those can be one whose footprint reaches it.
+   */
+  anchorOf(cell: Cell): Cell | undefined {
+    const tile = this.get(cell);
+    if (isBig(tile)) return cell;
+    if (tile !== 'annex') return undefined;
+    const { x, y } = cell;
+    // The tile above or to the left may itself be an annex of the same building.
+    for (const anchor of [{ x: x - 1, y }, { x, y: y - 1 }, { x: x - 1, y: y - 1 }]) {
+      if (isBig(this.get(anchor))) return anchor;
+    }
   }
 
   /** Turns cells into water, whatever they were. For laying out terrain, not for play. */
@@ -118,20 +168,46 @@ export class TileMap {
   execute(command: GameCommand,
     approve?: (changes: { cell: Cell; tile: Tile }[]) => string | undefined):
     { changed: Cell[]; error?: string } {
+    // A metro station goes under a road and leaves the road as it is.
+    if (command.type === 'BUILD_METRO') {
+      const cell = { x: command.x, y: command.y };
+      const current = this.get(cell);
+      if (current === undefined) return { changed: [], error: '超出地圖範圍了。' };
+      if (current !== 'road' && current !== 'avenue') {
+        return { changed: [], error: '捷運站要蓋在道路或大道上：入口在路邊，車站在地下。橋上不能蓋。' };
+      }
+      if (this.hasStation(cell)) return { changed: [] };
+      const error = approve?.([{ cell, tile: 'metro' }]);
+      if (error) return { changed: [], error };
+      this.stations.add(cell.y * MAP_SIZE + cell.x);
+      return { changed: [cell] };
+    }
+    // Pulling down a road that has a station takes the station first and leaves the road.
+    if (command.type === 'DEMOLISH' && this.hasStation(command)) {
+      const cell = { x: command.x, y: command.y };
+      const error = approve?.([{ cell, tile: 'grass' }]);
+      if (error) return { changed: [], error };
+      this.stations.delete(cell.y * MAP_SIZE + cell.x);
+      return { changed: [cell] };
+    }
+    const big = command.type === 'BUILD_SERVICE' && isBig(command.service);
     const cells = command.type === 'BUILD_ROAD' ? command.path :
-      command.type === 'SET_ZONE' || command.type === 'BUILD_PARK' ? command.tiles :
-      [{ x: command.x, y: command.y }];
+      command.type === 'SET_ZONE' || command.type === 'BUILD_PARK' || command.type === 'BUILD_FARM' ? command.tiles :
+      big ? footprint(command) : [{ x: command.x, y: command.y }];
     const tile: Tile = command.type === 'BUILD_ROAD' ? command.road ?? 'road' :
       command.type === 'SET_ZONE' ? command.zone :
       command.type === 'BUILD_FACILITY' ? command.facility :
       command.type === 'BUILD_PARK' ? 'park' :
+      command.type === 'BUILD_FARM' ? 'farm' :
       command.type === 'BUILD_SERVICE' ? command.service :
-      command.type === 'BUILD_BUS_STOP' ? 'bus' :
-      command.type === 'BUILD_METRO' ? 'metro' : 'grass';
+      command.type === 'BUILD_BUS_STOP' ? 'bus' : 'grass';
 
     for (const cell of cells) {
       const current = this.get(cell);
       if (current === undefined) return { changed: [], error: '超出地圖範圍了。' };
+      if (big && (current === 'annex' || isBig(current) || isRoad(current))) {
+        return { changed: [], error: '這種建築要佔 2 × 2 四格，這裡被別的大建築或道路擋住了。' };
+      }
       if (current === 'river' && command.type !== 'BUILD_ROAD') {
         return { changed: [], error: command.type === 'DEMOLISH' ? '河流拆不掉。' :
           '水上不能蓋東西。只有道路可以過河，鋪過去會變成橋。' };
@@ -140,8 +216,11 @@ export class TileMap {
         return { changed: [], error: '道路上不能劃分區，要先拆掉道路。' };
       }
       if ((command.type === 'BUILD_FACILITY' || command.type === 'BUILD_SERVICE' ||
-          command.type === 'BUILD_BUS_STOP' || command.type === 'BUILD_METRO') && isRoad(current)) {
+          command.type === 'BUILD_BUS_STOP') && isRoad(current)) {
         return { changed: [], error: '道路上不能蓋東西，要先拆掉道路。' };
+      }
+      if (command.type === 'BUILD_FARM' && isRoad(current)) {
+        return { changed: [], error: '道路上不能種田，要先拆掉道路。' };
       }
       if (command.type === 'BUILD_PARK' && isRoad(current)) {
         return { changed: [], error: '道路上不能蓋公園，要先拆掉道路。' };
@@ -153,8 +232,20 @@ export class TileMap {
       isRoad(tile) && (current === 'river' || current === 'bridge') ? 'bridge' :
       tile === 'grass' && current === 'bridge' ? 'river' :
       tile === 'road' && current === 'avenue' ? 'avenue' : tile;
-    const changes = cells.map(cell => ({ cell, tile: becomes(this.get(cell)!) }))
+    const changes = cells.map((cell, index) => ({ cell, tile: big && index ? 'annex' as const : becomes(this.get(cell)!) }))
       .filter(({ cell, tile: next }) => this.get(cell) !== next);
+    // Whatever touches part of a big building takes all of it down.
+    const touched = new Set(changes.map(({ cell }) => cell.y * MAP_SIZE + cell.x));
+    for (const { cell } of [...changes]) {
+      const anchor = big ? undefined : this.anchorOf(cell);
+      if (!anchor) continue;
+      for (const part of footprint(anchor)) {
+        const id = part.y * MAP_SIZE + part.x;
+        if (touched.has(id)) continue;
+        touched.add(id);
+        changes.push({ cell: part, tile: 'grass' });
+      }
+    }
     const error = changes.length ? approve?.(changes) : undefined;
     if (error) return { changed: [], error };
     if (changes.some(({ cell, tile: next }) => isRoad(next) || isRoad(this.get(cell)))) this.roadVersion++;
@@ -166,8 +257,10 @@ export class TileMap {
     return Uint8Array.from(this.tiles, tile => TILES.indexOf(tile));
   }
 
-  load(codes: Uint8Array): void {
+  load(codes: Uint8Array, stations: readonly number[] = []): void {
     this.roadVersion++;
+    this.stations.clear();
+    for (const id of stations) this.stations.add(id);
     codes.forEach((code, index) => { this.tiles[index] = TILES[code]; });
   }
 }

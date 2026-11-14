@@ -15,8 +15,13 @@ export const growth = {
   residentsPerJob: 1.05,
   /** How the jobs the city wants are split between shops and factories. */
   jobShare: { commercial: 0.4, industrial: 0.6 },
-  /** Chance of building per step, as demand goes from just above 0 to 100. */
-  chance: { min: 0.25, max: 1 },
+  /**
+   * Chance of building per step, as demand goes from just above 0 to 100. It rises with the
+   * square of demand: an empty city builds at once, a nearly balanced one takes its time.
+   */
+  chance: { min: 0.08, max: 1 },
+  /** Chance per step that someone moves into a home that has room for them. An empty home fills its first place at once. */
+  moveIn: 0.35,
 };
 
 export type Demand = Record<Zone, number>;
@@ -49,5 +54,5 @@ export function zoneDemand({ population, openings, commercialJobs, industrialJob
 /** The chance that a zone with this demand gets a building in one growth step. */
 export function buildChance(demand: number): number {
   if (demand <= 0) return 0;
-  return growth.chance.min + (growth.chance.max - growth.chance.min) * demand / 100;
+  return growth.chance.min + (growth.chance.max - growth.chance.min) * (demand / 100) ** 2;
 }

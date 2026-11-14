@@ -121,10 +121,13 @@ it('does not run a bus line whose stops have no road between them', () => {
   expect(city.addLine('metro').error).toBeTruthy();
 });
 
-it('runs a metro line off the roads, fast enough that most people ride', () => {
-  const { city } = street();
-  const west = { x: 0, y: 1 };
-  const east = { x: 13, y: 3 };
+it('runs a metro line under the roads, fast enough that most people ride', () => {
+  const { engine, city } = street();
+  const west = { x: 1, y: 2 };
+  const east = { x: 12, y: 2 };
+  // A station goes under a road, not on open ground or a lot.
+  expect(city.execute({ type: 'BUILD_METRO', x: 0, y: 1 }).error).toBeTruthy();
+  expect(city.execute({ type: 'BUILD_METRO', ...home }).error).toBeTruthy();
   // Four hundred people on one street: the drive is a crawl.
   const jammed = city.inspect(home)!.commute!;
   expect(city.execute({ type: 'BUILD_METRO', ...west }).cost).toBe(economy.cost.metro);
@@ -133,22 +136,43 @@ it('runs a metro line off the roads, fast enough that most people ride', () => {
   city.toggleStop(line, west);
   city.toggleStop(line, east);
 
-  // Thirteen tiles along and two down, no road needed at either end.
-  const oneWay = 15 * transit.metro.minutesPerTile + transit.dwell;
+  // The road above is still a road, and costs a station's upkeep more.
+  expect(city.map.get(west)).toBe('road');
+  expect(city.map.hasStation(west)).toBe(true);
+  expect(city.getStats().budget.upkeep).toBe(12 * economy.upkeep.road + 2 * economy.upkeep.metro + transit.metro.vehicleUpkeep);
+  // Eleven tiles along.
+  const oneWay = 11 * transit.metro.minutesPerTile + transit.dwell;
   const plan = city.getLines()[0];
   expect(plan).toMatchObject({ active: true, headway: 2 * oneWay });
   expect(plan.times[1]).toBeCloseTo(oneWay);
-  expect(plan.path).toHaveLength(16);
+  expect(plan.path).toHaveLength(12);
   expect(plan.path[0]).toEqual(west);
   expect(plan.path.at(-1)).toEqual(east);
   expect(city.inspect(west)).toMatchObject({ tile: 'metro', running: true, lines: [line] });
   expect(city.getStats().idle).toBe(0);
 
-  // Waiting half of 14 minutes and riding 7 beats the 24-minute drive.
+  // Waiting half the time between trains and riding beats the crawl by road.
   expect(city.getStats().riders).toBe(willing(transit.share.faster));
   expect(city.inspect(middle)).toMatchObject({ flow: 400 - willing(transit.share.faster) });
   expect(city.getStats().budget.fares).toBe(willing(transit.share.faster) * transit.metro.fare);
   // The home's average trip to work is shorter than it was by road alone.
   expect(city.inspect(home)!.commute!).toBeLessThan(jammed / 2);
   expect(city.inspect(home)).toMatchObject({ transit: true });
+
+  // Stations survive a save. Pulling at the road takes the station out first and leaves the road.
+  const restored = new SimulationEngine({ version: 1, seed: 0, tick: 0 });
+  restored.load(structuredClone(engine.save()));
+  expect(restored.city.getStats().riders).toBe(city.getStats().riders);
+  city.execute({ type: 'DEMOLISH', ...east });
+  expect(city.map.get(east)).toBe('road');
+  expect(city.map.hasStation(east)).toBe(false);
+  expect(city.getLines()[0]).toMatchObject({ stops: [id(west)], active: false });
+  expect(city.getStats().employed).toBe(400);
+  // A save from when a station was a tile of its own: it becomes a road with the station under it.
+  const old = engine.save();
+  const tiles = old.tiles.slice();
+  tiles[id({ x: 20, y: 20 })] = 16;
+  restored.load({ ...old, tiles, metros: undefined, lines: [] });
+  expect(restored.city.map.get({ x: 20, y: 20 })).toBe('road');
+  expect(restored.city.map.hasStation({ x: 20, y: 20 })).toBe(true);
 });

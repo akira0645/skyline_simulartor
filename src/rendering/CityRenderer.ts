@@ -1,5 +1,8 @@
 import { Application, Assets, Graphics, type Texture } from 'pixi.js';
 import cityUrl from '../assets/city.png';
+import sfUrl from '../assets/city-sf.png';
+import californiaUrl from '../assets/city-california.png';
+import newyorkUrl from '../assets/city-newyork.png';
 import tilesUrl from '../assets/tiles.png';
 import { footprint, isBig, isFacility, isRoad, isService, MAP_SIZE, TILE_SIZE, type Cell } from '../simulation/TileMap';
 import { services } from '../simulation/Services';
@@ -64,7 +67,7 @@ export class CityRenderer {
     const app = new Application();
     await app.init({ width: host.clientWidth, height: host.clientHeight,
       background: '#1d1f24', antialias: false, autoStart: false });
-    const sheets = await Promise.all([tilesUrl, cityUrl].map(url => Assets.load<Texture>(url)))
+    const sheets = await Promise.all([tilesUrl, cityUrl, sfUrl, californiaUrl, newyorkUrl].map(url => Assets.load<Texture>(url)))
       .catch((error: unknown) => {
         app.destroy(true);
         throw error;
@@ -82,7 +85,7 @@ export class CityRenderer {
     // start with the map's corner clear of the top bar.
     camera.margin = 260;
     camera.pan(24, 96, app.screen.width, app.screen.height);
-    const tiles = new TileRenderer(sheets[0].source, sheets[1].source);
+    const tiles = new TileRenderer(sheets[0].source, { classic: sheets[1].source, sf: sheets[2].source, california: sheets[3].source, newyork: sheets[4].source });
     const canvas = app.canvas;
     app.stage.addChild(tiles.view);
     const people = new Graphics();
@@ -136,7 +139,9 @@ export class CityRenderer {
         people.rect(Math.round(cx) - 1, Math.round(cy) - 1, 3, 3).fill(0xffd1a0);
         return;
       }
-      people.rect(left + 1, top + 1, width - 2, height - 2).fill(tier === 4 ? [0x2b2f3a, 0x8a1f2b, 0xf4f6f8][index % 3] :
+      // In New York most of the ordinary cars are yellow cabs.
+      const cab = this.city.theme === 'newyork' && tier < 4 && index % 5 < 3;
+      people.rect(left + 1, top + 1, width - 2, height - 2).fill(cab ? 0xf2c21f : tier === 4 ? [0x2b2f3a, 0x8a1f2b, 0xf4f6f8][index % 3] :
         [0x5bb6ce, 0xd87856, 0xe6c15a, 0x8fbf6a, 0xd6d9de][index % 5]);
       people.rect(left + (vertical ? 2 : 4), top + (vertical ? 4 : 2), width - (vertical ? 4 : 8), height - (vertical ? 8 : 4))
         .fill(0xa9d8de);
@@ -595,7 +600,11 @@ export class CityRenderer {
       // Scaffolding on what has just gone up or grown a level. A tile seen for the first time
       // is only noted, so nothing is "built" by scrolling to it; and when another city is
       // loaded, everything is seen afresh.
-      if (this.city.now < knownAt) known.clear();
+      // A jump in time either way means another city: one frame never moves the clock this far.
+      if (Math.abs(this.city.now - knownAt) > 16) {
+        known.clear();
+        building.clear();
+      }
       knownAt = this.city.now;
       for (let y = top; y <= bottom; y++) {
         for (let x = left; x <= right; x++) {
@@ -623,6 +632,15 @@ export class CityRenderer {
           const walk = 4 + Math.floor(age / 300) % 22;
           effects.rect(px + walk, py + 12, 2, 4).fill(0xf2c94c).rect(px + walk, py + 11, 2, 1).fill(0xffd1a0);
         }
+      }
+      // The light of each city: fog off the bay on a San Francisco morning, a golden hour in California.
+      if (this.city.theme === 'sf' && hour >= 5 && hour < 9) {
+        const thick = 0.26 * (1 - Math.abs(hour - 7) / 2);
+        effects.rect(left * TILE_SIZE, top * TILE_SIZE, (right - left + 1) * TILE_SIZE, (bottom - top + 1) * TILE_SIZE)
+          .fill({ color: 0xe8eef2, alpha: thick });
+      } else if (this.city.theme === 'california' && hour >= 16.5 && hour < 19.5) {
+        effects.rect(left * TILE_SIZE, top * TILE_SIZE, (right - left + 1) * TILE_SIZE, (bottom - top + 1) * TILE_SIZE)
+          .fill({ color: 0xff9a4d, alpha: 0.13 * (1 - Math.abs(hour - 18) / 1.5) });
       }
       // Rain slanting down over the whole view, and the light a little dimmer for it.
       if (wet) {

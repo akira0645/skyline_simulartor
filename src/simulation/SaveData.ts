@@ -15,6 +15,12 @@ import { brands, dilemmas, type Boost, type Brand, type Dilemma } from './Dilemm
  * 2 added per-building capacity and occupants.
  */
 export const SCHEMA_VERSION = 4;
+/**
+ * How a city looks: which city's colours its homes and shops wear, and the trees, cars and
+ * bridges that go with them. Nothing in the simulation goes by it.
+ */
+export const THEMES = ['classic', 'sf', 'california', 'newyork'] as const;
+export type Theme = (typeof THEMES)[number];
 const READABLE = [1, 2, 3, SCHEMA_VERSION];
 
 export interface SavedBuilding {
@@ -89,6 +95,8 @@ export interface SaveData {
   boosts: Boost[];
   /** The price level: 1 on the city's first day (see Prices.ts). Saves from before there was one load at 1. */
   level: number;
+  /** The city's look. Saves from before there was a choice load as the first. */
+  theme: Theme;
 }
 
 const zonedCode = (code: number) => isZone(TILES[code]);
@@ -266,5 +274,6 @@ export function parseSave(data: unknown): SaveData {
     combos: parseList((data as Record<string, unknown>).combos, value => typeof value === 'string') as string[],
     policies: parseList((data as Record<string, unknown>).policies, value => typeof value === 'string') as string[],
     ...parseChallenge((data as Record<string, unknown>).challenge),
-    ...parseDilemma(data as Record<string, unknown>), level: parseLevel((data as Record<string, unknown>).level) };
+    ...parseDilemma(data as Record<string, unknown>), level: parseLevel((data as Record<string, unknown>).level),
+    theme: THEMES.find(theme => theme === (data as Record<string, unknown>).theme) ?? 'classic' };
 }

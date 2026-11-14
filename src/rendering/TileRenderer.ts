@@ -7,6 +7,7 @@ import { Camera } from './Camera';
 
 import type { BuildingSystem } from '../simulation/BuildingSystem';
 import type { Line } from '../simulation/Transit';
+import type { Theme } from '../simulation/SaveData';
 import { seasonAt } from '../simulation/Seasons';
 import { lineColour } from '../app/lineColours';
 
@@ -93,7 +94,11 @@ export class TileRenderer {
   private readonly overlay = new Graphics();
   private readonly frames = new Map<TextureSource, Map<number, Texture>>();
 
-  constructor(private readonly kenney: TextureSource, private readonly city: TextureSource) {
+  /** Our own sheet in the colours of the city being drawn; `sheets` holds one for each look. */
+  private city: TextureSource;
+
+  constructor(private readonly kenney: TextureSource, private readonly sheets: Record<Theme, TextureSource>) {
+    this.city = sheets.classic;
     this.view.addChild(this.tiles, this.overlay);
   }
 
@@ -131,6 +136,8 @@ export class TileRenderer {
     lines: readonly Line[] = [], marks: readonly Cell[] = [], rush: readonly number[] = [],
     aim?: { cells: readonly Cell[]; ok: boolean }) {
     const map = city.map;
+    const { theme } = city;
+    this.city = this.sheets[theme];
     const start = camera.cellAt(0, 0);
     const end = camera.cellAt(width, height);
     const g = this.tiles.clear();
@@ -163,7 +170,17 @@ export class TileRenderer {
           tileAt(GRASS[seed % 7 === 0 ? 1 : 0], x, y);
           const roll = (seed >>> 8) % 100;
           // A tree's canopy covers the tile above, so it only grows below open grass.
-          if (roll < 4 && map.get({ x, y: y - 1 }) === 'grass') {
+          if (roll < 4 && theme === 'california') {
+            // A palm: a thin leaning trunk and a crown of fronds.
+            const left = x * TILE_SIZE;
+            const top = y * TILE_SIZE;
+            g.rect(left + 16, top + 26, 8, 3).fill({ color: 0x101114, alpha: 0.25 });
+            g.rect(left + 15, top + 12, 2, 16).rect(left + 14, top + 6, 2, 8).fill(0x8a6a44);
+            g.rect(left + 15, top + 16, 2, 1).rect(left + 15, top + 21, 2, 1).fill(0x6b4a2c);
+            g.rect(left + 6, top + 4, 8, 2).rect(left + 16, top + 4, 9, 2).rect(left + 4, top + 6, 4, 2).rect(left + 23, top + 6, 4, 2)
+              .rect(left + 9, top + 1, 5, 2).rect(left + 16, top + 1, 5, 2).rect(left + 13, top - 1, 4, 3).fill(0x3f8f4a);
+            g.rect(left + 8, top + 4, 5, 1).rect(left + 17, top + 4, 6, 1).rect(left + 13, top, 3, 1).fill(0x6fc46b);
+          } else if (roll < 4 && map.get({ x, y: y - 1 }) === 'grass') {
             const column = TREES[(seed >>> 16) % TREES.length];
             tileAt([column, 10], x, y - 1);
             tileAt([column, 11], x, y);
@@ -193,8 +210,20 @@ export class TileRenderer {
             // The deck is the road tile for its neighbours, with a wooden rail on the open sides.
             const upright = (mask & 5) !== 0 && (mask & 10) === 0;
             cityAt(upright ? 5 : 10, ROAD_ROW, x, y);
-            if (upright) g.rect(left, top, 4, TILE_SIZE).rect(left + 28, top, 4, TILE_SIZE).fill(RAIL);
-            else g.rect(left, top, TILE_SIZE, 4).rect(left, top + 28, TILE_SIZE, 4).fill(RAIL);
+            // San Francisco's bridges are its red one; New York's are grey steel.
+            const rail = theme === 'sf' ? 0xc0362c : theme === 'newyork' ? 0x6d7078 : RAIL;
+            if (upright) g.rect(left, top, 4, TILE_SIZE).rect(left + 28, top, 4, TILE_SIZE).fill(rail);
+            else g.rect(left, top, TILE_SIZE, 4).rect(left, top + 28, TILE_SIZE, 4).fill(rail);
+            if (theme === 'sf' || theme === 'newyork') {
+              // A tower astride the deck on every other tile, with a cable slung from it.
+              const tower = theme === 'sf' ? 0xd94a3a : 0x8d9199;
+              if ((upright ? y : x) % 2 === 0) {
+                if (upright) g.rect(left - 2, top + 12, 8, 8).rect(left + 26, top + 12, 8, 8).fill(0x25232b).rect(left - 1, top + 13, 6, 6).rect(left + 27, top + 13, 6, 6).fill(tower);
+                else g.rect(left + 12, top - 2, 8, 8).rect(left + 12, top + 26, 8, 8).fill(0x25232b).rect(left + 13, top - 1, 6, 6).rect(left + 13, top + 27, 6, 6).fill(tower);
+              }
+              if (upright) g.rect(left + 1, top, 1, TILE_SIZE).rect(left + 30, top, 1, TILE_SIZE).fill(tower);
+              else g.rect(left, top + 1, TILE_SIZE, 1).rect(left, top + 30, TILE_SIZE, 1).fill(tower);
+            }
           }
         } else if (isRoad(tile)) {
           let mask = 0;

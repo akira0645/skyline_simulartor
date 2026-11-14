@@ -136,7 +136,9 @@ export function demoCity(engine: SimulationEngine, size: DemoSize = 'small') {
   river(city);
   // The city is laid out with money to spare, then handed over with its opening balance. It
   // starts at the rank a city of its size has reached, which is what lets it have its buildings.
-  engine.load({ ...engine.save(), tick: years * YEAR, funds: 10_000_000, rank });
+  // Each size wears another city's colours, so the three do not look alike.
+  engine.load({ ...engine.save(), tick: years * YEAR, funds: 10_000_000, rank,
+    theme: size === 'small' ? 'california' : size === 'medium' ? 'sf' : 'newyork' });
   if (size === 'small') {
     oldTown(city, 32);
     // The far bank: a cross street and lots for homes and shops, and nothing else yet.

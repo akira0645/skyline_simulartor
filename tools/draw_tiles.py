@@ -1279,6 +1279,100 @@ def fine(image, ground=False):
     return out
 
 
+# --- City styles: the same sheet with the homes and shops in another city's colours
+import colorsys
+
+# Each style: what a wall and what a roof or trim becomes, as (hue in degrees, saturation,
+# brightness as a multiple of the original). A wall may have several, one per building in turn.
+STYLES = {
+    # San Francisco: painted row houses in pastels under grey-blue slate.
+    'sf': {'walls': [(340, 0.26, 1.06), (150, 0.2, 1.04), (48, 0.3, 1.06), (205, 0.24, 1.05), (272, 0.2, 1.05), (22, 0.3, 1.06)],
+           'roof': (215, 0.2, 0.82)},
+    # Southern California: cream stucco under terracotta tiles.
+    'california': {'walls': [(42, 0.13, 1.1), (36, 0.18, 1.06), (50, 0.1, 1.1)], 'roof': (15, 0.62, 0.95)},
+    # New York: red brick and brownstone under dark flat roofs.
+    'newyork': {'walls': [(12, 0.5, 0.72), (26, 0.4, 0.66), (8, 0.42, 0.6), (30, 0.3, 0.74)], 'roof': (222, 0.1, 0.52)},
+}
+# The rows that hold homes and shops, and the building of the big row that is housing.
+STYLED_ROWS = (2, 3)
+# Residential columns by level in row 2 (BUILDING_ART in TileRenderer.ts): the taller ones get the city's roof furniture.
+TALL_HOMES = (3, 4, 5, 6, 7, 8, 9)
+
+
+def restyle(sheet, style, F):
+    """A copy of the sheet with homes and shops repainted in a style, and its small touches added."""
+    out = sheet.copy()
+    pixels = out.load()
+    spec = STYLES[style]
+    home_rows = range(len(ROWS) + 2, len(ROWS) + 2 + len(HOME_ROWS))
+
+    def repaint(left, top, size, which):
+        wall = spec['walls'][which % len(spec['walls'])]
+        for y in range(top, top + size):
+            for x in range(left, left + size):
+                r, g, b, a = pixels[x, y]
+                if a < 255:
+                    continue
+                h, sat, val = colorsys.rgb_to_hsv(r / 255, g / 255, b / 255)
+                hue = h * 360
+                # Outlines, glass and greenery stay as they are.
+                if val < 0.22 or (185 <= hue <= 235 and sat > 0.22) or (70 <= hue <= 165 and sat > 0.25):
+                    continue
+                to = wall if sat < 0.34 and val >= 0.55 else spec['roof']
+                nr, ng, nb = colorsys.hsv_to_rgb(to[0] / 360, to[1], max(0.0, min(1.0, val * to[2])))
+                pixels[x, y] = (round(nr * 255), round(ng * 255), round(nb * 255), 255)
+
+    def solid(x, y):
+        return pixels[x, y][3] == 255
+
+    def touches(left, top, tall):
+        """What each city puts on its buildings: only where there is building to put it on."""
+        def put(x0, y0, x1, y1, colour, need=True):
+            for y in range(y0, y1 + 1):
+                for x in range(x0, x1 + 1):
+                    if not need or solid(left + x, top + y):
+                        pixels[left + x, top + y] = rgba(colour)
+        if style == 'newyork' and tall:
+            # A fire escape down the front, and a water tank on legs on the roof.
+            for y in (13, 18, 23):
+                put(11, y, 21, y, '#1b1d22')
+                put(11, y + 1, 11, y + 3, '#1b1d22')
+                put(21, y + 1, 21, y + 3, '#1b1d22')
+            for step in range(4):
+                put(13 + step * 2, 14 + step, 14 + step * 2, 14 + step, '#3a3f47')
+            if solid(left + 22, top + 5):
+                put(21, 1, 26, 5, '#6b432b', need=False)
+                put(21, 1, 26, 1, '#8a5a3a', need=False)
+                put(22, 0, 25, 0, '#55575b', need=False)
+                put(21, 6, 21, 7, '#25232b', need=False)
+                put(26, 6, 26, 7, '#25232b', need=False)
+        elif style == 'sf':
+            # White trim under the eaves and round the door: the painted-lady look.
+            for y in range(4, 28):
+                edge = [x for x in range(4, 28) if solid(left + x, top + y) and not solid(left + x, top + y - 1)]
+                if len(edge) > 10:
+                    put(min(edge), y, max(edge), y, '#fbf7ee')
+                    break
+            put(14, 22, 17, 22, '#fbf7ee')
+        elif style == 'california' and not tall:
+            # A row of darker tiles along the ridge.
+            for x in range(6, 26, 4):
+                put(x, 5, x + 1, 5, '#8f3f24')
+
+    for row in STYLED_ROWS:
+        for column in range(16):
+            repaint(column * F, row * F, F, column + row)
+            if row == 2:
+                touches(column * F, row * F, column in TALL_HOMES)
+    for index, row in enumerate(home_rows):
+        for column in range(16):
+            repaint(column * F, row * F, F, column // 2 + index)
+            touches(column * F, row * F, index > 0)
+    # The housing complex, first of the big buildings.
+    repaint(0, len(ROWS) * F, 2 * F, 1)
+    return out
+
+
 if __name__ == '__main__':
     F = 2 * T
     sheet = Image.new('RGBA', (16 * F, (len(ROWS) + 2 + len(HOME_ROWS)) * F), (0, 0, 0, 0))
@@ -1292,3 +1386,7 @@ if __name__ == '__main__':
             sheet.paste(fine(tile.image), (column * F, (len(ROWS) + 2 + row) * F))
     sheet.save(OUT)
     print(f'wrote {OUT}')
+    for style in STYLES:
+        path = OUT.with_name(f'city-{style}.png')
+        restyle(sheet, style, F).save(path)
+        print(f'wrote {path}')

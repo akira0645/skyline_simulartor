@@ -15,7 +15,7 @@ import { childrenAt, homeSites, residentAt, traitOf, traits, TRAITS, type HomeKi
 import { doingAt, mind, moodOf, thoughtsOf, type Facts, type Thought, type Way } from './Mind';
 import { pollution } from './Pollution';
 import { ELEVATED, RoadGraph } from './RoadGraph';
-import type { SaveData, SavedBuilding, SavedPerson } from './SaveData';
+import type { SaveData, SavedBuilding, SavedPerson, Theme } from './SaveData';
 import { alsoServes, emergencies, expectations, scare, SCHOOLS, services, SERVICES } from './Services';
 import { footprint, isBig, isFacility, isRoad, isService, isZone, MAP_SIZE, type Cell, type Facility, type GameCommand,
   type Road, type Service, type TileMap, type Zone } from './TileMap';
@@ -100,6 +100,8 @@ export class BuildingSystem {
   /** How many milestones the city has been paid for. */
   private rank = 0;
   private taxRate: number = economy.taxRate.default;
+  /** The city's look (see `THEMES` in SaveData.ts). Saved; the simulation does not go by it. */
+  theme: Theme = 'classic';
   /** The city's seed. It decides who lives where, so it must be set before anything is derived. */
   seed = 0;
   /** The ids of the goals already rewarded, and the months left on each loan. */
@@ -2259,10 +2261,10 @@ export class BuildingSystem {
       lines: this.lines.map(line => ({ ...line, stops: [...line.stops] })),
       goals: [...this.goalsDone], loans: [...this.loans], tasks: [...this.tasksOn],
       combos: [...this.combosSeen], policies: [...this.policiesOn], challenge: this.challenge && { ...this.challenge },
-      dilemma: this.dilemma && { ...this.dilemma }, boosts: this.boosts.map(boost => ({ ...boost })), level: this.level };
+      dilemma: this.dilemma && { ...this.dilemma }, boosts: this.boosts.map(boost => ({ ...boost })), level: this.level, theme: this.theme };
   }
 
-  load({ tiles, zones, buildings, funds, rank, taxRate, tick, lines, goals: done, loans, seed, metros, tasks: saved, combos: known, policies: chosen, challenge, spans, dilemma, boosts, level }: SaveData): void {
+  load({ tiles, zones, buildings, funds, rank, taxRate, tick, lines, goals: done, loans, seed, metros, tasks: saved, combos: known, policies: chosen, challenge, spans, dilemma, boosts, level, theme }: SaveData): void {
     this.seed = seed;
     this.goalsDone.clear();
     for (const goal of done) this.goalsDone.add(goal);
@@ -2277,6 +2279,7 @@ export class BuildingSystem {
     this.challenge = challenge && { ...challenge };
     this.challengeEnd = undefined;
     this.level = level;
+    this.theme = theme;
     this.dilemma = dilemma && { ...dilemma };
     this.dilemmaEnd = undefined;
     this.boosts.splice(0, this.boosts.length, ...boosts.map(boost => ({ ...boost })));

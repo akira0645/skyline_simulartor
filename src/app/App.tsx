@@ -19,6 +19,7 @@ import { isBig, isFacility, isService, TILES, type Service } from '../simulation
 import { services } from '../simulation/Services';
 import { SimulationClock, type SimulationSpeed } from '../simulation/SimulationClock';
 import { SimulationEngine } from '../simulation/SimulationEngine';
+import { THEMES, type Theme } from '../simulation/SaveData';
 import { AUTO_SLOT, deleteSave, listSaves, readSave, SLOTS, writeSlot, type SaveNote } from '../storage/SaveManager';
 import { brands, type Brand, type DilemmaId } from '../simulation/Dilemmas';
 import { goals } from '../simulation/Goals';
@@ -418,6 +419,8 @@ const dilemmaNames: Record<DilemmaId, [string, [string, string], [string, string
   fair: ['鄰鎮邀請合辦市集', ['出錢參加', '−$1,500，60 天內更多人想來'], ['只去觀摩', '拿補助 +$500']],
   lottery: ['彩券行想進駐', ['全面開放', '+$3,500，開一間彩券行，但 60 天內比較沒人想來'], ['限量開放', '+$1,500，只開一間小舖']],
 };
+/** How a city can look. */
+const themeNames: Record<Theme, string> = { classic: '原本', sf: '舊金山', california: '加州', newyork: '紐約' };
 /** The three ready-made cities. */
 const demoList: [DemoSize, string, string, string[]][] = [
   ['small', '小鎮', '140 人', ['捷運', '電影院', '東岸待開發']],
@@ -443,6 +446,8 @@ function freshCity(): SimulationEngine {
   const seed = Math.floor(Math.random() * 2 ** 31);
   const engine = new SimulationEngine({ version: 1, seed, tick: 0 });
   engine.city.map.generateTerrain(seed);
+  // Every new map wears one of the looks, by its seed.
+  engine.city.theme = THEMES[seed % THEMES.length];
   return engine;
 }
 
@@ -488,6 +493,8 @@ export function App() {
   // The problem whose explanation is shown, and whether the list of ready-made cities is open.
   const [asked, setAsked] = useState<Issue>();
   const [choosing, setChoosing] = useState(false);
+  // The city's look, kept here so the button shows it.
+  const [look, setLook] = useState<Theme>(() => engine.city.theme);
   // The special group whose recipe is shown, and the tick of the last finished task that was announced.
   const knownTask = useRef(0);
   const knownCombos = useRef(0);
@@ -692,6 +699,7 @@ export function App() {
   useEffect(() => {
     const next = engine.city.getStats();
     setStats(next);
+    setLook(engine.city.theme);
     setHistory(past => {
       const last = past.at(-1);
       // Going back in time means another city was loaded: start the charts again.
@@ -989,6 +997,12 @@ export function App() {
         <div className="menu" role="group" aria-label="城市">
           <button type="button" onClick={startNew}>新地圖</button>
           <button type="button" aria-pressed={choosing} onClick={() => setChoosing(!choosing)}>示範</button>
+          <button type="button" title="換一種城市風格（只換外觀）" onClick={() => {
+            engine.city.theme = THEMES[(THEMES.indexOf(engine.city.theme) + 1) % THEMES.length];
+            setLook(engine.city.theme);
+            setMessage(`風格：${themeNames[engine.city.theme]}。`);
+            rendererRef.current?.refresh?.();
+          }}>風格：{themeNames[look]}</button>
           <button type="button" aria-pressed={saves !== undefined} onClick={() => saves ? setSaves(undefined) : void openSaves()}>存檔</button>
         </div>
       </header>

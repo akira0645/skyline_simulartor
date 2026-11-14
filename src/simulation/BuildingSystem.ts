@@ -278,12 +278,15 @@ export class BuildingSystem {
    * A road tile's flow as a share of its capacity; 0 off the roads. With an hour of the day it
    * counts the shifts travelling at that hour; without, the tile's busiest shift.
    */
-  /** How full a road is with the commuters of these shifts only (indices into `shifts`). */
-  congestionOn(cell: Cell, on: readonly number[]): number {
+  /**
+   * How full a road is with this share of each shift's commuters on it: one figure from 0 to
+   * 1 per shift, in the order of `shifts`.
+   */
+  congestionOn(cell: Cell, share: readonly number[]): number {
     const tile = this.map.get(cell);
     if (!isRoad(tile)) return 0;
     let flow = 0;
-    for (const shift of on) flow += this.shiftFlows[shift][indexOf(cell)];
+    this.shiftFlows.forEach((flows, shift) => { flow += (share[shift] ?? 0) * flows[indexOf(cell)]; });
     return congestion(flow, tile);
   }
 

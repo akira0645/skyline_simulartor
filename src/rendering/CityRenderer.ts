@@ -181,7 +181,18 @@ export class CityRenderer {
      * travelling on it, and a little after, so it does not flicker between two of them.
      */
     const lastMoved = shifts.map(() => -Infinity);
-    const rushNow = () => shifts.map((_, index) => index).filter(index => animationTime - lastMoved[index] < 1500);
+    /**
+     * How much of each shift is on the road, 0 to 1. It builds up and dies away over a few
+     * seconds rather than switching, so traffic thickens and thins instead of appearing.
+     */
+    const onRoad = shifts.map(() => 0);
+    const rushNow = (elapsed = 0) => {
+      shifts.forEach((_, index) => {
+        const busy = animationTime - lastMoved[index] < 1500;
+        onRoad[index] = Math.max(0, Math.min(1, onRoad[index] + (busy ? elapsed : -elapsed) / 4000));
+      });
+      return onRoad;
+    };
 
     const drawPeople = (elapsed = 0) => {
       people.clear();
@@ -447,21 +458,27 @@ export class CityRenderer {
             // commuters drawn one by one are only a sample, so the rest of the queue is drawn here.
             // Like the traffic view this goes by the shifts the map shows on the road just now.
             const load = this.city.congestionOn({ x, y }, rush);
-            if (load <= 0.75) continue;
+            if (load <= 0.6) continue;
             const across = isRoad(map.get({ x: x - 1, y })) || isRoad(map.get({ x: x + 1, y }));
             const along = isRoad(map.get({ x, y: y - 1 })) || isRoad(map.get({ x, y: y + 1 }));
             // A junction is left clear.
             if (across === along) continue;
-            const jammed = load > 1;
-            // A jam crawls; a busy road moves.
-            const crawl = time / (jammed ? 2600 : 900);
+            // The queue is one stream along the whole road, not a loop on each tile: every car
+            // has a place in it and rolls from tile to tile, so none appears from nowhere.
+            // There is a place every half tile; the fuller the road, the more of them hold a car,
+            // and a car that is in a thin stretch is in the thick one beside it too.
+            const gap = TILE_SIZE / 2;
+            const full = Math.min(1, (load - 0.6) / 0.6);
+            const from = across ? px : py;
             for (let lane = 0; lane < 2; lane++) {
-              for (let car = 0; car < (jammed ? 2 : 1); car++) {
-                const part = (crawl + car / 2 + (seed % 5) / 5 + lane * 0.3) % 1;
-                const run = (lane ? 1 - part : part) * TILE_SIZE;
-                const side = lane ? -6 : 6;
-                if (across) drawCar(px + run, py + TILE_SIZE / 2 + side, false, seed + car + lane * 3, 2 + (seed + car) % 2);
-                else drawCar(px + TILE_SIZE / 2 - side, py + run, true, seed + car + lane * 3, 2 + (seed + car) % 2);
+              const shift = (lane ? -1 : 1) * time / 70 + lane * 7;
+              const side = lane ? -6 : 6;
+              for (let place = Math.ceil((from - shift) / gap); place * gap + shift < from + TILE_SIZE; place++) {
+                const at = place * gap + shift;
+                const look = Math.abs(place * 7 + (across ? y : x) * 13 + lane);
+                if ((Math.imul(look + 1, 2654435761) >>> 0) % 100 >= full * 100) continue;
+                if (across) drawCar(at, py + TILE_SIZE / 2 + side, false, look, 2 + look % 2);
+                else drawCar(px + TILE_SIZE / 2 - side, at, true, look, 2 + look % 2);
               }
             }
           } else if (tile === 'river') {
@@ -547,6 +564,7 @@ export class CityRenderer {
       if (!speed || !this.city.getCommutes().length) return;
       animationTime += ticker.deltaMS * speed;
       drawPeople(ticker.deltaMS * speed);
+      rushNow(ticker.deltaMS * speed);
       drawEffects();
     });
     app.start();

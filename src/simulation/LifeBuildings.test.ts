@@ -53,7 +53,7 @@ it('migrates annex counts into one building and aggregates a connected park', ()
 });
 
 it('appends new tile identifiers and gives the new services usable footprints and clinic coverage', () => {
-  expect(TILES.slice(-4)).toEqual(['community', 'familyclinic', 'eldercare', 'memorial']);
+  expect(TILES.slice(44)).toEqual(['community', 'familyclinic', 'eldercare', 'memorial', 'bakery', 'florist', 'cakeshop']);
   for (const service of ['community', 'eldercare', 'memorial'] as const) {
     const engine = town(service);
     expect(engine.city.map.anchorOf({ x: 5, y: 5 })).toEqual({ x: 4, y: 4 });

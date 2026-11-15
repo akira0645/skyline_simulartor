@@ -13,7 +13,7 @@ import { shifts } from './WorkShift';
 
 export type Doing = 'socializing' | 'care' | 'remembering' | 'sleeping' | 'getting-ready' | 'to-work' | 'working' | 'break' | 'to-home' |
   'job-hunting' | 'park' | 'shopping' | 'gardening' | 'helping' | 'dining' | 'home' | 'temple' | 'online' |
-  'outing' | 'family' | 'day-off' | 'chinatown' | 'reading' | 'exhibition' | 'nightmarket' | 'daycare' | 'bank' | 'school' | 'highschool' | 'university' | 'clinic' | 'hospital' | 'referred' | 'cinema' | 'pool' | 'ktv' | 'amusement' | 'casino' | 'museum' | 'stadium';
+  'outing' | 'family' | 'day-off' | 'chinatown' | 'reading' | 'exhibition' | 'nightmarket' | 'daycare' | 'bank' | 'school' | 'highschool' | 'university' | 'clinic' | 'hospital' | 'referred' | 'cinema' | 'pool' | 'ktv' | 'amusement' | 'casino' | 'museum' | 'stadium' | 'delivering' | 'takeout' | 'bakery' | 'flowers' | 'cake';
 
 /**
  * How someone gets to work. A trip of fewer than `mind.driveFrom` road tiles is walked; a

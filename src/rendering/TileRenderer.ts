@@ -39,7 +39,7 @@ const zoneIndex: Record<Zone, number> = { residential: 0, commercial: 1, industr
 // Bit per neighbouring road, matching the column order of the road row.
 const roadSides = [[0, -1, 1], [1, 0, 2], [0, 1, 4], [-1, 0, 8]];
 
-// Traffic tint by flow as a share of road capacity: free, busy, full, jammed.
+// Traffic tint by how full the map shows the road: free, busy, jammed, badly jammed.
 const TRAFFIC_COLOURS: [number, number][] = [[0.5, 0x4fc46b], [1, 0xf2d04b], [1.5, 0xf08a3c], [Infinity, 0xd9423a]];
 // The yellow median that tells an avenue from a street: [x, y, width, height] per road side.
 const MEDIAN = 0xf2c94c;
@@ -57,7 +57,7 @@ const FACILITY_ROOF: Record<Facility | Service | 'bus' | 'metro', number> = {
   bus: 0xf2c94c, metro: 0xe5484d, market: 0xd9423a, highschool: 0x7f8fb8, hospital: 0xe04a3c,
   university: 0xc9735a, museum: 0xe6dfcf, stadium: 0x6fb565, temple: 0xe0782f,
   mall: 0xd9423a, casino: 0x8a5fd0, cinema: 0xc8322e, parking: 0x3f6fb0,
-  library: 0xb98a4a, pool: 0x5bb6ce, ktv: 0xe8799a, amusement: 0xf2c94c, gas: 0xe5484d, cityhall: 0xb97a61, bank: 0x577d96, culture: 0x996694, coldstore: 0x568598, square: 0xad8f78, daycare: 0xb88449, recycling: 0x497c63, workshop: 0x80614f, community: 0xc78d54, familyclinic: 0x679f9a, eldercare: 0x8d9f68, memorial: 0x8a958e,
+  library: 0xb98a4a, pool: 0x5bb6ce, ktv: 0xe8799a, amusement: 0xf2c94c, gas: 0xe5484d, cityhall: 0xb97a61, bank: 0x577d96, culture: 0x996694, coldstore: 0x568598, square: 0xad8f78, daycare: 0xb88449, recycling: 0x497c63, workshop: 0x80614f, community: 0xc78d54, familyclinic: 0x679f9a, eldercare: 0x8d9f68, memorial: 0x8a958e, bakery: 0xc08a4e, florist: 0x5fa873, cakeshop: 0xe88aa6,
 };
 const WATER = [0x3f8fc4, 0x6fb4dc, 0x2f78ab];
 const SHORE = 0xd9cfa8;
@@ -72,7 +72,7 @@ const BIG_ROW = 6;
 const COMPLEX_ART = 0;
 const FOUNTAIN = [0x8f97a1, 0x74c7ed, 0xdff3fb];
 const CIVIC_DETAIL_ART: Partial<Record<string, number>> = {
-  cityhall: 0, bank: 1, culture: 2, coldstore: 3, square: 4, daycare: 5, recycling: 6, workshop: 7, gas: 8, familyclinic: 12,
+  cityhall: 0, bank: 1, culture: 2, coldstore: 3, square: 4, daycare: 5, recycling: 6, workshop: 7, gas: 8, familyclinic: 12, bakery: 13, florist: 14, cakeshop: 15,
 };
 const CIVIC_ART: Partial<Record<Facility | Service | 'bus' | 'metro', number>> =
   { power: 0, water: 1, fire: 2, police: 3, school: 4, clinic: 5, bus: 6, metro: 7, market: 8, highschool: 9, temple: 10, cinema: 11,
@@ -140,7 +140,7 @@ export class TileRenderer {
   draw(city: BuildingSystem, camera: Camera, width: number, height: number, preview: Cell[],
     selected?: Cell, layer: Overlay = 'none',
     range?: { centre: Cell; radius: number; kind: Facility | Service | 'bus' | 'metro' }, hour?: number,
-    lines: readonly Line[] = [], marks: readonly Cell[] = [], rush: readonly number[] = [],
+    lines: readonly Line[] = [], marks: readonly Cell[] = [], crowdOn?: (cell: Cell) => number,
     aim?: { cells: readonly Cell[]; ok: boolean }, focus?: (cell: Cell) => boolean) {
     const map = city.map;
     const { theme } = city;
@@ -534,9 +534,8 @@ export class TileRenderer {
           }
           if (layer === 'traffic') {
             if (!isRoad(map.get(cell))) continue;
-            // The shifts whose people the map shows on the road just now, not the hour on the
-            // clock: the map moves people at its own pace, and the colours must agree with it.
-            const load = city.congestionOn(cell, rush);
+            // The cars the map shows on this tile just now, so the colours agree with the picture.
+            const load = crowdOn?.(cell) ?? 0;
             colour = TRAFFIC_COLOURS.find(([limit]) => load <= limit)![1];
           } else if (city.hasBuilding(cell)) {
             colour = (layer === 'bus' || layer === 'metro' ? city.hasTransit(cell) :

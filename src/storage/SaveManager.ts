@@ -32,7 +32,7 @@ export const AUTO_SLOT = 'auto';
 export const BACKUP_SLOT = 'auto-backup';
 
 /** Keep the preceding autosave and replace the current one in a single atomic transaction. */
-export async function writeAutosave(save: SaveData, note: SaveNote): Promise<void> {
+export async function writeAutosave(save: SaveData, note: SaveNote, preserveBackup = false): Promise<void> {
   const database = await open();
   try {
     await new Promise<void>((resolve, reject) => {
@@ -40,7 +40,7 @@ export async function writeAutosave(save: SaveData, note: SaveNote): Promise<voi
       const store = transaction.objectStore(STORE);
       const previous = store.get(AUTO_SLOT);
       previous.onsuccess = () => {
-        if (previous.result !== undefined) store.put(previous.result, BACKUP_SLOT);
+        if (!preserveBackup && previous.result !== undefined) store.put(previous.result, BACKUP_SLOT);
         store.put({ ...save, note }, AUTO_SLOT);
       };
       transaction.oncomplete = () => resolve();

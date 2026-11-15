@@ -5,7 +5,8 @@ export const cellId = ({ x, y }: Cell): number => y * MAP_SIZE + x;
 export const cellFromId = (id: number): Cell => ({ x: id % MAP_SIZE, y: Math.floor(id / MAP_SIZE) });
 const offsets = [[0, -1], [1, 0], [0, 1], [-1, 0]];
 type SiteRoute = { path: Cell[]; distance: number; entrance: Cell };
-const routes = new WeakMap<TileMap, { revision: number; values: Map<string, SiteRoute | undefined> }>();
+type Door = { cell: Cell; road: Cell };
+const routes = new WeakMap<TileMap, { revision: number; values: Map<string, SiteRoute | undefined>; doors: Map<number, Door[]> }>();
 
 export function siteCells(map: TileMap, cell: Cell): Cell[] {
   const anchor = map.anchorOf(cell) ?? cell;
@@ -24,11 +25,14 @@ export function entrances(map: TileMap, cell: Cell): { cell: Cell; road: Cell }[
 export function routeToSite(map: TileMap, graph: RoadGraph, from: Cell, dest: Cell, tie = 0) {
   let cache = routes.get(map);
   if (!cache || cache.revision !== map.layoutRevision) {
-    cache = { revision: map.layoutRevision, values: new Map() };
+    cache = { revision: map.layoutRevision, values: new Map(), doors: new Map() };
     routes.set(map, cache);
   }
-  const doors = entrances(map, dest);
-  const key = `${cellId(from)}:${cellId(map.anchorOf(dest) ?? dest)}:${doors.length ? Math.abs(tie) % doors.length : 0}`;
+  // A building's doorways only change with the layout, so they are found once per layout.
+  const site = cellId(map.anchorOf(dest) ?? dest);
+  let doors = cache.doors.get(site);
+  if (!doors) cache.doors.set(site, doors = entrances(map, dest));
+  const key = `${cellId(from)}:${site}:${doors.length ? Math.abs(tie) % doors.length : 0}`;
   if (cache.values.has(key)) return cache.values.get(key);
   let best: { path: Cell[]; distance: number; entrance: Cell } | undefined;
   for (let n = 0; n < doors.length; n++) {

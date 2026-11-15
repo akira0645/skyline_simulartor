@@ -1,10 +1,17 @@
 import { LifeSystem, EMPTY_LIFE, type LifeResident } from './LifeSystem';
-import { planFacilityVisits } from './CivicVisits';
+import { planFacilityVisits, type CivicVisitContext } from './CivicVisits';
+import { ActivityDiary, activityDay, visitReasons } from './ActivityDiary';
 import { createIdentity, identityAt, YEAR_TICKS } from './ResidentIdentity';
 import { Relationships } from './Relationships';
+import { seats } from './Capacity';
+import { birthdayOf, eatingOf, fatigueAt, hungerAt, mealPlan, meals, needs, socialAt, type Needs } from './Needs';
+import { delivery, ridesFor } from './Delivery';
+
+/** The outings that end with something to eat, and the meal brought to the door. */
+const MEALS_OUT: readonly Doing[] = ['shopping', 'nightmarket', 'takeout', 'bakery'];
 import { weatherAt, weatherTravel, wantsOutdoor } from './Weather';
 import { entrances, routeToSite, siteCells, parkGroups } from './FacilityAccess';
-import { VisitSystem } from './VisitSystem';
+import { VisitSystem, travelTicks, type ActiveVisit, type FacilityVisit } from './VisitSystem';
 import { SHOP_SHIFT } from './Mind';
 import { calendar, dateAt, hourAt, weekendAt } from './calendar';
 import { bond, circle, PLACES, type Place } from './Community';
@@ -30,7 +37,7 @@ import { footprint, isBig, isFacility, isRoad, isService, isZone, MAP_SIZE, type
 import { congestion, tileMinutes, traffic } from './Traffic';
 import { transit, type Line, type SavedLine, type TransitKind } from './Transit';
 import { utilities } from './Utilities';
-import { rushShifts, shiftIndex, shifts } from './WorkShift';
+import { RUSH_HOURS, rushShifts, shiftIndex, shifts } from './WorkShift';
 import { buildChance, growth, zoneDemand, type Demand } from './ZoneDemandSystem';
 
 const neighbors = [[0, -1], [1, 0], [0, 1], [-1, 0]];
@@ -105,6 +112,7 @@ export class BuildingSystem {
   private nextPersonId = 0;
   readonly relationships = new Relationships();
   readonly life = new LifeSystem();
+  readonly diary = new ActivityDiary();
   private readonly peopleById = new Map<number, { home: number; person: SavedPerson }>();
 
   private ensureIdentities(): void {
@@ -119,6 +127,7 @@ export class BuildingSystem {
       this.peopleById.set(person.identity.id, { home, person });
     }
     this.relationships.retain(new Set(this.peopleById.keys()));
+    this.diary.retain(this.clock, new Set(this.peopleById.keys()));
     for (const [home, building] of this.buildings) {
       const members = building.people;
       if (!members || this.life.hasFamily(home)) continue;
@@ -265,6 +274,15 @@ export class BuildingSystem {
   /** Buildings each facility serves, by facility tile. */
   private readonly loads = new Map<number, number>();
   private readonly commutes: Commute[] = [];
+  /** The same routes by home and workplace, for looking one resident's trip up quickly. */
+  private readonly commuteByPair = new Map<number, Commute>();
+  /** This hour: who wanted each place and found it full, and the sick who now wait at home for one. */
+  private readonly crowded = new Map<number, Set<number>>();
+  private readonly waitingFor = new Map<number, number>();
+  /** Those whose meal is on its way to their door this hour. */
+  private readonly fed = new Set<number>();
+  /** Today's deliveries: orders brought, orders nobody could bring, and who rode. Not saved. */
+  private deliveries = { day: -1, orders: 0, missed: new Set<number>(), riders: new Set<number>() };
   /** Commuters crossing each road tile, per shift: only people on one shift travel together. */
   private readonly shiftFlows = shifts.map(() => new Float32Array(MAP_SIZE ** 2));
   /** The busiest shift's commuters on each road tile. Routing and pollution go by this. */
@@ -334,7 +352,22 @@ export class BuildingSystem {
   }
 
   private recordVisits(tick: number): void {
-    if (dateAt(tick - 1).month !== dateAt(tick).month) this.monthlyVisits.clear();
+    // Schedule every game hour so 07:00 school and 16:00 childcare are not skipped.
+    try {
+      for (let part = 1; part <= 3; part++) {
+        const at = tick - 1 + part / 3;
+        const previous = tick - 1 + (part - 1) / 3;
+        if (activityDay(previous) !== activityDay(at)) this.diary.retain(at, new Set(this.peopleById.keys()));
+        if (dateAt(previous).month !== dateAt(at).month) this.monthlyVisits.clear();
+        this.clock = at;
+        this.advanceVisits(at);
+      }
+    } finally { this.clock = tick; }
+  }
+
+  private advanceVisits(tick: number): void {
+    this.crowded.clear();
+    this.waitingFor.clear();
     const count = (id: number, people: number) => {
       const anchor = indexOf(this.map.anchorOf(cellAt(id)) ?? cellAt(id));
       this.monthlyVisits.set(anchor, (this.monthlyVisits.get(anchor) ?? 0) + people);
@@ -347,17 +380,19 @@ export class BuildingSystem {
         const from = trip.path.at(-2)!;
         const route = routeToSite(this.map, this.roadGraph, from, cellAt(trip.home), trip.slot);
         return route && [start, ...route.path];
-      });
+      }, (trip, departed) => this.continueVisit(trip, departed), 1 / 3);
     for (const trip of arrived) {
-      count(trip.destination, 1);
+      // A rider at a customer's door is no visitor.
+      if (trip.doing !== 'delivering') count(trip.destination, 1);
       const person = this.buildings.get(trip.home)?.people?.find(person => person.slot === trip.slot);
+      if (person?.identity) this.diary.arrive(person.identity.id, trip, trip.started + travelTicks(trip.path, trip.doing));
       const site = this.map.at(trip.destination);
-      if (person?.identity && ['clinic', 'familyclinic', 'hospital', 'eldercare'].includes(site)) this.life.treat(person.identity.id, tick, site === 'hospital');
+      if (person?.identity && ['clinic', 'familyclinic', 'hospital', 'eldercare'].includes(site)) this.life.treat(person.identity.id, Math.ceil(tick), site === 'hospital');
     }
     const meetings = new Map<number, { person: number; from: number; until: number }[]>();
     for (const { visit: trip, from, until } of this.visits.usage) {
       const person = this.buildings.get(trip.home)?.people?.find(person => person.slot === trip.slot);
-      if (!person?.identity) continue;
+      if (!person?.identity || trip.doing === 'delivering') continue;
       const venue = Math.min(...this.siteIds(cellAt(trip.destination)));
       if (!meetings.has(venue)) meetings.set(venue, []);
       meetings.get(venue)!.push({ person: person.identity.id, from, until });
@@ -370,13 +405,118 @@ export class BuildingSystem {
       }
     }
     const hour = hourAt(tick);
-    this.visits.start(this.facilityVisits(hour, () => true), tick);
+    // Riders set out first, so that nobody is both out with deliveries and off on an errand.
+    const runs = this.deliverMeals(tick);
+    this.visits.start(runs, tick);
+    const outings = this.facilityVisits(hour, () => true);
+    this.visits.start(outings, tick);
+    const plans = [...runs, ...outings];
+    for (const plan of plans) {
+      const person = this.buildings.get(plan.home)?.people?.find(person => person.slot === plan.slot);
+      if (person?.identity) this.diary.depart(person.identity.id, plan, tick);
+    }
     for (const route of this.commutes) {
       const start = shifts[route.shift].start;
-      if (start <= hour && start > hour - 24 / calendar.ticksPerDay &&
+      if (start <= hour && start > hour - 1 &&
           (!weekendAt(tick) || route.shift === SHOP_SHIFT)) count(route.workId, route.workers);
     }
   }
+  /**
+   * Meals to the door (see Delivery.ts). In the hours of lunch and dinner, those who order in
+   * and want this meal get it from a staffed shop near home, if a rider who lives near the
+   * shop is free. Returns the riders' runs: from their door to the shop and on to the first
+   * customer. A meal counts as eaten the hour it is ordered.
+   */
+  private deliverMeals(tick: number): FacilityVisit[] {
+    this.fed.clear();
+    const day = activityDay(tick);
+    if (this.deliveries.day !== day) this.deliveries = { day, orders: 0, missed: new Set(), riders: new Set() };
+    const hour = hourAt(tick);
+    const lunch = hour >= meals.lunch.from && hour < meals.lunch.until;
+    if (!lunch && !(hour >= meals.dinner.from && hour < meals.dinner.until)) return [];
+    const weekend = weekendAt(tick);
+    /** At home with nothing on: not out, not ill, and not at work or on the way there or back. */
+    const free = (home: number, person: SavedPerson) => {
+      if (this.visits.has(home, person.slot) || this.life.health(person.identity!.id)) return false;
+      const shift = person.job < 0 || this.whoAt(home, person).age >= 65 ? undefined : shiftIndex(this.map.at(person.job) as Zone, person.job);
+      if (shift === undefined || (weekend && shift !== SHOP_SHIFT)) return true;
+      return hour < shifts[shift].start - RUSH_HOURS || hour >= shifts[shift].end + RUSH_HOURS;
+    };
+    const customers: { id: number; home: number; person: SavedPerson }[] = [];
+    const riders: { id: number; home: number; person: SavedPerson; taken?: boolean }[] = [];
+    for (const [id, { home, person }] of this.peopleById) {
+      if (this.map.at(home) !== 'residential') continue;
+      if (eatingOf(this.seed, id) === 'delivery') {
+        if (person.car && (person.money ?? 0) >= delivery.fee && free(home, person) && this.hungerOf(home, person, tick).wantsFood) customers.push({ id, home, person });
+      } else if (ridesFor(this.seed, id, person.car ?? 0) && this.whoAt(home, person).age < 65 && free(home, person) &&
+          this.fatigueOf(home, person, tick) < needs.tired) riders.push({ id, home, person });
+    }
+    if (!customers.length) return [];
+    const shops = new Map<number, number | undefined>();
+    /** The nearest shop to a home that has staff and stands on a road. */
+    const shopNear = (home: number) => {
+      if (shops.has(home)) return shops.get(home);
+      const at = cellAt(home);
+      let best: number | undefined;
+      let far = Infinity;
+      for (let dy = -delivery.shopReach; dy <= delivery.shopReach; dy++) {
+        const span = delivery.shopReach - Math.abs(dy);
+        for (let dx = -span; dx <= span; dx++) {
+          const cell = { x: at.x + dx, y: at.y + dy };
+          if (this.map.get(cell) !== 'commercial' || Math.abs(dx) + Math.abs(dy) >= far) continue;
+          if (!this.buildings.get(indexOf(cell))?.occupants || !this.roadAccess(cell)) continue;
+          best = indexOf(cell);
+          far = Math.abs(dx) + Math.abs(dy);
+        }
+      }
+      shops.set(home, best);
+      return best;
+    };
+    const runs = new Map<number, { rider: (typeof riders)[number]; load: number; visit: FacilityVisit }>();
+    for (const customer of customers) {
+      const shop = shopNear(customer.home);
+      let run = shop === undefined ? undefined : runs.get(shop);
+      if (shop !== undefined && (!run || run.load >= delivery.perRun)) {
+        run = undefined;
+        const at = cellAt(shop);
+        const near = riders.filter(rider => !rider.taken)
+          .map(rider => ({ rider, far: Math.abs(rider.home % MAP_SIZE - at.x) + Math.abs(Math.floor(rider.home / MAP_SIZE) - at.y) }))
+          .filter(entry => entry.far <= delivery.riderReach).sort((a, b) => a.far - b.far || a.rider.id - b.rider.id);
+        for (const { rider } of near.slice(0, 3)) {
+          const door = this.roadAccess(cellAt(rider.home));
+          const there = door && routeToSite(this.map, this.roadGraph, door, at, rider.id);
+          const on = there && routeToSite(this.map, this.roadGraph, there.path.at(-2)!, cellAt(customer.home), rider.id);
+          if (!there || !on || there.path.length + on.path.length > delivery.longest) continue;
+          rider.taken = true;
+          run = { rider, load: 0, visit: { home: rider.home, slot: rider.person.slot, doing: 'delivering', destination: customer.home,
+            path: [cellAt(rider.home), ...there.path.slice(0, -1), ...on.path.slice(1)], reason: 'sidejob' } };
+          runs.set(shop, run);
+          break;
+        }
+      }
+      if (shop === undefined || !run) {
+        // Nobody to bring it: they will go out for it if they can, or make do at home.
+        this.deliveries.missed.add(customer.id * 2 + (lunch ? 0 : 1));
+        continue;
+      }
+      this.deliveries.missed.delete(customer.id * 2 + (lunch ? 0 : 1));
+      run.load++;
+      customer.person.money = (customer.person.money ?? 0) - delivery.fee;
+      if (!customer.person.money) delete customer.person.money;
+      run.rider.person.money = (run.rider.person.money ?? 0) + delivery.fee;
+      this.diary.note(customer.id, 'takeout', shop, tick, 'delivery');
+      this.fed.add(customer.id);
+      this.deliveries.orders++;
+      this.deliveries.riders.add(run.rider.id);
+    }
+    return [...runs.values()].map(run => run.visit);
+  }
+
+  /** Today's meals to the door: how many were brought, how many nobody could bring, and how many people rode. */
+  deliveriesToday() {
+    return { orders: this.deliveries.orders, unfilled: this.deliveries.missed.size, riders: this.deliveries.riders.size };
+  }
+
   /** What nearby parks add to land value, per tile. */
   private readonly green = new Float32Array(MAP_SIZE ** 2);
   readonly roadGraph: RoadGraph;
@@ -446,18 +586,6 @@ export class BuildingSystem {
    * A road tile's flow as a share of its capacity; 0 off the roads. With an hour of the day it
    * counts the shifts travelling at that hour; without, the tile's busiest shift.
    */
-  /**
-   * How full a road is with this share of each shift's commuters on it: one figure from 0 to
-   * 1 per shift, in the order of `shifts`.
-   */
-  congestionOn(cell: Cell, share: readonly number[]): number {
-    const tile = this.map.get(cell);
-    if (!isRoad(tile)) return 0;
-    let flow = 0;
-    this.shiftFlows.forEach((flows, shift) => { if (this.shiftRuns(shift)) flow += (share[shift] ?? 0) * flows[indexOf(cell)]; });
-    return this.crashDelay(cell) ? Math.max(1, congestion(flow, tile)) : congestion(flow, tile);
-  }
-
   congestionAt(cell: Cell, hour?: number): number {
     const tile = this.map.get(cell);
     if (!isRoad(tile)) return 0;
@@ -1521,7 +1649,17 @@ export class BuildingSystem {
     if (this.whoAt(home, person).age >= 65 && ['job-hunting', 'working', 'to-work'].includes(activity)) activity = 'home';
     const health = this.life.health(person.identity!.id);
     if (health && !visit) activity = 'home';
-    return { ...this.describe(home, person), contacts, health,
+    const waiting = this.waitingFor.get(person.identity!.id);
+    return { ...this.describe(home, person), contacts, health, needs: this.needsOf(home, person, this.clock),
+      /** How they eat, and whether they ride with deliveries when free; with what that has earned them today. */
+      eating: eatingOf(this.seed, person.identity!.id),
+      birthday: birthdayOf(this.seed, person.identity!.id) === activityDay(this.clock) % (calendar.daysPerMonth * calendar.monthsPerYear),
+      rider: ridesFor(this.seed, person.identity!.id, person.car ?? 0) && this.whoAt(home, person).age < 65 ?
+        { runs: this.diary.count(person.identity!.id, 'delivering', this.clock) } : undefined,
+      /** The kind of place they are ill and waiting at home to get into, because it is full. */
+      waitingFor: waiting === undefined ? undefined : this.map.at(waiting),
+      activityReason: visit?.reason ? visitReasons[visit.reason] : undefined,
+      activities: this.diary.today(person.identity!.id, this.clock),
       weatherReason: facts.way ? weatherTravel(weatherAt(this.seed, this.clock), person.car ?? 0,
         this.commutes.find(route => route.homeId === home && route.workId === person.job)?.path.length ?? 0,
         facts.way === 'bus' || facts.way === 'metro' ? facts.way : undefined).reason :
@@ -1530,15 +1668,85 @@ export class BuildingSystem {
       doing: activity };
   }
 
+  /** What a resident lacks at a moment (see Needs.ts), read off their day so far. */
+  private needsOf(home: number, person: SavedPerson, tick: number): Needs {
+    const { hunger, wantsFood } = this.hungerOf(home, person, tick);
+    const fatigue = this.fatigueOf(home, person, tick);
+    const social = this.socialOf(home, person, tick);
+    return { hunger, fatigue, social, wantsFood, tired: fatigue >= needs.tired, lonely: social >= needs.lonely };
+  }
+
+  private hungerOf(home: number, person: SavedPerson, tick: number) {
+    const id = person.identity?.id ?? home * 64 + person.slot;
+    const ateOut = person.identity ? this.diary.hoursOf(id, tick, MEALS_OUT, hourAt) : [];
+    return hungerAt(hourAt(tick), mealPlan(this.seed, id, activityDay(tick)), ateOut);
+  }
+
+  private fatigueOf(home: number, person: SavedPerson, tick: number): number {
+    const old = this.whoAt(home, person).age >= 65;
+    const shift = person.job >= 0 && !old ? shiftIndex(this.map.at(person.job) as Zone, person.job) : undefined;
+    const working = shift !== undefined && (!weekendAt(tick) || shift === SHOP_SHIFT);
+    return fatigueAt(hourAt(tick), working ? { start: shifts[shift].start, end: shifts[shift].end,
+      minutes: this.commuteByPair.get(home * MAP_SIZE ** 2 + person.job)?.minutes ?? 0 } : undefined,
+      this.kidsAt(home).length, old,
+      person.identity ? this.diary.count(person.identity.id, 'delivering', tick) * delivery.tiring : 0);
+  }
+
+  private socialOf(home: number, person: SavedPerson, tick: number): number {
+    return socialAt(Math.floor(tick / calendar.ticksPerDay),
+      person.identity ? this.relationships.lastMet(person.identity.id) : undefined, Math.floor(person.came / calendar.ticksPerDay));
+  }
+
   facilityVisits(hour: number, visible: (home: Cell) => boolean) {
-    return planFacilityVisits({ map: this.map, roadGraph: this.roadGraph, clock: this.clock,
+    return planFacilityVisits(this.visitContext(this.clock), hour, visible);
+  }
+
+  private visitContext(tick: number): CivicVisitContext {
+    return { map: this.map, roadGraph: this.roadGraph, clock: tick,
       seed: this.seed, buildings: this.buildings, daycareSeats: this.daycareSeats,
       hasCombo: (cell, combo) => this.hasCombo(cell, combo), kidsAt: home => this.kidsAt(home),
       ageOf: (home, person) => this.whoAt(home, person).age,
       health: person => person.identity ? this.life.health(person.identity.id) : undefined,
       available: (home, slot) => !this.visits.has(home, slot),
+      visited: (person, doing) => !!person.identity && this.diary.has(person.identity.id, doing, tick),
       roadAccess: cell => this.roadAccess(cell),
-    }, hour, visible);
+      needs: { tired: (home, person) => this.fatigueOf(home, person, tick) >= needs.tired,
+        wantsFood: (home, person) => this.hungerOf(home, person, tick).wantsFood,
+        lonely: (home, person) => this.socialOf(home, person, tick) >= needs.lonely,
+        cooks: (_home, person) => !!person.identity && eatingOf(this.seed, person.identity.id) === 'cook' },
+      staysIn: (_home, person) => !!person.identity && this.fed.has(person.identity.id),
+      celebrates: home => this.birthdayAt(home, tick) &&
+        !this.buildings.get(home)?.people?.some(person => person.identity && this.diary.has(person.identity.id, 'cake', tick)),
+      occupancy: site => this.visits.occupancy(site),
+      turnedAway: (site, home, person, waiting) => {
+        const who = person.identity?.id ?? home * 64 + person.slot;
+        if (!this.crowded.has(site)) this.crowded.set(site, new Set());
+        this.crowded.get(site)!.add(who);
+        if (waiting) this.waitingFor.set(who, site);
+      },
+    };
+  }
+
+  /** Whether a grown-up or a child of this home has their birthday today. */
+  private birthdayAt(home: number, tick: number): boolean {
+    const today = activityDay(tick) % (calendar.daysPerMonth * calendar.monthsPerYear);
+    return !!this.buildings.get(home)?.people?.some(person => person.identity && birthdayOf(this.seed, person.identity.id) === today) ||
+      this.life.childrenAt(home, tick).some(child => birthdayOf(this.seed, child.id) === today);
+  }
+
+  private continueVisit(trip: ActiveVisit, departed: number) {
+    if (['clinic', 'hospital', 'referred', 'care', 'delivering'].includes(trip.doing)) return undefined;
+    const building = this.buildings.get(trip.home);
+    const person = building?.people?.find(person => person.slot === trip.slot);
+    if (!building || !person?.identity || this.life.health(person.identity.id)) return undefined;
+    const context = this.visitContext(departed);
+    context.buildings = new Map([[trip.home, building]]);
+    context.available = (_home, slot) => slot === trip.slot;
+    context.visited = (person, doing) => doing === trip.doing || this.diary.has(person.identity!.id, doing, departed);
+    context.origin = () => ({ cell: trip.path.at(-1)!, road: trip.path.at(-2)! });
+    const next = planFacilityVisits(context, hourAt(departed), () => true)[0];
+    if (next) this.diary.depart(person.identity.id, next, departed);
+    return next;
   }
 
   visitorsAt(cell: Cell, _hour?: number, tickProgress = 0) {
@@ -1549,6 +1757,19 @@ export class BuildingSystem {
         const person = this.buildings.get(visit.home)?.people?.find(person => person.slot === visit.slot);
         return { ...visit, name: person ? this.whoAt(visit.home, person).name : '居民' };
       });
+  }
+
+  /**
+   * How full a place is: how many it holds, how many are inside or on their way, and how many
+   * wanted to come this hour and could not. Undefined for places that take everyone.
+   */
+  crowdAt(cell: Cell, tickProgress = 0): { seats: number; busy: number; turnedAway: number } | undefined {
+    const anchor = this.map.anchorOf(cell) ?? cell;
+    const limit = seats[this.map.get(anchor)!];
+    if (!limit) return undefined;
+    const site = indexOf(anchor);
+    // Counted the way the lists of visitors are, so the panel's numbers agree between steps.
+    return { seats: limit, busy: this.visitorsAt(cell, undefined, tickProgress).length, turnedAway: this.crowded.get(site)?.size ?? 0 };
   }
 
   visitorGroupsAt(cell: Cell, tickProgress = 0) {
@@ -2190,6 +2411,9 @@ export class BuildingSystem {
   }
 
   /** Recomputes everything derived after tiles or the set of buildings changed. */
+  /** The layout and the frightened blocks that `covered` and `shore` were last worked out for. */
+  private coveredFor?: { layout: number; scared: Uint8Array };
+
   private refresh(): void {
     this.ensureIdentities();
     this.circles.clear();
@@ -2430,6 +2654,12 @@ export class BuildingSystem {
 
   /** Marks the tiles within reach of each fire station, police station, school and clinic. */
   private coverServices(): void {
+    // What is covered follows from the layout and from which blocks are frightened, and most
+    // steps change neither, so the last answer is kept until one of them does.
+    const scared = this.scared;
+    const last = this.coveredFor;
+    if (last && last.layout === this.map.layoutRevision && last.scared.every((value, id) => value === scared[id])) return;
+    this.coveredFor = { layout: this.map.layoutRevision, scared: Uint8Array.from(scared) };
     for (const service of SERVICES) this.covered[service].fill(0);
     this.shore.fill(0);
     for (let id = 0; id < MAP_SIZE ** 2; id++) {
@@ -2443,13 +2673,13 @@ export class BuildingSystem {
       const radius = water ? landValue.waterfront.radius : services.radius[tile as Service];
       const field = water ? this.shore : this.covered[tile as Service];
       const second = water ? undefined : alsoServes[tile as Service];
-      for (let dy = -radius; dy <= radius; dy++) {
+      const also = second && this.covered[second];
+      for (let dy = Math.max(-radius, -y); dy <= radius && y + dy < MAP_SIZE; dy++) {
         const span = radius - Math.abs(dy);
-        for (let dx = -span; dx <= span; dx++) {
-          const cell = { x: x + dx, y: y + dy };
-          if (this.map.get(cell) === undefined) continue;
-          field[indexOf(cell)] = 1;
-          if (second) this.covered[second][indexOf(cell)] = 1;
+        const row = (y + dy) * MAP_SIZE;
+        for (let cx = Math.max(0, x - span); cx <= x + span && cx < MAP_SIZE; cx++) {
+          field[row + cx] = 1;
+          if (also) also[row + cx] = 1;
         }
       }
     }
@@ -2671,6 +2901,7 @@ export class BuildingSystem {
   private matchJobs(): boolean {
     this.transfers.clear();
     this.commutes.length = 0;
+    this.commuteByPair.clear();
     this.riders = 0;
     this.flows.fill(0);
     for (const flows of this.shiftFlows) flows.fill(0);
@@ -2849,6 +3080,7 @@ export class BuildingSystem {
         }
         this.commutes.push({ homeId: building.id, workId, workers, path, minutes: 0, shift, riders,
           line: riders ? ride!.plan.id : undefined, transfer: riders ? ride!.transfer : undefined, transitMinutes: riders ? ride!.minutes : undefined });
+        this.commuteByPair.set(building.id * MAP_SIZE ** 2 + workId, this.commutes.at(-1)!);
       }
       this.employed.set(building.id, people.filter(person => person.job >= 0).length);
     }
@@ -2886,11 +3118,11 @@ export class BuildingSystem {
       goals: [...this.goalsDone], loans: [...this.loans], tasks: [...this.tasksOn],
       combos: [...this.combosSeen], policies: [...this.policiesOn], challenge: this.challenge && { ...this.challenge },
       dilemma: this.dilemma && { ...this.dilemma }, boosts: this.boosts.map(boost => ({ ...boost })), level: this.level, theme: this.theme,
-      coldStock: [...this.coldStock], marketStock: [...this.marketStock], monthlyVisits: [...this.monthlyVisits], activeVisits: this.visits.save(),
+      coldStock: [...this.coldStock], marketStock: [...this.marketStock], monthlyVisits: [...this.monthlyVisits], activeVisits: this.visits.save(), dailyActivities: this.diary.save(),
       scares: this.scares.map(entry => ({ ...entry })), tasksRest: [...this.tasksRest], nextPersonId: this.nextPersonId, relationships: this.relationships.save(), life: this.life.save() };
   }
 
-  load({ tiles, zones, buildings, funds, rank, taxRate, tick, lines, goals: done, loans, seed, metros, tasks: saved, combos: known, policies: chosen, challenge, spans, dilemma, boosts, level, theme, coldStock, marketStock, monthlyVisits, activeVisits, scares, tasksRest, nextPersonId, relationships, life }: SaveData): void {
+  load({ tiles, zones, buildings, funds, rank, taxRate, tick, lines, goals: done, loans, seed, metros, tasks: saved, combos: known, policies: chosen, challenge, spans, dilemma, boosts, level, theme, coldStock, marketStock, monthlyVisits, activeVisits, dailyActivities, scares, tasksRest, nextPersonId, relationships, life }: SaveData): void {
     this.seed = seed;
     this.nextPersonId = nextPersonId ?? 0;
     this.life.load(life ?? EMPTY_LIFE());
@@ -2919,6 +3151,7 @@ export class BuildingSystem {
     this.events.length = 0;
     this.scares.splice(0, this.scares.length, ...(scares ?? []).map(entry => ({ ...entry })));
     this.visits.load(activeVisits ?? []);
+    this.diary.load(dailyActivities ?? []);
     this.clock = tick;
     this.funds = funds;
     this.rank = rank;

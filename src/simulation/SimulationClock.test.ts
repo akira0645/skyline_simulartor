@@ -7,6 +7,20 @@ function createClock() {
 }
 
 describe('SimulationClock', () => {
+  it.each([0.25, 0.5] as const)('slows the actual simulation at %s× and preserves paused progress', speed => {
+    const clock = createClock();
+    clock.speed = speed;
+    expect(clock.advance(TICK_MS / speed / 2)).toBe(0);
+    expect(clock.tickProgress).toBeCloseTo(0.5);
+    clock.speed = 0;
+    expect(clock.advance(10000)).toBe(0);
+    clock.speed = speed;
+    expect(clock.advance(TICK_MS / speed / 2)).toBe(1);
+    expect(clock.tickProgress).toBe(0);
+    clock.suspended = true;
+    expect(clock.advance(60000)).toBe(1);
+    expect(clock.speed).toBe(speed);
+  });
   it('limits catch-up work and ignores hidden time without changing the selected speed', () => {
     const clock = createClock();
     clock.speed = 4;

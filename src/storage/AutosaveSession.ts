@@ -20,6 +20,15 @@ export class AutosaveSession<T> {
   initialize(): Promise<boolean> {
     return this.initializing ??= this.open();
   }
+  retry(): Promise<boolean> {
+    if (this.status.phase !== 'failed') return this.initialize();
+    this.publish({ phase: 'loading' });
+    return this.initializing = this.open();
+  }
+  /** Called only after another save has been successfully parsed and restored. */
+  resumeAfterRecovery(): void {
+    if (this.status.phase === 'failed') this.publish({ phase: 'ready' });
+  }
   private publish(status: AutosaveStatus): void {
     this.status = status;
     this.changed(status);

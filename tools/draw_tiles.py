@@ -1584,6 +1584,61 @@ def family_clinic():
     return t
 
 
+def corner_shop(kind):
+    """The small shops of everyday life: a bakery, a florist and a cake shop. Each has its
+    goods on the roof as a sign, a striped awning, and its wares in the window."""
+    t = Tile()
+    t.shadow(1, 2, 14, 14)
+    if kind == 'bakery':
+        t.slab(1, 2, 14, 7, '#e2b47c', '#c08a4e', '#8a5a30')
+        t.slab(11, 1, 12, 4, '#c9785a', '#a85a40', '#7a3f2c')      # oven chimney
+        t.rect(4, 4, 8, 5, '#f0c060')                              # a loaf for a sign
+        t.rect(5, 3, 7, 3, '#f7d98a')
+        t.rect(4, 5, 8, 5, '#d99a3c')
+        awning(t, 8, '#8a5a30', '#6b432b')
+        t.rect(1, 10, 14, 14, '#f5e6c4')
+        t.rect(14, 10, 14, 14, '#d6c39c')
+        t.window(2, 10, 8, 12)
+        t.rect(3, 12, 4, 12, '#e8a23c')                            # loaves in the window
+        t.rect(6, 12, 7, 12, '#c98a3a')
+        t.rect(2, 13, 8, 13, '#b98a4a')                            # shelf
+        t.rect(10, 10, 12, 14, '#6b432b')                          # door
+        t.rect(11, 11, 11, 12, GLASS_LIGHT)
+    elif kind == 'florist':
+        t.slab(1, 2, 14, 7, '#8fcf9a', '#5fa873', '#3d7a52')
+        t.slab(4, 3, 10, 6, STEEL_LIGHT, GLASS, GLASS_DARK)        # glasshouse roof
+        t.rect(7, 3, 7, 6, STEEL_LIGHT)
+        awning(t, 8, '#e8799a', '#c25a7c')
+        t.rect(1, 10, 14, 14, '#f4f6f8')
+        t.rect(14, 10, 14, 14, '#cdd3d8')
+        t.window(6, 10, 9, 12)
+        t.rect(11, 10, 13, 14, '#3d7a52')                          # door
+        t.rect(12, 11, 12, 12, GLASS_LIGHT)
+        for x, flower in ((2, '#e5484d'), (4, '#f2c94c')):         # buckets of flowers by the door
+            t.rect(x, 10, x, 10, flower)
+            t.rect(x, 11, x, 12, '#5fa873')
+            t.rect(x, 13, x, 14, STEEL_DARK)
+        for x, flower in ((6, '#e8799a'), (8, '#9a6fd0')):
+            t.rect(x, 13, x, 13, flower)
+            t.rect(x, 14, x, 14, '#5fa873')
+    else:
+        t.slab(1, 2, 14, 7, '#f6b8c8', '#e88aa6', '#b85f7c')
+        t.rect(5, 5, 10, 6, '#fff6ea')                             # a cake for a sign
+        t.rect(6, 3, 9, 4, '#fff6ea')
+        t.rect(5, 5, 10, 5, '#f2c94c')
+        t.rect(7, 2, 8, 2, '#d9423a')
+        awning(t, 8, '#6fc4b0', '#4f9a8d')
+        t.rect(1, 10, 14, 14, '#fff3e0')
+        t.rect(14, 10, 14, 14, '#dccdb4')
+        t.window(2, 10, 7, 12)
+        t.rect(3, 11, 5, 12, '#fff6ea')                            # the cake in the window
+        t.rect(4, 10, 4, 10, '#d9423a')
+        t.rect(2, 13, 7, 13, '#c9a56a')
+        t.rect(10, 10, 12, 14, '#b85f7c')                          # door
+        t.rect(11, 11, 11, 12, GLASS_LIGHT)
+    return t
+
+
 if __name__ == '__main__':
     F = 2 * T
     sheet = Image.new('RGBA', (16 * F, (len(ROWS) + 2 + len(HOME_ROWS) + len(INDUSTRY_ROWS) + 3) * F), (0, 0, 0, 0))
@@ -1630,6 +1685,8 @@ if __name__ == '__main__':
             icon.rect(5, 7, 10, 7, '#e1c589')
         sheet.paste(fine(icon.image), (column * F, civic_row * F))
     sheet.paste(fine(family_clinic().image), (12 * F, civic_row * F))
+    for column, kind in enumerate(('bakery', 'florist', 'cakeshop'), 13):
+        sheet.paste(fine(corner_shop(kind).image), (column * F, civic_row * F))
     for column, kind in enumerate(('community', 'eldercare', 'memorial')):
         sheet.paste(fine(life_building(kind).image), (column * 2 * F, (civic_row + 1) * F))
     sheet.save(OUT)

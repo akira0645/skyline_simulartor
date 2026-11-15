@@ -107,7 +107,7 @@ function oldTown(city: City, avenueEnd: number): Cell[] {
   city.execute({ type: 'SET_ZONE', tiles: shops, zone: 'commercial' });
   city.execute({ type: 'SET_ZONE', tiles: factories, zone: 'industrial' });
   // The small park behind the temple, with the market down the street, makes a temple fair of it.
-  city.execute({ type: 'BUILD_PARK', tiles: [...block(1, 12, 1, 1).filter(({ x }) => ![4, 7, 10].includes(x)),
+  city.execute({ type: 'BUILD_PARK', tiles: [...block(1, 12, 1, 1).filter(({ x }) => ![2, 4, 7, 8, 10, 11].includes(x)),
     { x: 14, y: 4 }, { x: 14, y: 6 }, { x: 12, y: 10 }] });
   fit(city, [
     ['power', powerPlant.x, powerPlant.y], ['water', waterTower.x, waterTower.y], ['power', 15, 9], ['water', 14, 9],
@@ -115,6 +115,8 @@ function oldTown(city: City, avenueEnd: number): Cell[] {
     ['fire', 6, 9], ['police', 7, 9], ['fire', 16, 9], ['police', 17, 9],
     // The schools and the clinic take three plots of the park strip, facing the north street.
     ['school', 4, 1], ['school', 10, 1], ['clinic', 7, 1],
+    // A bakery, a florist and a cake shop among them, a short walk from every home.
+    ['bakery', 2, 1], ['florist', 8, 1], ['cakeshop', 11, 1],
     // A market, a high school, a temple and a cinema with its car park on the south street.
     ['cityhall', 1, 7], ['bank', 2, 7], ['market', 9, 9], ['highschool', 11, 9], ['temple', 12, 9], ['cinema', 13, 9], ['parking', 10, 9],
   ]);

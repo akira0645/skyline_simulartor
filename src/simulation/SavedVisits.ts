@@ -1,12 +1,14 @@
 import { MAP_SIZE, type Cell } from './TileMap';
 import type { ActiveVisit } from './VisitSystem';
+import { visitReasons } from './ActivityDiary';
 
 const count = (value: unknown): value is number => Number.isSafeInteger(value) && (value as number) >= 0;
 const tileId = (value: unknown): value is number => count(value) && value < MAP_SIZE ** 2;
 const doing = new Set(['socializing', 'care', 'remembering', 'school', 'highschool', 'university', 'daycare', 'bank', 'shopping', 'clinic',
   'hospital', 'referred', 'exhibition', 'reading', 'park', 'temple', 'cinema', 'pool', 'ktv',
-  'amusement', 'casino', 'museum', 'stadium', 'nightmarket']);
+  'amusement', 'casino', 'museum', 'stadium', 'nightmarket', 'delivering', 'takeout', 'bakery', 'flowers', 'cake']);
 const invalid = (): never => { throw new Error('存檔資料損壞。'); };
+export const isVisitDoing = (value: unknown): boolean => typeof value === 'string' && doing.has(value);
 function path(value: unknown): Cell[] {
   if (!Array.isArray(value) || value.length < 3 || value.length > MAP_SIZE ** 2) return invalid();
   return value.map(cell => {
@@ -27,9 +29,12 @@ export function parseVisits(value: unknown, tick: number): ActiveVisit[] {
     seen.add(key);
     const transfer = item.transfer === undefined ? undefined : path(item.transfer);
     if (transfer && !tileId(item.transferDestination)) return invalid();
+    if (item.reason !== undefined && !Object.hasOwn(visitReasons, item.reason)) return invalid();
+    if (item.legs !== undefined && (!count(item.legs) || item.legs < 1 || item.legs > 3)) return invalid();
     return { home: item.home, slot: item.slot, destination: item.destination, doing: item.doing,
       started: item.started, arrived: item.arrived, returning: item.returning, path: path(item.path),
-      transfer, transferDestination: transfer ? item.transferDestination : undefined };
+      transfer, transferDestination: transfer ? item.transferDestination : undefined,
+      ...(item.reason !== undefined ? { reason: item.reason } : {}), ...(item.legs !== undefined ? { legs: item.legs } : {}) };
   });
 }
 

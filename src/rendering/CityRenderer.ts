@@ -62,6 +62,11 @@ export class CityRenderer {
   followVisitor?: { home: number; slot: number };
   /** Where the map shows a commuter: settled at home or at work, or on the way to either. */
   tripOf?: (homeId: number, workId: number) => 'home' | 'work' | 'to-work' | 'to-home' | undefined;
+  /**
+   * How full the map shows a road tile just now, in the measure of the traffic view's colours:
+   * up to 0.5 free, up to 1 busy, up to 1.5 jammed, more than that badly jammed.
+   */
+  crowdOn?: (cell: Cell) => number;
 
   constructor(private readonly city: BuildingSystem, private readonly speed: () => number,
     private readonly hour: () => number, private readonly overlay: () => Overlay) {}
@@ -219,22 +224,31 @@ export class CityRenderer {
       if (index % 3 === 0) people.rect(x + 3, y + 4.5, 1, 1.5).fill(0x8a5a3a);
     };
     /**
-     * When the map last showed someone of each shift on the road. The traffic view and the
-     * queues on busy roads go by this, so a road is only shown jammed while people are seen
-     * travelling on it, and a little after, so it does not flicker between two of them.
+     * The traffic view is coloured by the cars the map itself shows, so the two cannot disagree:
+     * `counted` adds up the cars on each road tile in this frame, a car stuck behind another
+     * weighing three, and `crowd` follows it over a couple of seconds so that a tile does not
+     * blink as single cars pass. A street tile has room for four, an avenue for eight.
      */
-    const lastMoved = shifts.map(() => -Infinity);
-    /**
-     * How much of each shift is on the road, 0 to 1. It builds up and dies away over a few
-     * seconds rather than switching, so traffic thickens and thins instead of appearing.
-     */
-    const onRoad = shifts.map(() => 0);
-    const rushNow = (elapsed = 0) => {
-      shifts.forEach((_, index) => {
-        const busy = animationTime - lastMoved[index] < 1500;
-        onRoad[index] = Math.max(0, Math.min(1, onRoad[index] + (busy ? elapsed : -elapsed) / 4000));
-      });
-      return onRoad;
+    const counted = new Float32Array(MAP_SIZE ** 2);
+    const crowd = new Float32Array(MAP_SIZE ** 2);
+    /** The tiles where either figure is above nothing, so the rest need not be gone through. */
+    let crowded = new Set<number>();
+    const settleCrowd = (elapsed: number) => {
+      const share = Math.min(1, elapsed / 2500);
+      const still = new Set<number>();
+      for (const id of crowded) {
+        crowd[id] += (counted[id] - crowd[id]) * share;
+        counted[id] = 0;
+        if (crowd[id] < 0.02) crowd[id] = 0;
+        else still.add(id);
+      }
+      crowded = still;
+    };
+    this.crowdOn = cell => {
+      const tile = map.get(cell);
+      if (!isRoad(tile)) return 0;
+      const load = crowd[cell.y * MAP_SIZE + cell.x] / (tile === 'avenue' ? 8 : 4);
+      return this.city.crashDelay(cell) ? Math.max(1.2, load) : load;
     };
 
     /**
@@ -366,8 +380,6 @@ export class CityRenderer {
           if (driving) park(trip.at);
           continue;
         }
-        // This shift has people on the road, as far as the map shows.
-        lastMoved[shiftIndex(zone, route.workId)] = animationTime;
         const returning = trip.at === 'work';
         const from = trip.at;
         const to = from === 'home' ? 'work' : 'home';
@@ -456,12 +468,20 @@ export class CityRenderer {
           drawCar(spot.x, spot.y, vertical, i, tier);
           seenAt(spot);
           if (inLane) moving.push({ x: tileX, y: tileY, hx, hy, index: i });
+          if (elapsed > 0) {
+            const id = Math.floor(tileY) * MAP_SIZE + Math.floor(tileX);
+            counted[id] += blocked ? 3 : 1;
+            crowded.add(id);
+          }
         }
 
         trip.along = driving ? along + elapsed * speed : walkForward(route.path, returning ? workplace : home, along, elapsed * speed, returning);
         if (trip.along >= steps) trips.set(key, { at: to, wait: 0, count: trip.count });
       }
-      if (elapsed > 0) cars = moving;
+      if (elapsed > 0) {
+        cars = moving;
+        settleCrowd(elapsed);
+      }
       // The cars standing in each car park: up to six, in its bays.
       for (const [lot, count] of lotCars) {
         const left = lot % MAP_SIZE * TILE_SIZE;
@@ -499,7 +519,18 @@ export class CityRenderer {
           0, 'walk', trip.progress, false);
         if (!point) continue;
         const spot = centre(point);
-        drawWalker(spot.x, spot.y, trip.home + trip.slot);
+        if (trip.doing === 'delivering') {
+          // A rider on a scooter, with the box of meals behind the saddle.
+          const next = commuterPosition({ homeId: origin.y * MAP_SIZE + origin.x, workId: dest.y * MAP_SIZE + dest.x,
+            path: trip.path.slice(1, -1) }, 0, 'walk', Math.min(1, trip.progress + 0.02), false) ?? point;
+          const upright = Math.abs(next.y - point.y) > Math.abs(next.x - point.x);
+          drawCar(spot.x, spot.y, upright, trip.home + trip.slot, 1);
+          if (camera.scale >= 0.85) {
+            const back = { x: Math.sign(point.x - next.x) * 4, y: Math.sign(point.y - next.y) * 4 };
+            people.rect(Math.round(spot.x + back.x) - 2, Math.round(spot.y + back.y) - 2, 5, 5).fill(0x25232b)
+              .rect(Math.round(spot.x + back.x) - 1, Math.round(spot.y + back.y) - 1, 3, 3).fill(0x3fbf7f);
+          }
+        } else drawWalker(spot.x, spot.y, trip.home + trip.slot);
         spots.push({ ...spot, homeId: trip.home, slot: trip.slot });
         if (this.followVisitor?.home === trip.home && this.followVisitor.slot === trip.slot) pin = spot;
       }
@@ -771,11 +802,17 @@ export class CityRenderer {
     };
     app.ticker.add(ticker => {
       const speed = this.speed();
-      if (!speed || !this.city.getCommutes().length) return;
+      // Facility outings and life events also animate in towns without commuters.
+      if (!speed) return;
       animationTime += ticker.deltaMS * speed;
       drawPeople(ticker.deltaMS * speed);
-      rushNow(ticker.deltaMS * speed);
       drawEffects();
+      // The traffic colours follow the cars, so they are painted again a few times a second.
+      repaint -= ticker.deltaMS;
+      if (repaint <= 0 && this.overlay() === 'traffic') {
+        repaint = 250;
+        draw();
+      }
     });
     app.start();
 
@@ -790,6 +827,7 @@ export class CityRenderer {
     let lastFocus: typeof this.focus;
     let lastRevision = -1;
     let hasFocusMatches = false;
+    let repaint = 0;
     const draw = () => {
       const focus = this.focus;
       if (focus !== lastFocus || lastRevision !== map.layoutRevision) {
@@ -822,7 +860,7 @@ export class CityRenderer {
           tool : layer,
         range, this.hour(),
         // Routes show while laying out transport, and in the map view for them.
-        routesShown() ? this.city.getLines() : [], this.marks, rushNow(),
+        routesShown() ? this.city.getLines() : [], this.marks, this.crowdOn,
         aim && !drag && tool !== 'inspect' && tool !== 'pan' && tool !== 'line' ?
           { cells: isBig(tool) ? footprint(aim) : [aim], ok: (isBig(tool) ? footprint(aim) : [aim]).every(cell => fits(tool, cell)) } : undefined, hasFocusMatches && tool !== 'park' ? focus : undefined);
       drawPeople();

@@ -1,6 +1,6 @@
 import type { SimulationEngine } from './SimulationEngine';
 
-export type SimulationSpeed = 0 | 1 | 2 | 4;
+export type SimulationSpeed = 0 | 0.25 | 0.5 | 1 | 2 | 4;
 export const TICK_MS = 1000;
 export const MAX_TICKS_PER_POLL = 4;
 export const SUSPEND_GAP_MS = 15000;

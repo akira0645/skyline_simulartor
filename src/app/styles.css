@@ -1,3 +1,15 @@
+/*
+ * How this file is laid out, top to bottom:
+ *   1. Colours and the page            6. Side panel: frame and tabs
+ *   2. Shared pieces (panel, button)   7. Side panel: what goes inside
+ *   3. Where things sit                8. Map views and the build bar
+ *   4. Top bar                         9. Boxes over the map
+ *   5. News line and notices          10. Window sizes
+ * Each rule lives in one place. A new rule goes in its own section, not at the end.
+ */
+
+/* ===== 1. Colours and the page ===== */
+
 /* Palette sampled from the tilesheet so the UI and the map share one set of colours. */
 :root {
   --ink: #1d1f24;
@@ -21,18 +33,9 @@
 
 html, body { height: 100%; margin: 0; overflow: hidden; }
 
-/*
- * The map fills the window and everything else floats over it at a fixed spot, so nothing
- * that changes can push anything else around. Every number keeps the same width whatever
- * its digits.
- */
-.game { position: fixed; inset: 0; font-variant-numeric: tabular-nums; }
+/* ===== 2. Shared pieces ===== */
 
-.viewport { position: absolute; inset: 0; overflow: hidden; background: var(--grass); }
-.viewport canvas { display: block; image-rendering: pixelated; touch-action: none; cursor: crosshair; }
-.viewport[data-tool="inspect"] canvas { cursor: grab; }
-.viewport[data-tool="inspect"] canvas:active { cursor: grabbing; }
-
+/* Every panel that floats over the map. */
 .hud {
   position: absolute;
   box-sizing: border-box;
@@ -63,169 +66,125 @@ button:disabled { opacity: 0.35; cursor: default; }
 
 h2 { margin: 0 0 0.4rem; font-size: 0.9rem; color: var(--sand); }
 .hint { margin: 0; color: var(--steel); font-size: 0.9rem; }
+.tabs { display: flex; gap: 0.25rem; }
 
-/* --- Top bar: money, people, what is missing, the clock, the menu */
+/* ===== 3. Where things sit ===== */
+
+/*
+ * The map fills the window and everything else floats over it at a fixed spot, so nothing
+ * that changes can push anything else around. Every number keeps the same width whatever
+ * its digits.
+ */
+.game { position: fixed; inset: 0; font-variant-numeric: tabular-nums; --top-height: 3.6rem; --below-top: calc(var(--top-height) + 1.2rem);
+  /* The room the side panel takes on the right, and the map-display list on the left. Everything
+     else is placed between the two, so no two panels can sit on top of each other. */
+  --side-width: 21.5rem; --views-width: 6.5rem; --right: calc(var(--side-width) + 0.6rem); }
+.game[data-side-open="false"] { --right: 0rem; }
+.game > [hidden] { display: none; }
+
+.viewport { position: absolute; inset: 0; overflow: hidden; background: var(--grass); }
+.viewport canvas { display: block; image-rendering: pixelated; touch-action: none; cursor: crosshair; }
+.viewport[data-tool="inspect"] canvas { cursor: grab; }
+.viewport[data-tool="inspect"] canvas:active { cursor: grabbing; }
+
+/* Each panel carries its own small handle to fold it away; none floats on its own. */
+.panel-toggle { z-index: 2; padding: 0.25rem 0.5rem; font-size: 0.85rem; }
+/* The side panel's handle hangs on its left edge; with the panel shut it waits in the corner. */
+.panel-toggle-side { top: var(--below-top); right: var(--right); height: 2.2rem; border-right: 0; box-shadow: none; color: var(--steel); }
+.game[data-side-open="false"] > .panel-toggle-side { right: 0.6rem; border-right: 2px solid var(--slate); color: inherit; }
+/* The map-display list opens upward out of its own title. */
+.panel-toggle-views { left: 0.6rem; bottom: 0.6rem; display: flex; justify-content: space-between; align-items: center;
+  width: var(--views-width); height: 2rem; color: var(--steel); }
+
+/* ===== 4. Top bar ===== */
+
+/*
+ * One strip in three parts. Time and its speed on the left, the city's figures in the middle,
+ * the menu on the right. Every figure is built the same way: a small grey label on top, the
+ * value under it, and a short note beside the value.
+ */
 .top {
   top: 0.6rem;
   left: 0.6rem;
   right: 0.6rem;
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas: "clock status menu";
   align-items: center;
-  gap: 0.5rem 1.4rem;
-  height: 3.6rem;
+  height: var(--top-height);
   padding: 0 0.9rem;
   white-space: nowrap;
-  overflow: hidden;
+  border-width: 1px;
 }
-.stat {
-  display: grid;
-  grid-template-columns: auto auto;
-  align-items: baseline;
-  column-gap: 0.6rem;
-}
-.stat > span { grid-row: span 2; align-self: center; color: var(--steel); }
-.stat b { font-size: 1.2rem; font-weight: normal; }
-.stat small { color: var(--steel); }
-.stat small.loss { color: var(--loss); }
-.stat.demand { display: flex; align-items: center; gap: 0.7rem; }
-.stat.demand label { display: flex; align-items: center; gap: 0.35rem; }
-.stat.demand meter { width: 3.5rem; height: 0.7rem; }
-.clock { display: flex; align-items: center; gap: 0.7rem; margin-left: auto; }
-.clock b { width: 12.5rem; font-weight: normal; text-align: right; }
-.clock span, .menu { display: flex; gap: 0.3rem; }
+.clock { grid-area: clock; display: flex; align-items: center; gap: 1rem; }
+.city-status { grid-area: status; display: flex; align-items: center; gap: 1.6rem; min-width: 0; margin-left: 1.2rem; padding-left: 1.2rem;
+  border-left: 1px solid var(--asphalt); }
+.menu { grid-area: menu; display: flex; gap: 0.4rem; }
+.top button { padding: 0.3rem 0.6rem; border-width: 1px; font-size: 0.85rem; min-height: 2rem; }
 
-/* --- A line of guidance or news under the top bar */
+.stat {
+  flex: none;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-areas: "label label" "value note";
+  align-items: baseline;
+  column-gap: 0.45rem;
+  line-height: 1.25;
+}
+.stat > span { grid-area: label; color: var(--steel); font-size: 0.75rem; }
+.stat b { grid-area: value; font-size: 1.1rem; font-weight: normal; }
+.stat small { grid-area: note; color: var(--steel); font-size: 0.8rem; }
+.stat small.loss { color: var(--loss); }
+/* Each figure keeps room for its longest value, so a growing number does not push its neighbours. */
+.stat.when { min-width: 10.5rem; }
+.stat.when small { color: var(--sand); }
+.stat.weather { min-width: 6.5rem; }
+.stat.funds { min-width: 11.5rem; }
+.stat.people { min-width: 11rem; }
+.stat.demand > div { grid-column: 1 / -1; display: flex; align-items: center; gap: 0.7rem; height: 1.4rem; font-size: 0.85rem; }
+.stat.demand label { display: flex; align-items: center; gap: 0.3rem; }
+.stat.demand meter { width: 3rem; height: 0.7rem; }
+
+.speed-controls { display: flex; flex-wrap: nowrap; gap: 0; padding: 2px; border: 1px solid var(--asphalt); background: var(--shadow); }
+.speed-controls button { min-width: 3rem; border-color: transparent; background: transparent; }
+.speed-controls button[aria-pressed="true"] { background: var(--sand); color: var(--ink); border-color: var(--sand); }
+.speed-controls button:hover { border-color: var(--steel); }
+
+/* The seldom-used city actions drop down from the menu button, over whatever is below. */
+.menu-list { top: calc(var(--top-height) + 0.6rem - 1px); right: 0.6rem; z-index: 5; display: grid; gap: 0.3rem; min-width: 9rem; padding: 0.5rem; }
+.menu-list button { text-align: left; white-space: nowrap; }
+
+/* ===== 5. News line and notices ===== */
+
+/* A line of guidance or news under the top bar, centred over the map. */
 .toast {
-  top: 4.8rem;
-  left: 50%;
-  transform: translateX(-50%);
+  top: var(--below-top);
+  left: 0.6rem;
+  right: calc(var(--right) + 5.5rem);
   display: flex;
   align-items: flex-start;
   gap: 0.8rem;
-  width: min(46rem, calc(100% - 40rem));
-  min-width: 20rem;
+  width: fit-content;
+  max-width: 46rem;
+  margin-inline: auto;
   padding: 0.45rem 0.6rem 0.45rem 0.9rem;
   border-left: 5px solid var(--sand);
   line-height: 1.35;
 }
 .toast[hidden] { display: none; }
+/* A decision card on the left pushes the line of news clear of it. */
+.game:has(> .card) > .toast { left: 18.8rem; }
 .toast span { flex: 1; }
 .toast button { flex: none; padding: 0 0.4rem; border-width: 1px; background: transparent; }
 
-/* --- Side panel with tabs */
-.side {
-  top: 4.8rem;
-  right: 0.6rem;
-  width: 17.5rem;
-  max-height: calc(100% - 13.5rem);
-  padding: 0 0.7rem 0.7rem;
-  overflow-y: auto;
-  scrollbar-width: thin;
-}
-.tabs { display: flex; gap: 0.25rem; }
-.side .tabs {
-  position: sticky;
-  top: 0;
-  margin: 0 -0.7rem 0.7rem;
-  padding: 0.5rem 0.7rem 0;
-  background: var(--ink);
-  border-bottom: 2px solid var(--slate);
-}
-.side .tabs button { flex: 1; padding: 0.3rem 0; border-bottom: 0; }
-.side .tabs i {
-  display: inline-block;
-  margin-left: 0.35rem;
-  padding: 0 0.3rem;
-  font-style: normal;
-  font-size: 0.8rem;
-  color: var(--ink);
-  background: var(--loss);
-}
-.side section { margin-bottom: 0.9rem; }
-.side section:last-child { margin-bottom: 0; }
-/* Labels get a fixed column so values start at the same place everywhere. */
-.side dl { display: grid; grid-template-columns: 4.5rem 1fr; gap: 0.3rem 0.6rem; margin: 0; }
-.side dt { color: var(--steel); }
-.side dd { margin: 0; }
-.side ul { margin: 0; padding-left: 1.1rem; }
-.side li { margin: 0.25rem 0; }
-.side .row { display: flex; flex-wrap: wrap; gap: 0.3rem; }
-.tax { display: flex; align-items: center; gap: 0.4rem; }
-.tax button { width: 1.5rem; height: 1.5rem; padding: 0; line-height: 1; border-width: 1px; background: transparent; }
+.load-shield { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; background: #17252ee8; color: white; }
+.save-warning { position: absolute; left: 0.6rem; right: calc(var(--right) + 5.5rem); top: var(--below-top); z-index: 100; padding: 0.5rem 0.9rem; color: #fff4dc; background: #743c18; border: 2px solid var(--loss); }
+.save-warning button { margin-left: 0.6rem; }
 
-/* --- Map views, bottom left */
-.views {
-  left: 0.6rem;
-  bottom: 0.6rem;
-  display: grid;
-  gap: 0.25rem;
-  width: 6.5rem;
-  padding: 0.5rem;
-}
-.views span { color: var(--steel); font-size: 0.85rem; }
-.views button { padding: 0.15rem 0; }
-
-/* --- Build bar, bottom centre: a tray of tools above the tabs that choose the tray */
-.build {
-  left: 50%;
-  bottom: 0.6rem;
-  transform: translateX(-50%);
-  padding: 0.5rem;
-}
-.tray { display: flex; justify-content: center; gap: 0.35rem; height: 5.6rem; margin-bottom: 0.4rem; }
-.tray button {
-  display: grid;
-  justify-items: center;
-  align-content: center;
-  gap: 0.1rem;
-  width: 5.2rem;
-  padding: 0.2rem;
-  background: var(--ink);
-}
-.tray button[aria-pressed="true"] { background: var(--sand); }
-.tray button:disabled { opacity: 0.55; cursor: default; }
-.tray button:disabled i { filter: grayscale(1); }
-.side h2 + .hint { margin-bottom: 0.4rem; }
-.tray small { color: var(--steel); }
-.tray button[aria-pressed="true"] small { color: inherit; }
-/* Tool pictures are tiles of city.png at twice their size; the few without one are drawn here. */
-.tray i {
-  position: relative;
-  width: 32px;
-  height: 32px;
-  background-size: 512px 192px;
-  image-rendering: pixelated;
-}
-[data-tool="avenue"] i::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 14px;
-  height: 4px;
-  background: #f2c94c;
-}
-[data-tool="park"] i { background: #6fb565; box-shadow: inset 0 0 0 4px #d9cfa8, inset 0 0 0 10px #4f9a55; }
-[data-tool="demolish"] i { background: var(--grass); box-shadow: inset 0 0 0 3px var(--shadow); }
-[data-tool="demolish"] i::before, [data-tool="demolish"] i::after {
-  content: "";
-  position: absolute;
-  left: 14px;
-  top: 5px;
-  width: 4px;
-  height: 22px;
-  background: var(--loss);
-  transform: rotate(45deg);
-}
-[data-tool="demolish"] i::after { transform: rotate(-45deg); }
-.build .tabs { justify-content: center; }
-.build .tabs button { width: 4.6rem; padding: 0.3rem 0; }
-.build .tabs .look { margin-right: 0.8rem; }
-
-/* --- The developer's readout, tucked in the corner */
+/* The developer's readout, tucked in the corner. */
 .dev {
   position: absolute;
-  right: 0.7rem;
+  right: calc(var(--right) + 0.7rem);
   bottom: 0.4rem;
   display: flex;
   gap: 0.8rem;
@@ -237,81 +196,57 @@ h2 { margin: 0 0 0.4rem; font-size: 0.9rem; color: var(--sand); }
 .dev button { padding: 0; border: 0; background: transparent; text-decoration: underline; }
 .dev button[aria-pressed="true"] { color: var(--sand); background: transparent; }
 
-/* Narrow windows: drop the notes under the figures and let the menu shrink. */
-@media (max-width: 80rem) {
-  .stat small { display: none; }
-  .clock b { width: auto; }
-  .toast { width: calc(100% - 26rem); left: 0.6rem; transform: none; }
+/* ===== 6. Side panel: frame and tabs ===== */
+
+/* From under the top bar to the bottom of the window; the tabs stay put and the content scrolls. */
+.side {
+  top: var(--below-top);
+  right: 0.6rem;
+  bottom: 0.6rem;
+  width: var(--side-width);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
+.side > .tabs { flex: none; padding: 0.5rem 0.7rem 0; background: var(--ink); border-bottom: 2px solid var(--slate); overflow-x: auto; }
+.side .tabs button { flex: 1; padding: 0.3rem 0; border-bottom: 0; font-size: 0.78rem; white-space: nowrap; }
+/* The count of things wanting attention, beside a tab's name. */
+.side .tabs i {
+  display: inline-block;
+  margin-left: 0.2rem;
+  padding: 0 0.2rem;
+  font-style: normal;
+  font-size: 0.75rem;
+  color: var(--ink);
+  background: var(--loss);
+}
+.side-content { min-height: 0; overflow-y: auto; padding: 0.7rem; scrollbar-width: thin; }
 
-/* The build tray keeps the width of its widest tab, so switching tabs does not resize the bar. */
-.tray { min-width: 22rem; }
+/* ===== 7. Side panel: what goes inside ===== */
 
-/* --- Trend charts in the side panel */
-.trend h2 { display: flex; justify-content: space-between; }
-.trend h2 span { color: var(--paper); font-weight: normal; }
-.trend svg { display: block; width: 100%; height: auto; overflow: visible; touch-action: none; }
-.trend .grid { stroke: var(--asphalt); stroke-width: 1; }
-.trend .line { fill: none; stroke: var(--sand); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
-.trend .cross { stroke: var(--steel); stroke-width: 1; }
-.trend .dot { fill: var(--sand); stroke: var(--ink); stroke-width: 2; }
-.trend .scale { display: flex; justify-content: space-between; margin: 0.2rem 0 0; font-size: 0.8rem; color: var(--steel); }
-
-/* --- Lines tab: one block per bus or metro line */
-.side .tabs button { font-size: 0.9rem; }
-.side { width: 19rem; }
-.line { padding-bottom: 0.7rem; border-bottom: 1px solid var(--asphalt); }
-.line h2 { display: flex; align-items: center; gap: 0.5rem; }
-.line h2 i { width: 0.9rem; height: 0.9rem; border: 2px solid var(--shadow); }
-.line h2 button { margin-left: auto; padding: 0 0.4rem; border-width: 1px; background: transparent; }
-.line dl { margin-bottom: 0.5rem; }
-.line .full { color: var(--loss); }
-
-/* Room for one more button in the top bar and one more tab in the side panel. */
-.top { gap: 0.5rem 1rem; padding: 0 0.7rem; }
-.top button { padding: 0.25rem 0.5rem; }
-.clock { gap: 0.5rem; }
-.clock b { width: 11.5rem; }
-.stat.demand meter { width: 3rem; }
-.side .tabs button { font-size: 0.85rem; white-space: nowrap; padding: 0.3rem 0; }
-.side .tabs i { margin-left: 0.2rem; padding: 0 0.2rem; font-size: 0.75rem; }
-
-/* The sheet of tiles grew two rows taller for the two-by-two buildings. */
-.tray i { background-size: 512px auto; }
-
-/* --- People in a home, goals, and the bankruptcy notice */
+/* --- Cards: each block of the panel, with its label on a bar */
+.side section { margin-bottom: 0.6rem; padding: 0 0.5rem 0.5rem; background: rgb(16 17 20 / 0.45); border: 1px solid var(--asphalt); }
+.side section:last-child { margin-bottom: 0; }
+.side section > h2:first-child, .side section > .back + h2 { margin: 0 -0.5rem 0.45rem; padding: 0.15rem 0.5rem; background: var(--asphalt);
+  color: var(--sand); font-size: 0.85rem; letter-spacing: 0.08em; }
 .side h2.sub { margin-top: 0.8rem; }
-.side .people { padding: 0; list-style: none; }
-.side .people li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 0.5rem; margin: 0 0 0.35rem; }
-.side .people small { flex-basis: 100%; color: var(--steel); font-size: 0.8rem; }
-.side .people li { cursor: pointer; padding: 0.1rem 0.2rem; }
-.side .people li:hover, .side .people li:focus-visible { background: var(--ink); }
-.side .people b { font-weight: normal; text-decoration: underline dotted; }
-/* One resident up close. */
-.side .person .back { margin: 0 0 0.5rem; padding: 0.1rem 0.4rem; }
-.side .person .dots { color: var(--sand); letter-spacing: 0.1em; }
-.side .thoughts { padding: 0; list-style: none; }
-.side .thoughts li { margin: 0 0 0.35rem; }
-.side .thoughts li.bad { color: #f0a08a; }
-.side .people span { color: var(--steel); font-size: 0.85rem; }
-.side .people i { margin-left: auto; padding: 0 0.3rem; font-style: normal; font-size: 0.8rem; color: var(--ink); background: var(--sand); }
-.side .goals { padding: 0; list-style: none; }
-.side .goals li { display: grid; gap: 0.1rem; margin: 0 0 0.6rem; }
-.side .goals b { font-weight: normal; }
-.side .goals span { color: var(--steel); font-size: 0.85rem; }
-.side .goals .done b { color: var(--residential); }
-.side .full { color: var(--loss); }
+.side h2 + .hint { margin-bottom: 0.4rem; }
+.side .hint.count { margin-bottom: 0.6rem; }
+.side .timed { border-color: var(--loss); }
+.side .timed > h2:first-child { background: #55302d; }
+
+/* --- Label and value rows. Labels get a fixed column, four characters wide, so values start
+       at the same place everywhere. */
+.side dl { display: grid; grid-template-columns: 3.4rem 1fr; gap: 0.3rem 0.4rem; align-items: start; margin: 0; }
+.side dt { color: var(--steel); font-size: 0.85rem; line-height: 1.55; white-space: nowrap; }
+.side dd { margin: 0; }
+.side ul { margin: 0; padding-left: 1.1rem; }
+.side li { margin: 0.25rem 0; }
+.side .row { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+/* A number with a minus and a plus button beside it. */
+.tax { display: flex; align-items: center; gap: 0.4rem; }
+.tax button { width: 1.5rem; height: 1.5rem; padding: 0; line-height: 1; border-width: 1px; background: transparent; }
 .tax button.wide { width: auto; padding: 0 0.5rem; }
-.over {
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: min(26rem, calc(100% - 2rem));
-  padding: 1rem 1.2rem;
-  border-color: var(--loss);
-}
-.over p { margin: 0 0 0.9rem; line-height: 1.5; }
-.over .row { display: flex; gap: 0.4rem; }
 
 /* --- Tags: a fact in a few characters, with its number set off beside it */
 .tags { display: flex; flex-wrap: wrap; gap: 0.25rem; align-items: center; align-content: flex-start; }
@@ -327,19 +262,15 @@ button.tag[aria-pressed="true"] { background: var(--sand); color: var(--ink); }
 button.tag[aria-pressed="true"] b { color: var(--ink); }
 /* Lists whose length changes keep room for two rows, so what is under them stays put. */
 .tags.two { min-height: 3.1rem; }
-.side .people small.tags { flex-basis: 100%; margin-top: 0.15rem; }
-.side .people small.tags .tag { font-size: 0.75rem; }
 /* The sentence behind the picked tag; it keeps its lines so nothing below jumps. */
 .side .said { min-height: 3.9em; margin: 0.4rem 0 0; font-size: 0.9rem; line-height: 1.3; color: var(--paper); }
 
-/* --- The side panel as a set of cards, each with a label on a bar */
-.side section { margin-bottom: 0.6rem; padding: 0 0.5rem 0.5rem; background: rgb(16 17 20 / 0.45); border: 1px solid var(--asphalt); }
-.side section > h2:first-child, .side section > .back + h2 { margin: 0 -0.5rem 0.45rem; padding: 0.15rem 0.5rem; background: var(--asphalt);
-  color: var(--sand); font-size: 0.85rem; letter-spacing: 0.08em; }
-.side section > .back { margin-top: 0.5rem; }
-.side dl { grid-template-columns: 3.4rem 1fr; gap: 0.3rem 0.4rem; align-items: start; }
-.side dt { font-size: 0.85rem; line-height: 1.55; }
-.side .visitor-label { white-space: nowrap; }
+/* A button that moves the map, set apart from the tags beside it. */
+.side .go { display: block; margin-top: 0.4rem; padding: 0.1rem 0.6rem; font-size: 0.85rem; color: var(--ink); background: #ffe14d;
+  border: 2px solid var(--ink); box-shadow: 2px 2px 0 var(--shadow); }
+.side .go:hover { background: #fff0a0; }
+
+/* --- A building: who is using it and who is on the way */
 .visitor-group { min-width: 0; }
 .visitor-details summary {
   display: flex; align-items: center; gap: 0.4rem;
@@ -362,15 +293,171 @@ button.tag[aria-pressed="true"] b { color: var(--ink); }
 }
 .visitor-names .tag { min-width: 0; justify-content: center; white-space: normal; overflow-wrap: anywhere; }
 .visitor-empty { display: inline-block; padding: 0.2rem 0; color: var(--steel); font-size: 0.85rem; white-space: nowrap; }
+
+/* --- The people of a home or a workplace, one row each */
+.side .people { padding: 0; list-style: none; }
+.side .people li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 0.5rem; margin: 0 0 0.35rem; padding: 0.1rem 0.2rem; cursor: pointer; }
+.side .people li:hover, .side .people li:focus-visible { background: var(--ink); }
+.side .people b { font-weight: normal; text-decoration: underline dotted; }
+.side .people span { color: var(--steel); font-size: 0.85rem; }
+.side .people i { margin-left: auto; padding: 0 0.3rem; font-style: normal; font-size: 0.8rem; color: var(--ink); background: var(--sand); }
+.side .people small { flex-basis: 100%; color: var(--steel); font-size: 0.8rem; }
+.side .people small.tags { flex-basis: 100%; margin-top: 0.15rem; }
+.side .people small.tags .tag { font-size: 0.75rem; }
+
+/* --- One resident up close */
+/* How they are: a bar per need, full when all is well, with the word for it in a fixed column. */
+.side .meters { margin-bottom: 0.5rem; }
+.meter { display: grid; grid-template-columns: 1fr 6.5rem; gap: 0.5rem; align-items: center; min-height: 1.3rem; }
+.meter .bar { height: 0.55rem; background: var(--ink); box-shadow: inset 0 0 0 1px var(--asphalt); }
+.meter .bar i { display: block; height: 100%; background: #f2d04b; }
+.meter .bar i.good { background: #4fc46b; }
+.meter .bar i.bad { background: var(--loss); }
+.meter .word { font-size: 0.85rem; white-space: nowrap; }
+.meter .word.bad { color: var(--loss); }
+.side .person dd small { display: block; color: var(--steel); font-size: 0.8rem; }
+.side .person .back { margin: 0 0 0.5rem; padding: 0.1rem 0.4rem; }
+.side .person > .tags { margin-bottom: 0.45rem; }
+.side .activity-diary { list-style: none; padding: 0; margin: 0; }
+.activity-diary li { display: flex; gap: 0.5rem; padding: 0.35rem 0; border-bottom: 1px solid var(--asphalt); font-size: 0.85rem; }
+.activity-diary time { flex: none; color: var(--sand); font-variant-numeric: tabular-nums; }
+.activity-diary small { display: block; color: var(--steel); line-height: 1.5; }
+
+/* --- City tab: trend charts */
+.trend h2 { display: flex; justify-content: space-between; }
+.trend h2 span { color: var(--paper); font-weight: normal; }
+.trend svg { display: block; width: 100%; height: auto; overflow: visible; touch-action: none; }
+.trend .grid { stroke: var(--asphalt); stroke-width: 1; }
+.trend .line { fill: none; stroke: var(--sand); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.trend .cross { stroke: var(--steel); stroke-width: 1; }
+.trend .dot { fill: var(--sand); stroke: var(--ink); stroke-width: 2; }
+.trend .scale { display: flex; justify-content: space-between; margin: 0.2rem 0 0; font-size: 0.8rem; color: var(--steel); }
+
+/* --- Lines tab: one card per bus or metro line */
+.line h2 { display: flex; align-items: center; gap: 0.5rem; }
+.line h2 i { width: 0.9rem; height: 0.9rem; border: 2px solid var(--shadow); }
+.line h2 button { margin-left: auto; padding: 0 0.4rem; border-width: 1px; background: transparent; }
+.line dl { margin-bottom: 0.5rem; }
+
+/* --- Goals and handbook: achievements already won fade and sink to the bottom */
+.side .goals { padding: 0; list-style: none; }
+.side .goals li { display: grid; gap: 0.1rem; margin: 0 0 0.6rem; padding-bottom: 0.5rem; border-bottom: 1px solid var(--asphalt); }
+.side .goals b { font-weight: normal; }
+.side .goals span { color: var(--steel); font-size: 0.85rem; }
+.side .goals .done { opacity: 0.55; }
 .side .goals .done b { color: #7ed492; }
 
-/* --- The clock: the date over the day and the time, at a width that fits any date */
-.clock .when { display: grid; width: 8.6rem; text-align: right; line-height: 1.2; }
-.clock .when b { width: auto; font-size: 0.95rem; }
-.clock .when small { color: var(--sand); }
-.top { overflow: visible; }
-@media (max-width: 86rem) { .stat.demand label { font-size: 0; gap: 0; } .stat.demand meter { width: 2.2rem; } }
-@media (max-width: 72rem) { .stat.demand { display: none; } }
+/* --- The log: date, what happened, and a button to find it, in three steady columns */
+.side .log { list-style: none; padding: 0; margin: 0; }
+.side .log li { display: grid; grid-template-columns: 4.6rem 1fr auto; align-items: start; gap: 0.5rem; margin: 0; padding: 0.4rem 0.1rem;
+  border-top: 1px solid var(--asphalt); font-size: 0.9rem; line-height: 1.4; }
+.side .log li:first-child, .side .log li.same { border-top: 0; }
+.side .log li.same { padding-top: 0; }
+.side .log time { color: var(--sand); font-size: 0.85rem; white-space: nowrap; }
+.side .log .go { margin: 0; padding: 0 0.4rem; font-size: 0.8rem; white-space: nowrap; }
+
+/* ===== 8. Map views and the build bar ===== */
+
+/* --- Map views, bottom left: the list sits on top of its own title */
+.views {
+  left: 0.6rem;
+  bottom: calc(2.6rem - 2px);
+  display: grid;
+  gap: 0.25rem;
+  width: var(--views-width);
+  padding: 0.5rem;
+}
+.views button { padding: 0.15rem 0; }
+
+/* --- Build bar, bottom centre: a tray of tools above the tabs that choose the tray. It sits
+       between the map views on the left and the side panel on the right. */
+.build {
+  left: calc(var(--views-width) + 1.2rem);
+  right: calc(var(--right) + var(--views-width) + 1.2rem);
+  bottom: 0.6rem;
+  width: fit-content;
+  margin-inline: auto;
+  padding: 0.5rem;
+}
+.build .tabs { flex-wrap: wrap; justify-content: center; }
+.build .tabs button { flex: none; padding: 0.3rem 0.7rem; white-space: nowrap; }
+.build .tabs .remove { margin-right: 0.6rem; }
+.build .tabs .fold { margin-left: 0.6rem; padding-inline: 0.5rem; color: var(--steel); }
+
+.tray { display: flex; justify-content: safe center; gap: 0.35rem; height: 5.6rem; margin-bottom: 0.4rem; overflow-x: auto; scrollbar-width: thin; }
+.tray[hidden] { display: none; }
+.tray button {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 0.1rem;
+  flex: none;
+  width: 4.7rem;
+  padding: 0.2rem;
+  white-space: nowrap;
+  background: var(--ink);
+}
+.tray button[aria-pressed="true"] { background: var(--sand); }
+.tray button:disabled { opacity: 0.55; cursor: default; }
+.tray button:disabled i { filter: grayscale(1); }
+.tray small { color: var(--steel); }
+.tray button[aria-pressed="true"] small { color: inherit; }
+
+/* --- Tool pictures: tiles of city.png at twice their size. The few drawn here by hand are
+       what shows when the sheet has no tile for a tool. */
+.tray i {
+  position: relative;
+  width: 32px;
+  height: 32px;
+  background-size: 512px auto;
+  image-rendering: pixelated;
+}
+[data-tool="avenue"] i::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 14px;
+  height: 4px;
+  background: #f2c94c;
+}
+[data-tool="park"] i { background: #6fb565; background-size: 512px auto; box-shadow: inset 0 0 0 4px #d9cfa8, inset 0 0 0 10px #4f9a55; }
+[data-tool="demolish"] i { background: var(--grass); background-size: 512px auto; box-shadow: inset 0 0 0 3px var(--shadow); }
+[data-tool="demolish"] i::before, [data-tool="demolish"] i::after {
+  content: "";
+  position: absolute;
+  left: 14px;
+  top: 5px;
+  width: 4px;
+  height: 22px;
+  background: var(--loss);
+  transform: rotate(45deg);
+}
+[data-tool="demolish"] i::after { transform: rotate(-45deg); }
+[data-tool="farm"] i { background: repeating-linear-gradient(#8a6a44 0 4px, #9ccc5a 4px 8px); box-shadow: inset 0 0 0 2px #6e5234; }
+[data-tool="viaduct"] i { background: linear-gradient(#0000 0 8px, #d6dbe6 8px 10px, #8d9199 10px 22px, #d6dbe6 22px 24px, #0000 24px), var(--grass); }
+[data-tool="viaduct"] i::after { content: ""; position: absolute; left: 6px; right: 6px; top: 15px; height: 2px;
+  background: repeating-linear-gradient(90deg, #f2c94c 0 6px, #0000 6px 10px); }
+[data-tool="gas"] i { background: linear-gradient(#0000 0 6px, #e5484d 6px 13px, #0000 13px), linear-gradient(90deg, #0000 0 5px, #d6dbe6 5px 7px, #0000 7px 24px, #d6dbe6 24px 26px, #0000 26px), #55575b;
+  box-shadow: inset 0 0 0 2px #84878c; }
+[data-tool="square"] i { background: repeating-linear-gradient(#b9b09e 0 4px, #d2c6ae 4px 6px); box-shadow: inset 0 0 0 4px #667f59; }
+[data-tool="daycare"] i { background: linear-gradient(#bb8247 0 9px, #eed4a5 9px 25px, #648355 25px); }
+[data-tool="recycling"] i { background: repeating-linear-gradient(90deg, #466757 0 3px, #75a777 3px 9px, #669baa 9px 15px, #c2a064 15px 21px); box-shadow: inset 0 7px #497c63, inset 0 -6px #424a48; }
+[data-tool="workshop"] i { background: repeating-linear-gradient(#818481 0 2px, #b9b8a7 2px 4px); box-shadow: inset 0 9px #80614f, inset 0 -5px #424a48, inset 6px 0 #424a48, inset -6px 0 #424a48; }
+
+/* ===== 9. Boxes over the map ===== */
+
+/* --- A box in the middle of the window; red-edged by itself, for bankruptcy */
+.over {
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(26rem, calc(100% - 2rem));
+  padding: 1rem 1.2rem;
+  border-color: var(--loss);
+}
+.over p { margin: 0 0 0.9rem; line-height: 1.5; }
+.over .row { display: flex; gap: 0.4rem; }
 
 /* --- Choosing a ready-made city */
 .over.pick { border-color: var(--sand); width: min(34rem, calc(100% - 2rem)); }
@@ -378,34 +465,6 @@ button.tag[aria-pressed="true"] b { color: var(--ink); }
 .pick .cards button { display: grid; gap: 0.3rem; align-content: start; padding: 0.6rem; text-align: left; background: var(--ink); }
 .pick .cards b { font-weight: normal; font-size: 1.1rem; color: var(--sand); }
 .pick .cards span { color: var(--steel); }
-[data-tool="farm"] i { background: repeating-linear-gradient(#8a6a44 0 4px, #9ccc5a 4px 8px); box-shadow: inset 0 0 0 2px #6e5234; }
-/* Wide enough for three tags in a row. */
-.side .person > .tags { margin-bottom: 0.45rem; }
-.side { width: 21.5rem; }
-
-/* Six tabs; achievements already won fade and sink to the bottom. */
-.side .tabs button { font-size: 0.8rem; }
-.side .goals .done { opacity: 0.55; }
-.side .goals li { padding-bottom: 0.5rem; border-bottom: 1px solid var(--asphalt); }
-.side .tabs button { font-size: 0.78rem; }
-.side .hint.count { margin-bottom: 0.6rem; }
-
-/* A button that moves the map, set apart from the tags beside it. */
-.side .go { display: block; margin-top: 0.4rem; padding: 0.1rem 0.6rem; font-size: 0.85rem; color: var(--ink); background: #ffe14d;
-  border: 2px solid var(--ink); box-shadow: 2px 2px 0 var(--shadow); }
-.side .go:hover { background: #fff0a0; }
-.side .timed { border-color: var(--loss); }
-.side .timed > h2:first-child { background: #55302d; }
-.build .tabs button { width: 4.2rem; }
-
-/* --- A decision that has come up: a card on the left, out of the way of the map's middle */
-.card { top: 4.8rem; left: 0.6rem; width: 17rem; padding: 0 0.6rem 0.6rem; border-color: var(--sand); }
-.card h2 { display: flex; justify-content: space-between; margin: 0 -0.6rem 0.5rem; padding: 0.2rem 0.6rem; background: var(--sand); color: var(--ink); }
-.card h2 small { font-weight: normal; }
-.card p { margin: 0 0 0.5rem; }
-.card button { display: grid; gap: 0.1rem; width: 100%; margin-top: 0.3rem; padding: 0.3rem 0.5rem; text-align: left; background: var(--ink); }
-.card button b { font-weight: normal; color: var(--sand); }
-.card button span { font-size: 0.85rem; color: var(--steel); }
 
 /* --- The list of saves */
 .over.files { border-color: var(--sand); width: min(40rem, calc(100% - 2rem)); }
@@ -416,56 +475,48 @@ button.tag[aria-pressed="true"] b { color: var(--ink); }
 .files li b { font-weight: normal; color: var(--sand); }
 .files .row { display: flex; gap: 0.25rem; }
 .files .row button { padding: 0.1rem 0.5rem; }
-[data-tool="viaduct"] i { background: linear-gradient(#0000 0 8px, #d6dbe6 8px 10px, #8d9199 10px 22px, #d6dbe6 22px 24px, #0000 24px), var(--grass); }
-[data-tool="viaduct"] i::after { content: ""; position: absolute; left: 6px; right: 6px; top: 15px; height: 2px;
-  background: repeating-linear-gradient(90deg, #f2c94c 0 6px, #0000 6px 10px); }
-[data-tool="gas"] i { background: linear-gradient(#0000 0 6px, #e5484d 6px 13px, #0000 13px), linear-gradient(90deg, #0000 0 5px, #d6dbe6 5px 7px, #0000 7px 24px, #d6dbe6 24px 26px, #0000 26px), #55575b;
-  box-shadow: inset 0 0 0 2px #84878c; }
 
-/* Keep the map clear of the data panel on wide screens. */
+/* --- A decision that has come up: a card on the left, out of the way of the map's middle */
+.card { top: var(--below-top); left: 0.6rem; width: 17rem; padding: 0 0.6rem 0.6rem; border-color: var(--sand); }
+.card h2 { display: flex; justify-content: space-between; margin: 0 -0.6rem 0.5rem; padding: 0.2rem 0.6rem; background: var(--sand); color: var(--ink); }
+.card h2 small { font-weight: normal; }
+.card p { margin: 0 0 0.5rem; }
+.card button { display: grid; gap: 0.1rem; width: 100%; margin-top: 0.3rem; padding: 0.3rem 0.5rem; text-align: left; background: var(--ink); }
+.card button b { font-weight: normal; color: var(--sand); }
+.card button span { font-size: 0.85rem; color: var(--steel); }
+
+/* ===== 10. Window sizes ===== */
+
+/* Wide and short enough: the map stops at the side panel instead of running under it. */
 @media (min-width: 64rem) and (min-aspect-ratio: 16/9) {
-  .viewport { right: 22.7rem; }
+  .viewport { right: var(--right); }
 }
-
-/* Keep all categories available when the build tray outgrows its viewport. */
-.build { max-width: calc(100% - 1.2rem); }
-.build .tray, .build .tabs { min-width: 0; justify-content: safe center; overflow-x: auto; }
-.build .tray button, .build .tabs button { flex: 0 0 auto; white-space: nowrap; }
-.build .tabs .look { margin-right: 0; }
-.build .tabs .remove { margin-right: 0.5rem; }
-
-.game > [hidden] { display: none; }
-.panel-toggle { z-index: 2; padding: 0.25rem 0.5rem; }
-.panel-toggle-side { right: 0.6rem; top: 4.25rem; }
-.side { top: 6.35rem; max-height: calc(100% - 15rem); }
-.panel-toggle-views { left: 0.6rem; bottom: 0.6rem; }
-.views { bottom: 2.8rem; }
-.panel-toggle-build { left: 50%; bottom: 0.6rem; transform: translateX(-50%); }
-.build { bottom: 2.8rem; }
-.game[data-side-open="false"] > .viewport { right: 0; }
-
-.game > .side:not([hidden]) {
-  display: flex;
-  flex-direction: column;
-  padding: 0;
-  overflow: hidden;
+/* Not wide enough for one strip: time and menu stay on top, the figures take a row of their own. */
+@media (max-width: 88rem) {
+  .game { --top-height: 6.4rem; }
+  .top { grid-template-columns: 1fr auto; grid-template-areas: "clock menu" "status status"; grid-template-rows: 1fr 1fr; }
+  .city-status { margin-left: 0; padding-left: 0; border-left: 0; border-top: 1px solid var(--asphalt); align-self: stretch;
+    overflow-x: auto; scrollbar-width: thin; }
 }
-.side > .tabs {
-  position: static;
-  flex: none;
-  margin: 0;
-  overflow-x: auto;
+@media (max-width: 80rem) {
+  /* Less room: the build bar uses all the space between the two side lists. */
+  .build { right: calc(var(--right) + 0.6rem); }
+  /* The corner is taken by the build bar now, so the readout moves up under the panel handle. */
+  .dev { bottom: auto; top: calc(var(--below-top) + 2.6rem); }
 }
-.side-content {
-  min-height: 0;
-  overflow-y: auto;
-  padding: 0.7rem;
-  scrollbar-width: thin;
+@media (max-width: 60rem) {
+  .game { --side-width: min(21.5rem, calc(100% - 3.5rem)); }
+  .build { left: 0.6rem; bottom: 3.2rem; }
+  .views { z-index: 1; }
 }
-
-[data-tool="square"] i { background: repeating-linear-gradient(#b9b09e 0 4px, #d2c6ae 4px 6px); box-shadow: inset 0 0 0 4px #667f59; }
-[data-tool="daycare"] i { background: linear-gradient(#bb8247 0 9px, #eed4a5 9px 25px, #648355 25px); }
-[data-tool="recycling"] i { background: repeating-linear-gradient(90deg, #466757 0 3px, #75a777 3px 9px, #669baa 9px 15px, #c2a064 15px 21px); box-shadow: inset 0 7px #497c63, inset 0 -6px #424a48; }
-[data-tool="workshop"] i { background: repeating-linear-gradient(#818481 0 2px, #b9b8a7 2px 4px); box-shadow: inset 0 9px #80614f, inset 0 -5px #424a48, inset 6px 0 #424a48, inset -6px 0 #424a48; }
-.load-shield { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; background: #17252ee8; color: white; }
-.save-warning { position: fixed; left: 1rem; right: 1rem; top: 6.5rem; z-index: 100; padding: .7rem 1rem; color: #fff4dc; background: #743c18; border-radius: .5rem; }
+/* Very narrow: time, then the menu, then the figures, each on its own row. */
+@media (max-width: 40rem) {
+  .game { --top-height: 9.6rem; }
+  .top { grid-template-columns: 1fr; grid-template-areas: "clock" "menu" "status"; grid-template-rows: repeat(3, 1fr); }
+  .clock { gap: 0.5rem; }
+  .stat.when { min-width: 0; }
+  .stat.when > span { display: none; }
+  .speed-controls { flex: 1; }
+  .speed-controls button { flex: 1; min-width: 0; }
+  .menu { justify-content: flex-end; }
+}

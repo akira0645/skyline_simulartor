@@ -1,12 +1,14 @@
 import type { Doing } from './Mind';
 import { cellId } from './FacilityAccess';
 import type { Cell } from './TileMap';
+import type { VisitReason } from './ActivityDiary';
+import { delivery } from './Delivery';
 
 /** One tick is three game hours. Nearby errands fit into a day, including the return walk. */
 export const VISIT_WALK_TICKS = 0.08;
 export const VISIT_STAY_TICKS = 1;
 export const stayTicks = (doing: Doing): number =>
-  ['school', 'highschool', 'daycare', 'bank', 'clinic'].includes(doing) ? 0.2 :
+  doing === 'delivering' ? 0.05 : ['school', 'highschool', 'daycare', 'bank', 'clinic', 'bakery', 'flowers', 'cake'].includes(doing) ? 0.2 :
   ['shopping', 'reading', 'park', 'remembering'].includes(doing) ? 0.5 :
   doing === 'exhibition' ? 0.75 : VISIT_STAY_TICKS;
 export interface FacilityVisit {
@@ -17,6 +19,8 @@ export interface FacilityVisit {
   path: Cell[];
   transfer?: Cell[];
   transferDestination?: number;
+  reason?: VisitReason;
+  legs?: number;
 }
 export interface ActiveVisit extends FacilityVisit {
   started: number;
@@ -24,7 +28,9 @@ export interface ActiveVisit extends FacilityVisit {
   returning: boolean;
 }
 export const visitKey = (visit: Pick<FacilityVisit, 'home' | 'slot'>) => `${visit.home}:${visit.slot}`;
-export const travelTicks = (path: readonly Cell[]) => Math.max(1, path.length - 1) * VISIT_WALK_TICKS;
+/** How long a way takes: on foot, or on two wheels for someone out with deliveries. */
+export const travelTicks = (path: readonly Cell[], doing?: Doing) =>
+  Math.max(1, path.length - 1) * VISIT_WALK_TICKS / (doing === 'delivering' ? delivery.speed : 1);
 
 /** Pure simulation state: arriving once is the only event that increments monthly visits. */
 export class VisitSystem {
@@ -32,31 +38,54 @@ export class VisitSystem {
   /** Actual use intervals from the latest core step, including visits that already finished. */
   readonly usage: { visit: ActiveVisit; from: number; until: number }[] = [];
 
+  /** People inside or on their way, by destination; counted afresh after any trip changes. */
+  private tally?: Map<number, number>;
+
   has(home: number, slot: number): boolean { return this.active.has(visitKey({ home, slot })); }
 
-  cancelResident(home: number, slot: number): void { this.active.delete(visitKey({ home, slot })); }
+  /** How many people are at a place or on their way to it. */
+  occupancy(destination: number): number {
+    if (!this.tally) {
+      this.tally = new Map();
+      for (const trip of this.active.values()) {
+        if (!trip.returning) this.tally.set(trip.destination, (this.tally.get(trip.destination) ?? 0) + 1);
+      }
+    }
+    return this.tally.get(destination) ?? 0;
+  }
+
+  /** Keeps the count right when one trip ends, starts or turns into another. */
+  private recount(before: ActiveVisit | undefined, after: ActiveVisit | undefined): void {
+    if (!this.tally) return;
+    if (before && !before.returning) this.tally.set(before.destination, (this.tally.get(before.destination) ?? 1) - 1);
+    if (after && !after.returning) this.tally.set(after.destination, (this.tally.get(after.destination) ?? 0) + 1);
+  }
+
+  cancelResident(home: number, slot: number): void { this.active.delete(visitKey({ home, slot })); this.tally = undefined; }
 
   start(visits: readonly FacilityVisit[], tick: number): void {
     for (const visit of visits) {
       const key = visitKey(visit);
       if (!this.active.has(key)) this.active.set(key, { ...visit, started: tick, arrived: false, returning: false });
     }
+    this.tally = undefined;
   }
 
   advance(tick: number, valid: (visit: ActiveVisit) => boolean,
-    routeHome: (visit: ActiveVisit) => Cell[] | undefined): ActiveVisit[] {
+    routeHome: (visit: ActiveVisit) => Cell[] | undefined,
+    nextVisit?: (visit: ActiveVisit, departed: number) => FacilityVisit | undefined, step = 1): ActiveVisit[] {
     const arrivals: ActiveVisit[] = [];
     this.usage.length = 0;
     for (const [key, initial] of this.active) {
       let trip = initial;
       // A visit can cross arrival, a referral, and the return leg between two core ticks.
-      for (let stage = 0; stage < 3; stage++) {
-        if (!valid(trip)) { this.active.delete(key); break; }
-        const travel = travelTicks(trip.path);
+      for (let stage = 0; stage < 8; stage++) {
+        if (!valid(trip)) { this.active.delete(key); this.recount(trip, undefined); break; }
+        const travel = travelTicks(trip.path, trip.doing);
         const stay = stayTicks(trip.doing);
         const age = tick - trip.started;
         if (!trip.returning) {
-          const from = Math.max(tick - 1, trip.started + travel);
+          const from = Math.max(tick - step, trip.started + travel);
           const until = Math.min(tick, trip.started + travel + stay);
           if (until > from) this.usage.push({ visit: { ...trip }, from, until });
         }
@@ -68,8 +97,17 @@ export class VisitSystem {
           if (age >= travel) this.active.delete(key);
           break;
         } else if (age >= travel + stay) {
+          const departed = trip.started + travel + stay;
+          const next = !trip.transfer && (trip.legs ?? 1) < 3 ? nextVisit?.(trip, departed) : undefined;
+          const before = trip;
+          if (next) {
+            trip = { ...next, legs: (trip.legs ?? 1) + 1, started: departed, arrived: false, returning: false };
+            this.active.set(key, trip);
+            this.recount(before, trip);
+            continue;
+          }
           const path = trip.transfer ?? routeHome(trip);
-          if (!path) { this.active.delete(key); break; }
+          if (!path) { this.active.delete(key); this.recount(trip, undefined); break; }
           const referral = !!trip.transfer;
           trip = { ...trip, path,
             started: trip.started + travel + stay,
@@ -78,6 +116,7 @@ export class VisitSystem {
             transfer: undefined, transferDestination: undefined,
             arrived: false, returning: !referral };
           this.active.set(key, trip);
+          this.recount(before, trip);
         } else {
           break;
         }
@@ -87,6 +126,7 @@ export class VisitSystem {
   }
 
   cancelAt(cells: ReadonlySet<number>): void {
+    this.tally = undefined;
     for (const [key, trip] of this.active) {
       if (cells.has(trip.home) || cells.has(trip.destination) ||
           (trip.transferDestination !== undefined && cells.has(trip.transferDestination)) ||
@@ -97,7 +137,7 @@ export class VisitSystem {
   frames(tick: number) {
     return [...this.active.values()].map(trip => {
       const age = tick - trip.started;
-      const travel = travelTicks(trip.path);
+      const travel = travelTicks(trip.path, trip.doing);
       const progress = Math.max(0, Math.min(1, age / travel));
       // Read-only sub-tick projection: even a short errand can appear as in use between core updates.
       return { ...trip, progress, phase: trip.returning || age >= travel + stayTicks(trip.doing) ? '回程' as const :
@@ -111,6 +151,7 @@ export class VisitSystem {
   }
 
   load(visits: readonly ActiveVisit[]): void {
+    this.tally = undefined;
     this.active.clear();
     this.usage.length = 0;
     for (const trip of visits) this.active.set(visitKey(trip), { ...trip,

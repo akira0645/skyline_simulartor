@@ -1,6 +1,35 @@
 import { expect, it, vi } from 'vitest';
 import { AutosaveSession } from './AutosaveSession';
 
+it('allows retry after a failed read and does not replace a ready city on repeated retry', async () => {
+  let reads = 0;
+  const restore = vi.fn();
+  const write = vi.fn();
+  const session = new AutosaveSession({ read: async () => { if (++reads === 1) throw new Error(); return 'saved'; },
+    restore, snapshot: () => 'current', write, now: () => 1 }, () => {});
+  await session.initialize();
+  await session.save();
+  expect(write).not.toHaveBeenCalled();
+  expect(await session.retry()).toBe(true);
+  expect(restore).toHaveBeenCalledExactlyOnceWith('saved');
+  await session.retry();
+  expect(reads).toBe(2);
+  await session.save();
+  expect(write).toHaveBeenCalledExactlyOnceWith('current');
+});
+
+it('resumes autosave only after a successfully restored alternate save is acknowledged', async () => {
+  const write = vi.fn();
+  const session = new AutosaveSession({ read: async () => { throw new Error(); }, restore: () => {},
+    snapshot: () => 'restored backup', write, now: () => 1 }, () => {});
+  await session.initialize();
+  await session.save();
+  expect(write).not.toHaveBeenCalled();
+  session.resumeAfterRecovery();
+  await session.save();
+  expect(write).toHaveBeenCalledExactlyOnceWith('restored backup');
+});
+
 it.each(['read', 'restore'])('preserves the original save after a %s failure', async failure => {
   const write = vi.fn();
   const session = new AutosaveSession({

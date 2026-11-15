@@ -1,8 +1,9 @@
+import { parseDiary, type ActivityEntry } from './ActivityDiary';
 import { parseLife } from './SavedLife';
 import type { LifeSave } from './LifeSystem';
 import { parseIdentity, type ResidentIdentity } from './ResidentIdentity';
 import type { Relationship } from './Relationships';
-import { parseVisits, parseScares, parseCooldowns } from './SavedVisits';
+import { parseVisits, parseScares, parseCooldowns, isVisitDoing } from './SavedVisits';
 import type { ActiveVisit } from './VisitSystem';
 import { combos, taskList } from './Combos';
 import { isZone, MAP_SIZE, TILES } from './TileMap';
@@ -18,18 +19,19 @@ import { challenges, type Challenge } from './Seasons';
 import { brands, dilemmas, type Boost, type Brand, type Dilemma } from './Dilemmas';
 
 /**
+ * 6 adds bounded daily activity diaries and reasons for continuous venue trips.
  * 5 adds persistent visits, resident identities, relationships, life events and cooldowns.
  * 4 added funds, the milestone rank and avenue tiles; 3 added power and water facility tiles;
  * 2 added per-building capacity and occupants.
  */
-export const SCHEMA_VERSION = 5;
+export const SCHEMA_VERSION = 6;
 /**
  * How a city looks: which city's colours its homes and shops wear, and the trees, cars and
  * bridges that go with them. Nothing in the simulation goes by it.
  */
 export const THEMES = ['classic', 'sf', 'california', 'newyork'] as const;
 export type Theme = (typeof THEMES)[number];
-const READABLE = [1, 2, 3, 4, SCHEMA_VERSION];
+const READABLE = [1, 2, 3, 4, 5, SCHEMA_VERSION];
 
 export interface SavedBuilding {
   id: number;
@@ -101,6 +103,7 @@ export interface SaveData {
   marketStock?: [number, number][];
   monthlyVisits?: [number, number][];
   activeVisits?: ActiveVisit[];
+  dailyActivities?: ActivityEntry[];
   scares?: { id: number; until: number }[];
   tasksRest?: [string, number][];
   nextPersonId?: number;
@@ -326,6 +329,7 @@ export function parseSave(data: unknown): SaveData {
     tasks: parseList((data as Record<string, unknown>).tasks, value => typeof value === 'string') as string[],
     combos: parseList((data as Record<string, unknown>).combos, value => typeof value === 'string') as string[],
     nextPersonId, relationships, life,
+    dailyActivities: parseDiary((data as Record<string, unknown>).dailyActivities, tick, isVisitDoing),
     activeVisits: parseVisits((data as Record<string, unknown>).activeVisits, tick),
     scares: parseScares((data as Record<string, unknown>).scares),
     tasksRest: parseCooldowns((data as Record<string, unknown>).tasksRest, taskList.map(task => task.id)),

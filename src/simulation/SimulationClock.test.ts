@@ -7,6 +7,20 @@ function createClock() {
 }
 
 describe('SimulationClock', () => {
+  it('limits catch-up work and ignores hidden time without changing the selected speed', () => {
+    const clock = createClock();
+    clock.speed = 4;
+    expect(clock.advance(3000)).toBe(4);
+    expect(clock.advance(0)).toBe(8);
+    expect(clock.advance(0)).toBe(12);
+    clock.suspended = true;
+    expect(clock.advance(3600000)).toBe(12);
+    expect(clock.speed).toBe(4);
+    clock.suspended = false;
+    expect(clock.advance(3600000)).toBe(12);
+    expect(clock.speed).toBe(0);
+    expect(clock.interrupted).toBe(true);
+  });
   it('preserves partial ticks while paused', () => {
     const clock = createClock();
     expect(clock.advance(TICK_MS / 2)).toBe(0);

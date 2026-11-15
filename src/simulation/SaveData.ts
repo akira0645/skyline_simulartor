@@ -1,4 +1,10 @@
-import { combos } from './Combos';
+import { parseLife } from './SavedLife';
+import type { LifeSave } from './LifeSystem';
+import { parseIdentity, type ResidentIdentity } from './ResidentIdentity';
+import type { Relationship } from './Relationships';
+import { parseVisits, parseScares, parseCooldowns } from './SavedVisits';
+import type { ActiveVisit } from './VisitSystem';
+import { combos, taskList } from './Combos';
 import { isZone, MAP_SIZE, TILES } from './TileMap';
 
 import { economy, milestones } from './Economy';
@@ -12,17 +18,18 @@ import { challenges, type Challenge } from './Seasons';
 import { brands, dilemmas, type Boost, type Brand, type Dilemma } from './Dilemmas';
 
 /**
+ * 5 adds persistent visits, resident identities, relationships, life events and cooldowns.
  * 4 added funds, the milestone rank and avenue tiles; 3 added power and water facility tiles;
  * 2 added per-building capacity and occupants.
  */
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
 /**
  * How a city looks: which city's colours its homes and shops wear, and the trees, cars and
  * bridges that go with them. Nothing in the simulation goes by it.
  */
 export const THEMES = ['classic', 'sf', 'california', 'newyork'] as const;
 export type Theme = (typeof THEMES)[number];
-const READABLE = [1, 2, 3, SCHEMA_VERSION];
+const READABLE = [1, 2, 3, 4, SCHEMA_VERSION];
 
 export interface SavedBuilding {
   id: number;
@@ -46,6 +53,8 @@ export interface SavedBuilding {
 }
 
 export interface SavedPerson {
+  identity?: ResidentIdentity;
+  graceUntil?: number;
   /** The place they took in the home, which with the seed decides who they are. */
   slot: number;
   /** The tile of the workplace they work at, or -1 without a job. */
@@ -91,6 +100,12 @@ export interface SaveData {
   coldStock?: [number, number][];
   marketStock?: [number, number][];
   monthlyVisits?: [number, number][];
+  activeVisits?: ActiveVisit[];
+  scares?: { id: number; until: number }[];
+  tasksRest?: [string, number][];
+  nextPersonId?: number;
+  relationships?: Relationship[];
+  life?: LifeSave;
   /** The policies that are on, and the challenge under way if there is one. */
   policies: string[];
   challenge?: Challenge;
@@ -234,7 +249,7 @@ export function parseSave(data: unknown): SaveData {
     const occupants = schemaVersion === 1 ? (zone === 'residential' ? capacity : 0) : entry.occupants;
     const level = schemaVersion === 1 ? 1 : entry.level ?? 1;
     const block = schemaVersion === 1 ? undefined : entry.block;
-    if (!isCount(capacity) || capacity === 0 || !isCount(occupants) || occupants > capacity ||
+    if (!isCount(capacity) || capacity === 0 || !isCount(occupants) || (zone !== 'residential' && occupants > capacity) || occupants > 10000 ||
         !isCount(level) || level < 1 || level > COMPLEX_LEVEL ||
         (level === COMPLEX_LEVEL) !== (block !== undefined) || (block !== undefined && !zoned.has(block))) {
       throw new Error('存檔資料損壞。');
@@ -248,7 +263,7 @@ export function parseSave(data: unknown): SaveData {
     }
     const brand = schemaVersion === 1 ? undefined : entry.brand;
     if (brand !== undefined) {
-      if (!(brand in brands) || zone !== 'commercial') throw new Error('存檔資料損壞。');
+      if (!Object.hasOwn(brands, brand) || zone !== 'commercial') throw new Error('存檔資料損壞。');
       record.brand = brand;
     }
     const people = schemaVersion === 1 ? undefined : entry.people;
@@ -257,12 +272,13 @@ export function parseSave(data: unknown): SaveData {
       const slots = new Set<number>();
       if (!Array.isArray(people) || people.length !== occupants || !isCount(nextSlot)) throw new Error('存檔資料損壞。');
       record.people = people.map(person => {
-        const { slot, job, came, hired, money, car } = (person ?? {}) as Record<string, unknown>;
+        const { slot, job, came, hired, money, car, identity, graceUntil } = (person ?? {}) as Record<string, unknown>;
         if (!isCount(slot) || slot >= nextSlot || slots.has(slot) || !(job === -1 || isCount(job)) ||
             !isCount(came) || !isCount(hired) || !(money === undefined || isCount(money)) ||
             !(car === undefined || (isCount(car) && car < vehicles.length))) throw new Error('存檔資料損壞。');
+        if (graceUntil !== undefined && !isCount(graceUntil)) throw new Error('存檔資料損壞。');
         slots.add(slot);
-        return { slot, job: job as number, came, hired, ...(money ? { money } : {}), ...(car ? { car } : {}) };
+        return { slot, job: job as number, came, hired, identity: parseIdentity(identity), ...(graceUntil !== undefined ? { graceUntil: graceUntil as number } : {}), ...(money ? { money } : {}), ...(car ? { car } : {}) };
       });
       record.nextSlot = nextSlot;
     }
@@ -276,6 +292,31 @@ export function parseSave(data: unknown): SaveData {
     available -= b.occupants;
     if (available < 0) throw new Error('存檔資料損壞。');
   }
+  const identities = records.flatMap(building => building.people?.flatMap(person => person.identity ? [person.identity.id] : []) ?? []);
+  const life = parseLife((data as Record<string, unknown>).life, tick);
+  const allIds = [...identities, ...(life?.children.map(child => child.identity.id) ?? [])];
+  if (new Set(allIds).size !== allIds.length) throw new Error('存檔資料損壞。');
+  const nextPersonId = (data as Record<string, unknown>).nextPersonId ?? 0;
+  if (!isCount(nextPersonId) || new Set(identities).size !== identities.length) throw new Error('存檔資料損壞。');
+  const relations = (data as Record<string, unknown>).relationships ?? [];
+  const identityIds = new Set(identities);
+  const relationKeys = new Set<string>();
+  const degree = new Map<number, number>();
+  if (!Array.isArray(relations) || relations.length > identities.length * 12) throw new Error('存檔資料損壞。');
+  const relationships: Relationship[] = relations.map(edge => {
+    if (!edge || !identityIds.has(edge.a) || !identityIds.has(edge.b) || edge.a >= edge.b ||
+        !isCount(edge.familiarity) || edge.familiarity > 100 || !isCount(edge.lastDay) ||
+        edge.lastDay > Math.floor(tick / 8)) throw new Error('存檔資料損壞。');
+    const key = `${edge.a}:${edge.b}`;
+    if (relationKeys.has(key)) throw new Error('存檔資料損壞。');
+    relationKeys.add(key);
+    for (const id of [edge.a, edge.b]) {
+      const count = (degree.get(id) ?? 0) + 1;
+      if (count > 24) throw new Error('存檔資料損壞。');
+      degree.set(id, count);
+    }
+    return { a: edge.a, b: edge.b, familiarity: edge.familiarity, lastDay: edge.lastDay };
+  });
   return { schemaVersion: SCHEMA_VERSION, seed: seed as number, tick, tiles: layout, zones, buildings: records,
     funds: funds as number, rank, taxRate, metros: [...metros].sort((a, b) => a - b),
     spans: parseSpans((data as Record<string, unknown>).spans),
@@ -284,6 +325,10 @@ export function parseSave(data: unknown): SaveData {
     loans: parseList((data as Record<string, unknown>).loans, isCount) as number[],
     tasks: parseList((data as Record<string, unknown>).tasks, value => typeof value === 'string') as string[],
     combos: parseList((data as Record<string, unknown>).combos, value => typeof value === 'string') as string[],
+    nextPersonId, relationships, life,
+    activeVisits: parseVisits((data as Record<string, unknown>).activeVisits, tick),
+    scares: parseScares((data as Record<string, unknown>).scares),
+    tasksRest: parseCooldowns((data as Record<string, unknown>).tasksRest, taskList.map(task => task.id)),
     monthlyVisits: parseStock((data as Record<string, unknown>).monthlyVisits, Number.MAX_SAFE_INTEGER),
     coldStock: parseStock((data as Record<string, unknown>).coldStock, combos.coldchain.capacity),
     marketStock: parseStock((data as Record<string, unknown>).marketStock, combos.coldchain.marketPerDay * combos.coldchain.batchDays),

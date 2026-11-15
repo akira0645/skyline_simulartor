@@ -1,3 +1,4 @@
+import { travelTicks } from './VisitSystem';
 import { expect, it } from 'vitest';
 import { demoCity, eastBank } from '../app/demoCity';
 import { calendar } from './calendar';
@@ -107,15 +108,19 @@ it('sends residents to a reachable cultural centre and stops visits when the roa
   city.execute({ type: 'SET_ZONE', tiles: [home], zone: 'residential' });
   expect(city.execute({ type: 'BUILD_SERVICE', ...culturalCentre, service: 'culture' }).error).toBeUndefined();
   city.found([home]);
-  expect(city.facilityVisits(13, () => true)).toMatchObject([
-    { doing: 'exhibition', path: [home, ...block(3, 6, 5, 5), culturalCentre] },
-  ]);
-  expect(city.visitorsAt(culturalCentre, 13)).toMatchObject([{ doing: 'exhibition', name: expect.any(String) }]);
-  engine.advance(3);
-  expect(city.visitCountAt(culturalCentre)).toBe(1);
+  const planned = city.facilityVisits(13, () => true);
+  expect(planned).toHaveLength(4);
+  for (const trip of planned) expect(trip).toMatchObject(
+    { doing: 'exhibition', path: [home, ...block(3, 6, 5, 5), culturalCentre] });
+  expect(city.visitorsAt(culturalCentre, 13)).toEqual([]);
+  city.visits.start(planned, 0);
+  expect(city.visitorsAt(culturalCentre, 13)).toHaveLength(4);
+  for (const visit of city.visitorsAt(culturalCentre)) expect(visit).toMatchObject({ doing: 'exhibition', name: expect.any(String) });
+  engine.advance(Math.ceil(travelTicks(city.visits.save()[0].path)));
+  expect(city.visitCountAt(culturalCentre)).toBe(4);
   const restored = new SimulationEngine({ version: 1, seed: 0, tick: 0 });
   restored.load(engine.save());
-  expect(restored.city.visitCountAt(culturalCentre)).toBe(1);
+  expect(restored.city.visitCountAt(culturalCentre)).toBe(4);
   city.execute({ type: 'DEMOLISH', x: 5, y: 5 });
   expect(city.facilityVisits(13, () => true)).toEqual([]);
   expect(city.visitorsAt(culturalCentre, 13)).toEqual([]);

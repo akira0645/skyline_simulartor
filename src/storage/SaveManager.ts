@@ -29,6 +29,25 @@ async function run<T>(mode: IDBTransactionMode, use: (store: IDBObjectStore) => 
 
 /** The slot the game writes to by itself every so often, apart from the player's own save. */
 export const AUTO_SLOT = 'auto';
+export const BACKUP_SLOT = 'auto-backup';
+
+/** Keep the preceding autosave and replace the current one in a single atomic transaction. */
+export async function writeAutosave(save: SaveData, note: SaveNote): Promise<void> {
+  const database = await open();
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const transaction = database.transaction(STORE, 'readwrite');
+      const store = transaction.objectStore(STORE);
+      const previous = store.get(AUTO_SLOT);
+      previous.onsuccess = () => {
+        if (previous.result !== undefined) store.put(previous.result, BACKUP_SLOT);
+        store.put({ ...save, note }, AUTO_SLOT);
+      };
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = transaction.onabort = () => reject(transaction.error);
+    });
+  } finally { database.close(); }
+}
 
 export async function writeSave(save: SaveData, slot: string = SLOT): Promise<void> {
   await run('readwrite', store => store.put(save, slot));

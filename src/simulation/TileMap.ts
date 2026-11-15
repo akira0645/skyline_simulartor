@@ -9,7 +9,7 @@ export type Road = 'road' | 'avenue' | 'bridge';
 /** Public services, which cover an area without a limit on buildings. */
 export type Service = 'fire' | 'police' | 'school' | 'clinic' |
   'market' | 'highschool' | 'hospital' | 'university' | 'museum' | 'stadium' | 'temple' |
-  'mall' | 'casino' | 'cinema' | 'parking' | 'library' | 'pool' | 'ktv' | 'amusement' | 'gas' | 'cityhall' | 'bank' | 'culture' | 'coldstore' | 'square' | 'daycare' | 'recycling' | 'workshop';
+  'mall' | 'casino' | 'cinema' | 'parking' | 'library' | 'pool' | 'ktv' | 'amusement' | 'gas' | 'cityhall' | 'bank' | 'culture' | 'coldstore' | 'square' | 'daycare' | 'recycling' | 'workshop' | 'community' | 'familyclinic' | 'eldercare' | 'memorial';
 /**
  * `annex` is the rest of a building that takes two tiles by two: the building's own tile is
  * its top left corner, and the three others are annexes.
@@ -25,7 +25,7 @@ export const TILES: readonly Tile[] =
   ['grass', 'road', 'residential', 'commercial', 'industrial', 'power', 'water', 'avenue', 'park',
     'fire', 'police', 'school', 'clinic', 'river', 'bridge', 'bus', 'metro',
     'annex', 'market', 'highschool', 'hospital', 'university', 'museum', 'stadium', 'temple',
-    'mall', 'casino', 'cinema', 'parking', 'farm', 'library', 'pool', 'ktv', 'amusement', 'viaduct', 'gas', 'cityhall', 'bank', 'culture', 'coldstore', 'square', 'daycare', 'recycling', 'workshop'];
+    'mall', 'casino', 'cinema', 'parking', 'farm', 'library', 'pool', 'ktv', 'amusement', 'viaduct', 'gas', 'cityhall', 'bank', 'culture', 'coldstore', 'square', 'daycare', 'recycling', 'workshop', 'community', 'familyclinic', 'eldercare', 'memorial'];
 export const isZone = (tile: Tile | undefined): tile is Zone =>
   tile === 'residential' || tile === 'commercial' || tile === 'industrial';
 export const isFacility = (tile: string | undefined): tile is Facility =>
@@ -35,11 +35,11 @@ export const isService = (tile: string | undefined): tile is Service =>
   tile === 'highschool' || tile === 'hospital' || tile === 'university' || tile === 'museum' || tile === 'stadium' ||
   tile === 'temple' || tile === 'mall' || tile === 'casino' || tile === 'cinema' || tile === 'parking' ||
   tile === 'library' || tile === 'pool' || tile === 'ktv' || tile === 'amusement' || tile === 'gas' || tile === 'cityhall' || tile === 'bank' || tile === 'culture' || tile === 'coldstore' ||
-  tile === 'square' || tile === 'daycare' || tile === 'recycling' || tile === 'workshop';
+  tile === 'square' || tile === 'daycare' || tile === 'recycling' || tile === 'workshop' || tile === 'community' || tile === 'familyclinic' || tile === 'eldercare' || tile === 'memorial';
 /** The buildings that take two tiles by two. */
 export const isBig = (tile: string | undefined): boolean =>
   tile === 'hospital' || tile === 'university' || tile === 'museum' || tile === 'stadium' || tile === 'mall' ||
-  tile === 'casino' || tile === 'amusement';
+  tile === 'casino' || tile === 'amusement' || tile === 'community' || tile === 'eldercare' || tile === 'memorial';
 /** The four tiles of a big building whose top left corner is `cell`. */
 export const footprint = ({ x, y }: Cell): Cell[] =>
   [{ x, y }, { x: x + 1, y }, { x, y: y + 1 }, { x: x + 1, y: y + 1 }];

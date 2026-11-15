@@ -11,7 +11,7 @@ import { traffic } from './Traffic';
 import { FINE_CAR } from './Wealth';
 import { shifts } from './WorkShift';
 
-export type Doing = 'sleeping' | 'getting-ready' | 'to-work' | 'working' | 'break' | 'to-home' |
+export type Doing = 'socializing' | 'care' | 'remembering' | 'sleeping' | 'getting-ready' | 'to-work' | 'working' | 'break' | 'to-home' |
   'job-hunting' | 'park' | 'shopping' | 'gardening' | 'helping' | 'dining' | 'home' | 'temple' | 'online' |
   'outing' | 'family' | 'day-off' | 'chinatown' | 'reading' | 'exhibition' | 'nightmarket' | 'daycare' | 'bank' | 'school' | 'highschool' | 'university' | 'clinic' | 'hospital' | 'referred' | 'cinema' | 'pool' | 'ktv' | 'amusement' | 'casino' | 'museum' | 'stadium';
 
@@ -66,6 +66,7 @@ export const mind = {
 
 /** The facts of one resident's life that their mind is read from. */
 export interface Facts {
+  retired?: boolean;
   slot: number;
   trait?: Trait;
   /** Days since they moved in. */
@@ -129,7 +130,7 @@ export function thoughtsOf(facts: Facts): Thought[] {
   const list: Thought[] = [];
   const has = (trouble: string) => facts.troubles.includes(trouble);
   const working = facts.shift !== undefined;
-  if (!working) list.push('need-job');
+  if (!working && !facts.retired) list.push('need-job');
   if (has('no-power')) list.push('no-power');
   if (has('no-water')) list.push('no-water');
   if (has('pollution')) list.push('air-bad');

@@ -174,7 +174,9 @@ it('joins four full top-level homes in a square into a housing complex', () => {
   }
   expect(city.inspect(homes[3])).toMatchObject({ complex: true, nextLevel: undefined });
   const grown = city.getStats();
-  expect(grown).toMatchObject({ complexes: 1, population: 4 * larger });
+  // Children now occupy housing too; filling the complex does not mean every occupant works.
+  expect(grown).toMatchObject({ complexes: 1, totalPopulation: 4 * larger });
+  expect(grown.population + grown.children).toBe(4 * larger);
   expect(grown.levels[3]).toBe(4);
   expect(grown.goals).toContain('complex');
 

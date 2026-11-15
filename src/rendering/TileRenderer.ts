@@ -57,7 +57,7 @@ const FACILITY_ROOF: Record<Facility | Service | 'bus' | 'metro', number> = {
   bus: 0xf2c94c, metro: 0xe5484d, market: 0xd9423a, highschool: 0x7f8fb8, hospital: 0xe04a3c,
   university: 0xc9735a, museum: 0xe6dfcf, stadium: 0x6fb565, temple: 0xe0782f,
   mall: 0xd9423a, casino: 0x8a5fd0, cinema: 0xc8322e, parking: 0x3f6fb0,
-  library: 0xb98a4a, pool: 0x5bb6ce, ktv: 0xe8799a, amusement: 0xf2c94c, gas: 0xe5484d, cityhall: 0xb97a61, bank: 0x577d96, culture: 0x996694, coldstore: 0x568598, square: 0xad8f78, daycare: 0xb88449, recycling: 0x497c63, workshop: 0x80614f,
+  library: 0xb98a4a, pool: 0x5bb6ce, ktv: 0xe8799a, amusement: 0xf2c94c, gas: 0xe5484d, cityhall: 0xb97a61, bank: 0x577d96, culture: 0x996694, coldstore: 0x568598, square: 0xad8f78, daycare: 0xb88449, recycling: 0x497c63, workshop: 0x80614f, community: 0xc78d54, familyclinic: 0x679f9a, eldercare: 0x8d9f68, memorial: 0x8a958e,
 };
 const WATER = [0x3f8fc4, 0x6fb4dc, 0x2f78ab];
 const SHORE = 0xd9cfa8;
@@ -72,14 +72,14 @@ const BIG_ROW = 6;
 const COMPLEX_ART = 0;
 const FOUNTAIN = [0x8f97a1, 0x74c7ed, 0xdff3fb];
 const CIVIC_DETAIL_ART: Partial<Record<string, number>> = {
-  cityhall: 0, bank: 1, culture: 2, coldstore: 3, square: 4, daycare: 5, recycling: 6, workshop: 7, gas: 8,
+  cityhall: 0, bank: 1, culture: 2, coldstore: 3, square: 4, daycare: 5, recycling: 6, workshop: 7, gas: 8, familyclinic: 12,
 };
 const CIVIC_ART: Partial<Record<Facility | Service | 'bus' | 'metro', number>> =
   { power: 0, water: 1, fire: 2, police: 3, school: 4, clinic: 5, bus: 6, metro: 7, market: 8, highschool: 9, temple: 10, cinema: 11,
     parking: 12, library: 13, pool: 14, ktv: 15 };
 // The buildings of two tiles by two, by their place in the row of them.
 const BIG_ART: Partial<Record<Service, number>> = { hospital: 1, university: 2, museum: 3, stadium: 4,
-  mall: 5, casino: 6, amusement: 7 };
+  mall: 5, casino: 6, amusement: 7, community: 8, eldercare: 9, memorial: 10 };
 // Homes of a kind have their own pictures, so a street tells you who lives on it: three rows
 // from HOME_ROW, one per level, with two looks of each kind side by side. Ordinary homes take
 // any of the level's pictures in the residential row.
@@ -117,7 +117,7 @@ export class TileRenderer {
     let texture = frames.get(key);
     if (!texture) {
       texture = new Texture({ source: this.city, frame: new Rectangle(
-        column * 2 * CITY_TILE, BIG_ROW * CITY_TILE, 2 * CITY_TILE, 2 * CITY_TILE) });
+        (column % 8) * 2 * CITY_TILE, (column < 8 ? BIG_ROW : 15) * CITY_TILE, 2 * CITY_TILE, 2 * CITY_TILE) });
       frames.set(key, texture);
     }
     return texture;

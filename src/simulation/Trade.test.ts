@@ -77,6 +77,11 @@ it('frightens the neighbourhood when a theft or a fire is left alone', { timeout
     expect(city.inspect(school)!.reaching).toBeGreaterThanOrEqual(0);
   }
   // It passes: a month after the last trouble nobody is frightened any more.
-  const calm = town();
+  const snapshot = engine.save();
+  const calm = new SimulationEngine({ version: 1, seed: 0, tick: 0 });
+  calm.load(snapshot);
+  expect(calm.city.getStats().complaints.scared).toBe(city.getStats().complaints.scared);
+  const expired = Math.max(...snapshot.scares!.map(item => item.until));
+  calm.load({ ...snapshot, tick: expired });
   expect(calm.city.getStats().complaints.scared).toBe(0);
 });

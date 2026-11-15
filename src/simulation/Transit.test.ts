@@ -1,3 +1,4 @@
+import { weatherAt } from './Weather';
 import { expect, it } from 'vitest';
 import { economy } from './Economy';
 import { countTrait } from './Residents';
@@ -18,9 +19,25 @@ const drivers = countTrait(1, id(home), 0, 400, 'driver');
 const keen = countTrait(1, id(home), 0, 400, 'rider');
 const willing = (share: number) => Math.floor((400 - drivers - keen) * share) + keen;
 
+it('increases rainy-day transit demand without exceeding train capacity', () => {
+  const { city, engine } = street();
+  city.execute({ type: 'BUILD_METRO', x: 1, y: 2 });
+  city.execute({ type: 'BUILD_METRO', x: 12, y: 2 });
+  const line = city.addLine('metro').id!;
+  city.toggleStop(line, { x: 1, y: 2 });
+  city.toggleStop(line, { x: 12, y: 2 });
+  const dryRiders = city.getStats().riders;
+  const wetTick = Array.from({ length: 200 }, (_, day) => dryTick + (day + 1) * 8)
+    .find(tick => weatherAt(1, tick) !== 'clear')!;
+  engine.load({ ...engine.save(), tick: wetTick });
+  expect(city.getStats().riders).toBeGreaterThan(dryRiders);
+  expect(city.getLines()[0].riders).toBeLessThanOrEqual(city.getLines()[0].capacity);
+});
+
 /** A home of 400 and a factory with room for them all, twelve road tiles apart. */
-function street() {
-  const engine = new SimulationEngine({ version: 1, seed: 1, tick: 0 });
+const dryTick = Array.from({ length: 30 }, (_, day) => day * 8).find(tick => weatherAt(1, tick) === 'clear')!;
+function street(tick = dryTick) {
+  const engine = new SimulationEngine({ version: 1, seed: 1, tick });
   const { city } = engine;
   city.execute({ type: 'BUILD_ROAD', path: row(2, 1, 12) });
   city.execute({ type: 'SET_ZONE', tiles: [home], zone: 'residential' });

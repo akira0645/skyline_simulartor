@@ -1,4 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { weatherAt, weatherNames } from '../simulation/Weather';
+import { AutosaveSession, type AutosaveStatus } from '../storage/AutosaveSession';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { CityRenderer } from '../rendering/CityRenderer';
 import cityUrl from '../assets/city.png';
 import { TrendChart, type TrendPoint } from './TrendChart';
@@ -21,7 +23,7 @@ import { services } from '../simulation/Services';
 import { SimulationClock, type SimulationSpeed } from '../simulation/SimulationClock';
 import { SimulationEngine } from '../simulation/SimulationEngine';
 import { THEMES, type Theme } from '../simulation/SaveData';
-import { AUTO_SLOT, deleteSave, listSaves, readSave, SLOTS, writeSlot, type SaveNote } from '../storage/SaveManager';
+import { AUTO_SLOT, BACKUP_SLOT, writeAutosave, deleteSave, listSaves, readSave, SLOTS, writeSlot, type SaveNote } from '../storage/SaveManager';
 import { brands, type Brand, type DilemmaId } from '../simulation/Dilemmas';
 import { goals } from '../simulation/Goals';
 import { combos, COMBOS, taskList, type Combo, type TaskId } from '../simulation/Combos';
@@ -37,6 +39,7 @@ const speeds = [0, 1, 2, 4] as const;
 
 /** The build tools, one group per tab of the toolbar. */
 const toolGroups: [string, [Tool, string][]][] = [
+  ['人生', [['community', '社區中心'], ['familyclinic', '家庭診所'], ['eldercare', '日間照護'], ['memorial', '紀念花園']]],
   ['道路', [['road', '道路'], ['avenue', '大道'], ['viaduct', '高架']]],
   ['分區', [['residential', '住宅'], ['commercial', '商業'], ['industrial', '工業']]],
   ['交通', [['bus', '公車站'], ['metro', '捷運站'], ['gas', '加油站'], ['parking', '停車場']]],
@@ -53,6 +56,7 @@ const toolGroups: [string, [Tool, string][]][] = [
 
 /** Where each tool's picture sits in city.png, as [column, row]; the rest are drawn in CSS. */
 const iconAt: Partial<Record<Tool, [number, number]>> = {
+  familyclinic: [12, 14],
   road: [10, 0], avenue: [10, 0], residential: [0, 2], commercial: [0, 3], industrial: [0, 4],
   power: [0, 5], water: [1, 5], fire: [2, 5], police: [3, 5], school: [4, 5], clinic: [5, 5], bus: [6, 5], metro: [7, 5],
   market: [8, 5], highschool: [9, 5], temple: [10, 5], cinema: [11, 5], parking: [12, 5],
@@ -61,12 +65,12 @@ const iconAt: Partial<Record<Tool, [number, number]>> = {
 };
 /** The buildings of two tiles by two, by their place in the row of them; shown at half size. */
 const bigIconAt: Partial<Record<Tool, number>> = { hospital: 1, university: 2, museum: 3, stadium: 4,
-  mall: 5, casino: 6, amusement: 7 };
+  mall: 5, casino: 6, amusement: 7, community: 8, eldercare: 9, memorial: 10 };
 const iconStyle = (tool: Tool) => {
   const big = bigIconAt[tool];
   if (big !== undefined) {
     return { backgroundImage: `url(${cityUrl})`, backgroundSize: '256px auto',
-      backgroundPosition: `-${big * 32}px -96px` };
+      backgroundPosition: `-${(big % 8) * 32}px -${(big < 8 ? 6 : 15) * 16}px` };
   }
   const at = iconAt[tool];
   return at && { boxShadow: 'none', backgroundImage: `url(${cityUrl})`, backgroundPosition: `-${at[0] * 32}px -${at[1] * 32}px` };
@@ -142,6 +146,10 @@ const overlays: [Overlay, string, string][] = [
 const zones = [['residential', '住宅'], ['commercial', '商業'], ['industrial', '工業']] as const;
 
 const facilityUse: Partial<Record<Tile, string>> = {
+  community: '室內聚會、認識鄰居。雨天也能安排活動。',
+  familyclinic: '治療一般疾病。重症仍需到醫院。',
+  eldercare: '65 歲以上居民的日間活動與照護，周邊長者生病機率降低。',
+  memorial: '安靜散步與追思的戶外花園，雨天會減少造訪。',
   park: '散步、休息。公園也會降低周邊污染。',
   culture: '看展覽。搭配市場和公園可形成藝文街區。',
   library: '閱讀和借書。',
@@ -175,7 +183,7 @@ const facilityUse: Partial<Record<Tile, string>> = {
   bus: '讓居民搭乘已營運的公車路線。',
   metro: '讓居民搭乘已營運的捷運路線。',
 };
-const visitable: readonly Tile[] = ['park', 'culture', 'library', 'school', 'daycare', 'clinic', 'hospital', 'bank', 'market', 'mall', 'square', 'highschool', 'university', 'temple', 'cinema', 'pool', 'ktv', 'amusement', 'casino', 'museum', 'stadium'];
+const visitable: readonly Tile[] = ['community', 'familyclinic', 'eldercare', 'memorial', 'park', 'culture', 'library', 'school', 'daycare', 'clinic', 'hospital', 'bank', 'market', 'mall', 'square', 'highschool', 'university', 'temple', 'cinema', 'pool', 'ktv', 'amusement', 'casino', 'museum', 'stadium'];
 
 const issueNames: Record<Issue, string> = {
   'no-road': '沒貼路', 'no-power': '沒電', 'no-water': '沒水',
@@ -203,6 +211,7 @@ const issueHelp: Record<Issue, string> = {
 };
 
 const tileNames: Record<Tile, string> = {
+  community: '社區中心', familyclinic: '家庭診所', eldercare: '日間照護', memorial: '紀念花園',
   grass: '草地', road: '道路', avenue: '大道', residential: '住宅區', commercial: '商業區',
   industrial: '工業區', power: '電廠', water: '水塔', park: '公園',
   fire: '消防局', police: '警察局', school: '小學', clinic: '診所',
@@ -309,6 +318,9 @@ const bondWord = (value: number) => value >= bond.close ? '很好' : value >= bo
 
 /** What someone is doing right now, in a sentence. */
 function doingText(doing: Doing, shift: number | undefined, way: Way | undefined): string {
+  if (doing === 'socializing') return '到社區中心聚會';
+  if (doing === 'care') return '參加日間照護活動';
+  if (doing === 'remembering') return '在紀念花園散步、追思';
   const place = shift === undefined ? '' : workplaceNames[shift];
   const going = wayNames[way ?? 'walk'];
   switch (doing) {
@@ -512,6 +524,7 @@ const thoughtTone = (thought: Thought) => thoughtWeights[thought] < 0 ? 'bad' as
 const moodWord = (mood: number) => mood >= mind.glad ? '開心' : mood >= mind.low ? '還好' : '不開心';
 
 const serviceNames: Record<Service, string> = { fire: '消防', police: '警察', school: '小學', clinic: '診所',
+  community: '社區中心', familyclinic: '家庭診所', eldercare: '日間照護', memorial: '紀念花園',
   market: '市場', highschool: '高中', hospital: '醫院', university: '大學', museum: '博物館', stadium: '體育場',
   temple: '廟', mall: '商場', casino: '賭場', cinema: '電影院', parking: '停車場',
   library: '圖書館', pool: '游泳池', ktv: 'KTV', amusement: '遊樂園', gas: '加油站', cityhall: '市政廳', bank: '銀行', culture: '文化中心', coldstore: '冷鏈倉庫', square: '廣場', daycare: '托兒所', recycling: '回收站', workshop: '維修工坊' };
@@ -561,6 +574,12 @@ export function App() {
   const [engine] = useState(() => freshCity());
   const [clock] = useState(() => new SimulationClock(engine));
   const [stats, setStats] = useState(() => engine.city.getStats());
+  const [autosaveStatus, setAutosaveStatus] = useState<AutosaveStatus>({ phase: 'loading' });
+  const [autosave] = useState(() => new AutosaveSession({
+    read: () => readSave(AUTO_SLOT), restore: data => engine.load(data),
+    snapshot: () => ({ save: engine.save(), note: note() }),
+    write: ({ save, note: metadata }) => writeAutosave(save, metadata), now: () => Date.now(),
+  }, setAutosaveStatus));
   const rendererRef = useRef<CityRenderer>(null);
   const lastTime = useRef(0);
   const tickMs = useRef(0);
@@ -615,7 +634,7 @@ export function App() {
   /** What the list of saves shows for the city as it is now. */
   function note(): SaveNote {
     const now = engine.city.getStats();
-    return { population: now.population, funds: now.funds, rank: now.rank, tick: engine.getSnapshot().tick, at: Date.now() };
+    return { population: now.totalPopulation, funds: now.funds, rank: now.rank, tick: engine.getSnapshot().tick, at: Date.now() };
   }
 
   async function openSaves() {
@@ -680,6 +699,11 @@ export function App() {
     lastTime.current = performance.now();
     const timer = window.setInterval(() => {
       const next = step(engine, clock, lastTime, tickMs);
+      if (clock.interrupted) {
+        clock.interrupted = false;
+        setSpeed(0);
+        setMessage('長時間離開後已暫停，按速度按鈕繼續。');
+      }
       setTick(next);
       setHour(hourAt(next, clock.tickProgress));
     }, 40);
@@ -708,14 +732,11 @@ export function App() {
 
   useEffect(() => {
     let cancelled = false;
-    void readSave(AUTO_SLOT).then(data => {
-      if (cancelled || data === undefined) return;
-      try {
-        engine.load(data);
-      } catch {
-        return;
-      }
+    clock.suspended = true;
+    void autosave.initialize().then(restored => {
+      if (cancelled) return;
       clock.reset();
+      clock.suspended = document.hidden;
       lastTime.current = performance.now();
       const now = engine.city.getStats();
       knownRank.current = now.rank;
@@ -726,19 +747,23 @@ export function App() {
       setTick(engine.getSnapshot().tick);
       setStats(now);
       rendererRef.current?.refresh?.();
-      setMessage('回到上次離開的城市。');
-    }).catch(() => undefined);
-    // Every quarter of a minute, and when the page is put away.
-    const keep = () => void writeSlot(engine.save(), AUTO_SLOT, note()).catch(() => undefined);
+      if (restored) setMessage('回到上次離開的城市。');
+    });
+    const keep = () => { void autosave.save(); };
     const timer = window.setInterval(keep, 15000);
-    const onHide = () => { if (document.visibilityState === 'hidden') keep(); };
-    document.addEventListener('visibilitychange', onHide);
+    const onVisibility = () => {
+      clock.suspended = document.hidden || autosave.status.phase === 'loading';
+      clock.reset();
+      lastTime.current = performance.now();
+      if (document.hidden) keep();
+    };
+    document.addEventListener('visibilitychange', onVisibility);
     return () => {
       cancelled = true;
       window.clearInterval(timer);
-      document.removeEventListener('visibilitychange', onHide);
+      document.removeEventListener('visibilitychange', onVisibility);
     };
-  }, [engine, clock]);
+  }, [engine, clock, autosave]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -955,7 +980,7 @@ export function App() {
       rendererRef.current.focus = undefined;
     }
     knownMood.current = opening.mood;
-    void writeSlot(engine.save(), AUTO_SLOT, note()).catch(() => undefined);
+    void autosave.save();
     setStats(engine.city.getStats());
     rendererRef.current?.refresh?.();
     setMessage(done);
@@ -982,10 +1007,9 @@ export function App() {
   const date = dateAt(tick);
   const info = selected && engine.city.inspect(selected);
   const monthlyVisits = selected && engine.city.visitCountAt(selected);
+  const siteSummary = selected && engine.city.siteSummary(selected);
   const visitors = selected && info && panelTab === 'tile' && !who && visitable.includes(info.tile) ?
-    (rendererRef.current?.visitorsAt?.(selected) ?? []).map(visit => ({
-      ...visit, name: engine.city.person(visit.home, visit.slot, hour)?.name,
-    })) : undefined;
+    engine.city.visitorGroupsAt(selected, clock.tickProgress) : undefined;
   const building = selected && engine.city.getBuilding(selected);
   const demoTile = (cell: Cell) => engine.city.map.get(cell);
   const shift = building && building.zone !== 'residential' ? workShift(building.zone, building.id) : undefined;
@@ -1016,9 +1040,11 @@ export function App() {
     </div>
     <dl>
       <dt>現在</dt><dd>{doingText(doing, seen.shift, seen.way)}</dd>
+      {seen.weatherReason && <><dt>天氣與出門</dt><dd>{seen.weatherReason}</dd></>}
       <dt>住在</dt><dd>{seen.kind ? homeKindNames[seen.kind][0] : '一般住宅'}，{howLong(seen.days)}</dd>
+      <dt>健康</dt><dd>{seen.health ? seen.health.state === 'recovering' ? '康復中，正在休養' : seen.health.severe ? '需要醫院治療' : '身體不舒服，安排休息或就醫' : '健康'}</dd>
       <dt>工作</dt>
-      <dd>{seen.shift === undefined ? '還在找工作' :
+      <dd>{seen.age >= 65 ? '已退休（基本年金支應生活）' : seen.shift === undefined ? '還在找工作' :
         `${shifts[seen.shift].title} ${shifts[seen.shift].start}–${shifts[seen.shift].end} 點，${howLong(seen.workDays ?? 0)}`}</dd>
       {seen.way && seen.minutes !== undefined && <>
         <dt>上班</dt><dd>{wayNames[seen.way]} {Math.max(1, Math.round(seen.minutes))} 分鐘</dd>
@@ -1032,6 +1058,10 @@ export function App() {
         {vehicles[seen.car + 1] && <Tag label={`${vehicleNames[seen.car + 1]}`} value={money(vehicles[seen.car + 1].price)}
           tone="dim" tip="存到這麼多就會換車" />}</dd>
     </dl>
+    <h2 className="sub">認識的人</h2>
+    <div className="tags">{seen.contacts.length ? seen.contacts.map(contact => <Tag key={contact.id}
+      label={contact.name} value={contact.label} tip={`熟悉度 ${contact.familiarity}/100`}
+      onPick={() => pickPerson(contact)} />) : <span>還沒有熟悉的鄰居，去公共場所一起活動會慢慢認識人。</span>}</div>
     <h2 className="sub">心裡在想</h2>
     <div className="tags">
       {seen.thoughts.map(thought => <Tag key={thought} label={thoughtTags[thought]} tone={thoughtTone(thought)}
@@ -1040,7 +1070,9 @@ export function App() {
     <p className="said">{spoken ? `「${thoughtNames[spoken]}」` : ''}</p>
   </section>;
   // What happened lately, to buildings and to people, newest first.
+  const lifeEventText = { birth: '出生了', adult: '成年了，開始新的人生階段', retired: '退休了', ill: '身體不適，需要照護', recovered: '恢復健康', death: '離世了', care: '安排了新的照護' };
   const happenings: { tick: number; text: string; cell?: Cell }[] = [
+    ...engine.city.life.events.map(event => ({ tick: event.tick, text: `${event.name}${lifeEventText[event.kind]}` })),
     ...engine.city.getEvents().map(event => ({ tick: event.tick, text: eventText[event.kind], cell: event.cell })),
     ...engine.city.getNews().map(item => ({ tick: item.tick, text: newsText(item) })),
     ...engine.city.getFeasts().map(item => ({ tick: item.tick,
@@ -1110,9 +1142,12 @@ export function App() {
 
   return (
     <main className="game" data-side-open={sideOpen}>
+      {autosaveStatus.phase === 'loading' && <div className="load-shield" role="status">正在讀取城市…</div>}
+      {autosaveStatus.error && <div className="save-warning" role="alert">{autosaveStatus.error}</div>}
       <div className="viewport" ref={viewport} data-tool={tool} role="region" aria-label="城市地圖" />
 
       <header className="hud top">
+        <div className="stat"><span>天氣</span><b>{weatherNames[weatherAt(engine.getSnapshot().seed, tick)]}</b><small>明日：{weatherNames[weatherAt(engine.getSnapshot().seed, tick + 8)]}</small></div>
         <div className="stat" title={`每月：稅收 ${money(stats.budget.tax)}，車票 ${money(stats.budget.fares)}，牌照稅 ${money(stats.budget.licence)}，油稅 ${money(stats.budget.fuel)}，停車費 ${money(stats.budget.parking)}，景點 ${money(stats.budget.visitors)}，民生用品買賣 ${money(stats.budget.trade)}，維護費 ${money(stats.budget.upkeep)}，還款 ${money(stats.budget.loans)}。每天進帳一點。`}>
           <span>資金</span>
           <b>{money(stats.funds)}</b>
@@ -1120,8 +1155,8 @@ export function App() {
         </div>
         <div className="stat">
           <span>人口</span>
-          <b>{stats.population.toLocaleString('en-US')} 人</b>
-          <small>{rankNames[stats.rank]}{nextRank && ` → ${nextRank.population.toLocaleString('en-US')}`}</small>
+          <b>{stats.totalPopulation.toLocaleString('en-US')} 人</b>
+          <small>兒童 {stats.children} · 退休 {stats.retired} · {rankNames[stats.rank]}{nextRank && ` → ${nextRank.population.toLocaleString('en-US')}`}</small>
         </div>
         <div className="stat demand" title="住宅、商業與工業分區需求">
           <span>分區需求</span>
@@ -1200,20 +1235,29 @@ export function App() {
               <dt>設施用途</dt>
               <dd>{facilityUse[info.tile]}</dd>
             </>}
+            {siteSummary && siteSummary.tiles > 1 && <>
+              <dt>整座範圍</dt><dd>{siteSummary.tiles} 格，共用造訪統計</dd>
+              {siteSummary.capacity > 0 && <><dt>整座住戶</dt><dd>{siteSummary.occupants} 人／{siteSummary.capacity} 人容量（下方為這一戶）</dd></>}
+            </>}
             {monthlyVisits !== undefined && <>
               <dt>本月拜訪人次</dt>
               <dd>{monthlyVisits.toLocaleString('zh-TW')} 人次</dd>
             </>}
-            {visitors && <>
-              <dt>目前訪客</dt>
-              <dd className="tags">
-                {visitors.length ? visitors.map(visit => <Tag key={`${visit.home}:${visit.slot}`}
-                  label={visit.name ?? '居民'} value={visit.doing === 'referred' && visit.phase === '前往中' ? '轉診途中' : visit.phase}
-                  tip={doingText(visit.doing, undefined, undefined)}
-                  onPick={() => setWho({ home: visit.home, slot: visit.slot })} />) :
-                  <Tag label="目前無人來訪" tone="dim" />}
+            {visitors && [{ label: '使用中', people: visitors.using }, { label: '前往中', people: visitors.heading }].map(group => <Fragment key={`${selected.x}:${selected.y}:${group.label}`}>
+              <dt className="visitor-label">{group.label}</dt>
+              <dd className="visitor-group">
+                {group.people.length ? <details className="visitor-details">
+                  <summary aria-label={`${group.label} ${group.people.length} 人，訪客名單`}>
+                    <span>{group.people.length} 人</span><span className="visitor-disclosure-hint" aria-hidden="true" />
+                  </summary>
+                  <div className="visitor-names" aria-label={`${group.label}的訪客`}>
+                    {group.people.map(visit => <Tag key={`${visit.home}:${visit.slot}`}
+                      label={visit.name ?? '居民'} tip={doingText(visit.doing, undefined, undefined)}
+                      onPick={() => setWho({ home: visit.home, slot: visit.slot })} />)}
+                  </div>
+                </details> : <span className="visitor-empty">0 人</span>}
               </dd>
-            </>}
+            </Fragment>)}
             {info.brand && <>
               <dt>招牌</dt>
               <dd className="tags"><Tag label={brandNames[info.brand]} tone="good" /><Tag label="收入" value={`${money(brands[info.brand])}/月`} tone="good" /></dd>
@@ -1702,15 +1746,16 @@ export function App() {
 
       {saves && <div className="hud over files" role="dialog" aria-label="存檔">
         <h2>存檔</h2>
+        <p role="status">{autosaveStatus.lastSaved ? `最近自動存檔：${new Date(autosaveStatus.lastSaved).toLocaleTimeString('zh-TW')}` : '尚未完成本次自動存檔'}</p>
         <ul>
-          {[...SLOTS, AUTO_SLOT, 'manual'].map((slot, index) => {
+          {[...SLOTS, AUTO_SLOT, BACKUP_SLOT, 'manual'].map((slot, index) => {
             const held = slot in saves;
             const kept = saves[slot];
             const own = index < SLOTS.length;
             if (!own && !held) return null;
             const day = kept && dateAt(kept.tick);
             return <li key={slot} className={held ? undefined : 'empty'}>
-              <b>{own ? `第 ${index + 1} 格` : slot === AUTO_SLOT ? '自動' : '舊存檔'}</b>
+              <b>{own ? `第 ${index + 1} 格` : slot === AUTO_SLOT ? '自動' : slot === BACKUP_SLOT ? '上次自動備份' : '舊存檔'}</b>
               {kept && day ? <span className="tags">
                 <Tag label={rankNames[kept.rank]} value={`${kept.population.toLocaleString('en-US')} 人`} />
                 <Tag label="資金" value={money(kept.funds)} />

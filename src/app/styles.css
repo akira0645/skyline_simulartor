@@ -339,6 +339,29 @@ button.tag[aria-pressed="true"] b { color: var(--ink); }
 .side section > .back { margin-top: 0.5rem; }
 .side dl { grid-template-columns: 3.4rem 1fr; gap: 0.3rem 0.4rem; align-items: start; }
 .side dt { font-size: 0.85rem; line-height: 1.55; }
+.side .visitor-label { white-space: nowrap; }
+.visitor-group { min-width: 0; }
+.visitor-details summary {
+  display: flex; align-items: center; gap: 0.4rem;
+  padding: 0.2rem 0.45rem; border: 1px solid var(--slate);
+  background: var(--panel); cursor: pointer; list-style: none;
+  font-size: 0.85rem; line-height: 1.55; white-space: nowrap;
+}
+.visitor-details summary::-webkit-details-marker { display: none; }
+.visitor-details summary::before { content: '▸'; color: var(--sand); }
+.visitor-details[open] summary::before { content: '▾'; }
+.visitor-details summary:hover { border-color: var(--paper); }
+.visitor-details summary:focus-visible { outline: 2px solid var(--sand); outline-offset: 2px; }
+.visitor-disclosure-hint { margin-left: auto; color: var(--steel); font-size: 0.75rem; }
+.visitor-disclosure-hint::after { content: '查看名單'; }
+.visitor-details[open] .visitor-disclosure-hint::after { content: '收起名單'; }
+.visitor-names {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.3rem;
+  margin-top: 0.35rem; padding: 0.15rem; max-height: 12rem; overflow-y: auto;
+  scrollbar-width: thin;
+}
+.visitor-names .tag { min-width: 0; justify-content: center; white-space: normal; overflow-wrap: anywhere; }
+.visitor-empty { display: inline-block; padding: 0.2rem 0; color: var(--steel); font-size: 0.85rem; white-space: nowrap; }
 .side .goals .done b { color: #7ed492; }
 
 /* --- The clock: the date over the day and the time, at a width that fits any date */
@@ -444,3 +467,5 @@ button.tag[aria-pressed="true"] b { color: var(--ink); }
 [data-tool="daycare"] i { background: linear-gradient(#bb8247 0 9px, #eed4a5 9px 25px, #648355 25px); }
 [data-tool="recycling"] i { background: repeating-linear-gradient(90deg, #466757 0 3px, #75a777 3px 9px, #669baa 9px 15px, #c2a064 15px 21px); box-shadow: inset 0 7px #497c63, inset 0 -6px #424a48; }
 [data-tool="workshop"] i { background: repeating-linear-gradient(#818481 0 2px, #b9b8a7 2px 4px); box-shadow: inset 0 9px #80614f, inset 0 -5px #424a48, inset 6px 0 #424a48, inset -6px 0 #424a48; }
+.load-shield { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; background: #17252ee8; color: white; }
+.save-warning { position: fixed; left: 1rem; right: 1rem; top: 6.5rem; z-index: 100; padding: .7rem 1rem; color: #fff4dc; background: #743c18; border-radius: .5rem; }

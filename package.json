@@ -9,7 +9,9 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -p tsconfig.simulation.json && tsc -p tsconfig.json && vite build",
-    "test": "vitest run"
+    "test": "npm run test:fast && npm run test:simulation",
+    "test:fast": "vitest run --mode fast",
+    "test:simulation": "vitest run --mode simulation"
   },
   "dependencies": {
     "pixi.js": "^8.0.0",

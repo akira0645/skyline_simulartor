@@ -13,7 +13,7 @@
 
 歷史提案、與早期規格的差異及歷次實作紀錄，見 [`docs/v0.2-design-proposal.md`](docs/v0.2-design-proposal.md)。其中早期描述可能已被後面的紀錄取代，不應單獨當作目前狀態。
 
-2026-11-15 的設計文件（尚未實作）：[大型建築、存檔與程式整理](docs/superpowers/specs/2026-11-15-city-foundation-design.md)、[居民人生、人際關係與雨天行為](docs/superpowers/specs/2026-11-15-resident-life-design.md)。後者包含新建築概念圖、評價與分階段驗收；先完成基礎修正，再擴充居民人生。
+2026-11-15 已加入大型地塊共用造訪、人物身分與關係、生命週期基礎、雨天出行，以及四種人生服務建築。已實作範圍與限制見 [目前實作](docs/current-implementation.md)。完整願景見 [大型建築、存檔與程式整理](docs/superpowers/specs/2026-11-15-city-foundation-design.md)、[居民人生、人際關係與雨天行為](docs/superpowers/specs/2026-11-15-resident-life-design.md)，設計文件中的後續功能尚未全部完成。
 
 同類遊戲（SimCity、Cities: Skylines、TheoTown 等）的機制與功能整理，以及與本專案的對照，見 [`docs/city-sim-mechanics-reference.md`](docs/city-sim-mechanics-reference.md)。這是參考資料，不是規格。
 

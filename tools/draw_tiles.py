@@ -1538,9 +1538,55 @@ def civic_details(kind):
             t.rect(x, 12, x + 1, 13, '#629866' if kind == 'daycare' else '#d99a54')
     return t
 
+def life_building(kind):
+    """Native pixel assets: clear entrances and distinct roof/landscape silhouettes."""
+    t = Tile(size=32)
+    t.slab(1, 2, 30, 30, '#b7c59b', '#879d72', '#566b51')
+    t.rect(14, 20, 17, 31, '#d4c4a2')
+    t.rect(0, 25, 31, 27, '#d4c4a2')
+    if kind == 'memorial':
+        t.slab(12, 9, 19, 19, '#d9ddd0', '#a4afa4', '#677e74')
+        t.slab(14, 5, 17, 16, '#e1e5d9', '#b8c1b6', '#77877c')
+        t.rect(15, 8, 16, 10, '#8a9e91')
+        for x in (4, 24):
+            t.slab(x, 6, x + 3, 14, '#a7be85', '#587b54', '#405c46')
+            t.rect(x + 1, 15, x + 2, 18, '#795c47')
+            t.rect(x, 22, x + 4, 23, '#8b6c4e')
+        for x in (6, 23):
+            t.rect(x, 29, x + 1, 29, '#d5b2ba')
+        return t
+    roof = '#b47751' if kind == 'community' else '#668778'
+    edge = '#754d40' if kind == 'community' else '#405e57'
+    t.shadow(4, 6, 27, 23)
+    t.slab(4, 10, 27, 23, '#ead6b5', '#c6ba9e', '#837b6c')
+    t.slab(3, 5, 28, 12, '#d8b18a', roof, edge)
+    t.rect(5, 7, 26, 7, '#e1c4a1')
+    for x in (6, 21):
+        t.slab(x, 15, x + 4, 19, '#c7e3df', '#79a1a1', '#476870')
+        t.rect(x + 2, 15, x + 2, 19, '#d6c9b1')
+    t.slab(13, 15, 18, 23, '#a9c9c7', '#597a78', '#364f50')
+    t.rect(15, 16, 15, 22, '#d0c2a7')
+    if kind == 'community':
+        for x, color in ((7, '#d4a34c'), (15, '#b76459'), (23, '#75a59a')):
+            t.rect(x, 12, x + 2, 13, color)
+    else:
+        t.rect(8, 28, 23, 28, '#e2d3b4')  # Broad, step-free access.
+        t.rect(5, 21, 10, 21, '#6c8c74')
+        t.rect(22, 21, 27, 21, '#6c8c74')
+    return t
+
+
+def family_clinic():
+    t = civic_details('daycare')
+    t.rect(5, 3, 10, 6, '#dce6d5')
+    t.rect(7, 3, 8, 6, '#629a87')
+    t.rect(5, 4, 10, 5, '#629a87')
+    return t
+
+
 if __name__ == '__main__':
     F = 2 * T
-    sheet = Image.new('RGBA', (16 * F, (len(ROWS) + 2 + len(HOME_ROWS) + len(INDUSTRY_ROWS) + 1) * F), (0, 0, 0, 0))
+    sheet = Image.new('RGBA', (16 * F, (len(ROWS) + 2 + len(HOME_ROWS) + len(INDUSTRY_ROWS) + 3) * F), (0, 0, 0, 0))
     for row, tiles in enumerate(ROWS):
         for column, tile in enumerate(tiles):
             sheet.paste(fine(tile.image, ground=row < 2), (column * F, row * F))
@@ -1583,6 +1629,9 @@ if __name__ == '__main__':
             icon.rect(10, 10, 11, 13, '#818487')
             icon.rect(5, 7, 10, 7, '#e1c589')
         sheet.paste(fine(icon.image), (column * F, civic_row * F))
+    sheet.paste(fine(family_clinic().image), (12 * F, civic_row * F))
+    for column, kind in enumerate(('community', 'eldercare', 'memorial')):
+        sheet.paste(fine(life_building(kind).image), (column * 2 * F, (civic_row + 1) * F))
     sheet.save(OUT)
     print(f'wrote {OUT}')
     for style in STYLES:

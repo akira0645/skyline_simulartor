@@ -1,3 +1,4 @@
+import { weatherAt, weatherTravel } from '../simulation/Weather';
 import { Application, Assets, Graphics, type Texture } from 'pixi.js';
 import cityUrl from '../assets/city.png';
 import sfUrl from '../assets/city-sf.png';
@@ -21,7 +22,7 @@ import { Camera } from './Camera';
 import { DETAIL_ZOOM, TileRenderer } from './TileRenderer';
 import { advancePedestrian, commuterPosition } from './commuterPosition';
 import { shiftIndex, shifts, workShift } from '../simulation/WorkShift';
-import { weekendAt } from '../simulation/calendar';
+import { calendar, hourAt, weekendAt } from '../simulation/calendar';
 import { rainingAt, seasonAt } from '../simulation/Seasons';
 import { utilities } from '../simulation/Utilities';
 import { mind, SHOP_SHIFT } from '../simulation/Mind';
@@ -31,9 +32,8 @@ import { mind, SHOP_SHIFT } from '../simulation/Mind';
  * clock but run at this pace: a game day lasts eight seconds, so a commute timed in game hours
  * would be over in a blink.
  */
-const WALK_MS_PER_TILE = 1250;
-const VISIT_STAY_MS = 1800;
 /** The same for each vehicle, in the order of Wealth's `vehicles`: a bicycle is slow, a car quick. */
+const WALK_MS_PER_TILE = 1250;
 const VEHICLE_PACE = [700, 520, 450, 450, 430];
 /** How long a traffic light stays green each way, in milliseconds at 1× speed. */
 const LIGHT = 2600;
@@ -115,7 +115,7 @@ export class CityRenderer {
      * building itself; at a house or a small shop it waits by the kerb. `held` is how long the
      * car has stood behind another.
      */
-    const trips = new Map<string, { at: 'home' | 'work'; along?: number; wait: number;
+    const trips = new Map<string, { at: 'home' | 'work'; along?: number; wait: number; driving?: boolean;
       garage?: { home: boolean; work: boolean }; lot?: { home?: number; work?: number }; held?: number;
       /** How many times they have set out, and the way by the filling station when this trip goes that way. */
       count?: number; detour?: { path: Cell[]; stop: number; wait: number } }>();
@@ -268,21 +268,8 @@ export class CityRenderer {
       }
     };
 
-    const activeVisits = new Map<number, { visit: FacilityVisit; elapsed: number; roads: Cell[]; returnPath?: Cell[]; homebound?: boolean }>();
-    this.visitorsAt = cell => {
-      const anchor = map.anchorOf(cell) ?? cell;
-      return [...activeVisits.values()].flatMap(({ visit, elapsed: age, homebound }) => {
-        if (homebound) return [];
-        const dest = visit.path.at(-1)!;
-        if (dest.x !== anchor.x || dest.y !== anchor.y) return [];
-        const travel = (visit.path.length - 1) * WALK_MS_PER_TILE;
-        const phase = age < travel ? '前往中' : age < travel + VISIT_STAY_MS ? '使用中' : '回程';
-        return [{ ...visit, phase }];
-      });
-    };
-    let visitKey = '';
-    let visitRevision = map.layoutRevision;
-    let visitTick = this.city.now;
+    this.visitorsAt = cell => this.city.visitorsAt(cell);
+
     const drawPeople = (elapsed = 0) => {
       people.clear();
       people.alpha = streetOpacity();
@@ -303,6 +290,8 @@ export class CityRenderer {
       // only its first routes, to keep each frame quick.
       for (let i = 0; i < Math.min(routes.length, CARS_SHOWN); i++) {
         const real = routes[i];
+        const slot = this.city.personOn(real.homeId, real.workId);
+        if (slot !== undefined && this.city.visits.has(real.homeId, slot)) continue;
         const key = `${real.homeId}:${real.workId}`;
         let trip = trips.get(key);
         if (!trip) trips.set(key, trip = { at: 'home', wait: 0 });
@@ -310,7 +299,8 @@ export class CityRenderer {
         const route = trip.detour ? { ...real, path: trip.detour.path } : real;
         const tiles = route.path.length;
         const steps = tiles + 1;
-        const driving = real.path.length >= mind.driveFrom;
+        const rainyWay = weatherTravel(weatherAt(this.city.seed, this.city.now), this.city.carOn(route.homeId, route.workId), real.path.length).way;
+        const driving = trip.along !== undefined && trip.driving !== undefined ? trip.driving : rainyWay !== 'walk';
         const home = cellOf(route.homeId);
         const workplace = cellOf(route.workId);
         const zone = this.city.map.get(workplace);
@@ -367,6 +357,7 @@ export class CityRenderer {
           trip.count = (trip.count ?? i % 4) + 1;
           trip.detour = driving && tier >= 1 && trip.at === 'home' && trip.count % 4 === 0 ? viaStation(real) : undefined;
           // Stagger departures a little so a household does not leave as one.
+          trip.driving = driving;
           trip.along = 0;
           trip.wait = (i % 7) * 260;
         }
@@ -498,62 +489,19 @@ export class CityRenderer {
         people.rect(left + 27, top + 27, 3, 3).fill(upright ? 0xe5484d : 0x4fc46b);
       }
 
-      const hour = this.hour();
-      const revision = map.layoutRevision;
-      if (revision !== visitRevision || this.city.now < visitTick) {
-        activeVisits.clear();
-        visitRevision = revision;
-      }
-      visitTick = this.city.now;
-      const key = [Math.floor(hour), revision, Math.floor(viewLeft / 4), Math.floor(viewTop / 4),
-        Math.ceil(viewRight / 4), Math.ceil(viewBottom / 4)].join(':');
-      for (const [home, trip] of activeVisits) {
-        const { visit, roads } = trip;
-        const origin = visit.path[0];
-        const dest = visit.path.at(-1)!;
-        const steps = roads.length + 1;
-        const travel = steps * WALK_MS_PER_TILE;
-        const returning = trip.elapsed >= travel + VISIT_STAY_MS;
-        if (returning && (visit.transfer || trip.returnPath)) {
-          const path = visit.transfer ?? trip.returnPath!;
-          const returnPath = visit.transfer ? this.city.roadBeside(path.at(-1)!) : undefined;
-          const homeRoad = returnPath && this.city.roadBeside(visit.path[0]);
-          const routeHome = returnPath && homeRoad && this.city.roadGraph.shortestPath(returnPath, homeRoad);
-          trip.returnPath = routeHome ? [path.at(-1)!, ...routeHome.path, visit.path[0]] : undefined;
-          trip.visit = { ...visit, path, transfer: undefined, doing: visit.transfer ? 'referred' : visit.doing };
-          trip.roads = path.slice(1, -1);
-          trip.elapsed = 0;
-          trip.homebound = !visit.transfer;
-          continue;
-        }
-        const walking = Math.max(0, returning ? trip.elapsed - travel - VISIT_STAY_MS : trip.elapsed);
-        if ((trip.homebound || returning) && walking >= travel) {
-          activeVisits.delete(home);
-          continue;
-        }
-        if (!returning && walking >= travel) {
-          trip.elapsed += elapsed;
-          continue;
-        }
-        const progress = walking / travel;
-        const point = commuterPosition({ homeId: origin.y * MAP_SIZE + origin.x, workId: dest.y * MAP_SIZE + dest.x, path: roads },
-          0, 'walk', returning ? 1 - progress : progress, false)!;
+      const fraction = ((this.hour() - hourAt(this.city.now) + 24) % 24) / (24 / calendar.ticksPerDay);
+      for (const trip of this.city.visits.frames(this.city.now + Math.min(1, fraction))) {
+        if (trip.progress >= 1) continue;
+        const origin = trip.path[0];
+        const dest = trip.path.at(-1)!;
+        const point = commuterPosition({ homeId: origin.y * MAP_SIZE + origin.x,
+          workId: dest.y * MAP_SIZE + dest.x, path: trip.path.slice(1, -1) },
+          0, 'walk', trip.progress, false);
+        if (!point) continue;
         const spot = centre(point);
-        drawWalker(spot.x, spot.y, home + visit.slot);
-        spots.push({ ...spot, homeId: home, slot: visit.slot });
-        if (this.followVisitor?.home === home && this.followVisitor.slot === visit.slot) pin = spot;
-        trip.elapsed += (walkForward(roads, returning ? dest : visit.path[0],
-          walking / WALK_MS_PER_TILE, elapsed / WALK_MS_PER_TILE, returning) -
-          walking / WALK_MS_PER_TILE) * WALK_MS_PER_TILE;
-      }
-
-      if (elapsed > 0 && key !== visitKey) {
-        visitKey = key;
-        const scheduled = this.city.facilityVisits(Math.floor(hour), cell =>
-          cell.x >= viewLeft - 4 && cell.x <= viewRight + 4 && cell.y >= viewTop - 4 && cell.y <= viewBottom + 4);
-        for (const visit of scheduled) {
-          if (!activeVisits.has(visit.home)) activeVisits.set(visit.home, { visit, elapsed: 0, roads: visit.path.slice(1, -1) });
-        }
+        drawWalker(spot.x, spot.y, trip.home + trip.slot);
+        spots.push({ ...spot, homeId: trip.home, slot: trip.slot });
+        if (this.followVisitor?.home === trip.home && this.followVisitor.slot === trip.slot) pin = spot;
       }
 
       if (pin) {

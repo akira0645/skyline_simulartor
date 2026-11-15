@@ -1,4 +1,5 @@
 /** Every word the screen shows for a thing in the simulation, and the small helpers that phrase numbers. */
+import type { VisitReason } from '../simulation/ActivityDiary';
 import type { Tile } from '../simulation/TileMap';
 import { type CityEvent, type Issue, type PersonNews } from '../simulation/BuildingSystem';
 import { type Mood } from '../simulation/Economy';
@@ -122,6 +123,9 @@ export const homeKindNames: Record<HomeKind, [string, string]> = {
 export const eventText: Record<CityEvent['kind'], string> = {
   fire: '失火沒人救，燒掉一棟，附近的人會怕一個月',
   'fire-out': '失火了，消防車趕到撲滅了',
+  'fire-late': '失火了，消防車被車流卡住來不及，燒掉一棟，附近的人會怕一個月',
+  'crime-late': `遭小偷，警車被車流卡住來不及，損失 $${services.crime.loss}，附近的人會怕一個月`,
+  'sick-late': '有人生病，救護車被車流卡住來不及，病倒了',
   crime: `遭小偷沒人管，損失 $${services.crime.loss}，附近的人會怕一個月`,
   robbery: `銀行遭搶，城市損失 $${services.robbery.loss}，附近居民受到驚嚇`,
   'robbery-stopped': '銀行發生搶劫，警方已阻止',
@@ -182,6 +186,15 @@ export const placeNames: Record<Place, string> = { shops: '商店', market: '市
 
 /** How close-knit a home is, as a word. */
 export const bondWord = (value: number) => value >= bond.close ? '很好' : value >= bond.distant ? '普通' : '冷淡';
+
+/**
+ * Why someone went out, in a word or two, where that says more than what they are doing does.
+ * "Buying bread" needs no reason beside it; "shopping" done because one cooks at home does.
+ */
+export const reasonNote: Partial<Record<VisitReason, string>> = {
+  hungry: '肚子餓', lonely: '想找人', groceries: '自己煮', birthday: '家人生日', treat: '想吃甜的',
+  indoor: '下雨改室內', medical: '不舒服', checkup: '健康檢查', sidejob: '兼職',
+};
 
 /** What someone is doing right now, in a sentence. */
 export function doingText(doing: Doing, shift: number | undefined, way: Way | undefined): string {

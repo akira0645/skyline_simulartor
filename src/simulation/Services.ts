@@ -28,6 +28,12 @@ export const services = {
     // The small shops of everyday life about pay their way once a few hundred people live in town.
     bakery: { perResident: 0.1, most: 60 }, florist: { perResident: 0.08, most: 45 }, cakeshop: { perResident: 0.1, most: 70 } } as
     Partial<Record<Service, { perResident: number; most: number }>>,
+  /**
+   * How many minutes traffic may hold up the engine, the patrol car or the ambulance on its
+   * way to a call before it is too late. They drive at `speed` times a car's pace, and on
+   * clear roads a station in reach is always in time; behind a jam it is no use.
+   */
+  response: { fire: 4, police: 4, clinic: 6, speed: 2 },
   /** A car park within `reach` tiles of a sight brings it this many times the visitors. */
   parking: { reach: 4, boost: 1.25 },
   /** From this population on, buildings without police lose land value and report crime. */
@@ -47,9 +53,9 @@ export const services = {
  * `crime.loss`, and an unserved illness enters the resident's persistent health state.
  */
 export const emergencies = [
-  { service: 'fire', trouble: 'fire', handled: 'fire-out' },
-  { service: 'police', trouble: 'crime', handled: 'crime-stopped' },
-  { service: 'clinic', trouble: 'sick', handled: 'sick-helped' },
+  { service: 'fire', trouble: 'fire', handled: 'fire-out', late: 'fire-late' },
+  { service: 'police', trouble: 'crime', handled: 'crime-stopped', late: 'crime-late' },
+  { service: 'clinic', trouble: 'sick', handled: 'sick-helped', late: 'sick-late' },
 ] as const;
 
 /**

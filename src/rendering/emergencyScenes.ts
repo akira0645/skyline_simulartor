@@ -12,6 +12,29 @@ export interface Scene {
   since: number;
   /** Road tiles from the station to the building, when a vehicle is sent. */
   route?: readonly Cell[];
+  /** How far along the route the vehicle is, in tiles; traffic holds it up, so it is kept, not worked out. */
+  travelled?: number;
+  /** The age of the scene at which the vehicle got there. */
+  arrived?: number;
+  /** The age of the scene when it was last moved on. */
+  moved?: number;
+}
+
+/**
+ * Moves a scene's vehicle on to `age`. `crowd` is how full the map shows the road tile it is
+ * on (see the traffic view): on a clear road it dashes, in a jam it crawls with everyone else.
+ */
+export function advanceScene(scene: Scene, age: number, crowd: (cell: Cell) => number): void {
+  const step = age - (scene.moved ?? 0);
+  scene.moved = age;
+  if (!scene.route || scene.arrived !== undefined) return;
+  const last = scene.route.length - 1;
+  const at = scene.route[Math.min(last, Math.floor(scene.travelled ?? 0))];
+  scene.travelled = (scene.travelled ?? 0) + step / DASH / (1 + 2 * Math.min(2, crowd(at)));
+  if (scene.travelled >= last) {
+    scene.travelled = last;
+    scene.arrived = age;
+  }
 }
 
 /** Milliseconds a vehicle takes per road tile: twice as fast as a commuter's car. */
@@ -21,10 +44,13 @@ const ON_SCENE = 2600;
 /** How long an emergency nobody answers stays on the map. */
 const UNANSWERED = 7000;
 
-const travelTime = (scene: Scene) => (scene.route ? (scene.route.length - 1) * DASH : 0);
+/** The way back, which the ambulance from a crash makes with its patient. */
+const wayBack = (scene: Scene) => (scene.event.kind === 'crash-hospital' ? (scene.route!.length - 1) * DASH : 0);
 
+/** How long a scene lasts; one whose vehicle is still on its way is not over. */
 export function sceneLength(scene: Scene): number {
-  return scene.route ? travelTime(scene) * (scene.event.kind === 'crash-hospital' ? 2 : 1) + ON_SCENE : UNANSWERED;
+  if (!scene.route) return UNANSWERED;
+  return scene.arrived === undefined ? Infinity : scene.arrived + ON_SCENE + wayBack(scene);
 }
 
 const BODY: Record<string, number> = { fire: 0xd9423a, crime: 0x3f5f98, sick: 0xf4f6f8 };
@@ -39,17 +65,16 @@ export function drawScene(g: Graphics, scene: Scene, age: number): void {
     const ambulance = event.kind === 'crash-hospital';
     if (!ambulance) drawMarker(g, left, top, age, event.kind !== 'crash-no-hospital');
     if (route) {
-      const travel = travelTime(scene);
-      const progress = age <= travel ? age / DASH :
-        ambulance ? Math.max(0, (travel + ON_SCENE + travel - age) / DASH) : route.length - 1;
-      drawVehicle(g, route, Math.min(route.length - 1, progress), age, ambulance ? 'sick' : 'crime');
+      const leaving = scene.arrived === undefined ? 0 : age - scene.arrived - ON_SCENE;
+      const progress = ambulance && leaving > 0 ? Math.max(0, route.length - 1 - leaving / DASH) : scene.travelled ?? 0;
+      drawVehicle(g, route, progress, age, ambulance ? 'sick' : 'crime');
     }
     return;
   }
   const trouble = event.kind.startsWith('robbery') ? 'crime' : event.kind.split('-')[0];
   const left = event.cell.x * TILE_SIZE;
   const top = event.cell.y * TILE_SIZE;
-  const arrival = travelTime(scene);
+  const arrival = scene.arrived ?? Infinity;
   const arrived = route !== undefined && age >= arrival;
 
   if (trouble === 'fire') {
@@ -63,7 +88,7 @@ export function drawScene(g: Graphics, scene: Scene, age: number): void {
     drawMarker(g, left, top, age, trouble === 'crime');
   }
 
-  if (route) drawVehicle(g, route, Math.min(age, arrival) / DASH, age, trouble);
+  if (route) drawVehicle(g, route, scene.travelled ?? 0, age, trouble);
 }
 
 /** Three flames that flicker between heights, scaled down as the fire dies. */

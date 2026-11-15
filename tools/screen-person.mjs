@@ -36,11 +36,14 @@ await send('Page.enable'); await send('Runtime.enable');
 // A page that thinks nobody is looking pauses the game, so it is kept in front.
 await send('Emulation.setFocusEmulationEnabled', { enabled: true });
 await send('Emulation.setDeviceMetricsOverride', { width: w, height: h, deviceScaleFactor: 1, mobile: false });
-await send('Page.navigate', { url: 'http://localhost:5199/' });
+await send('Page.navigate', { url: process.env.GAME_URL ?? 'http://localhost:5199/' });
 await sleep(5000);
 await click('選單'); await sleep(200); await click('示範'); await sleep(300);
 await run(`document.querySelectorAll('.pick .cards button')[${card}].click()`);
-await sleep(4000);
+// A large town takes a while to build; the page must stay alive meanwhile.
+const built = async () => { for (let i = 0; i < 120; i++) { await sleep(500); if (!(await run(`document.querySelector('.toast')?.textContent ?? ''`)).startsWith('正在')) return (i + 1) / 2; } return -1; };
+console.log('built after seconds:', await built());
+await sleep(1500);
 const tap = async (x, y) => {
   for (const type of ['mousePressed', 'mouseReleased']) await send('Input.dispatchMouseEvent', { type, x, y, button: 'left', clickCount: 1 });
   await sleep(250);
@@ -60,6 +63,6 @@ await shot('person');
 console.log('card:', await run(`document.querySelector('.person')?.innerText.slice(0, 600)`));
 await click('選單'); await sleep(200); await click('示範'); await sleep(300);
 await run(`document.querySelectorAll('.pick .cards button')[${card}].click()`);
-await sleep(6000);
+console.log('built again after seconds:', await built());
 console.log('notice after second load:', await run(`document.querySelector('.toast')?.textContent`));
 ws.close(); edge.kill(); process.exit(0);

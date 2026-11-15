@@ -8,7 +8,8 @@
   },
   "scripts": {
     "dev": "vite",
-    "build": "tsc -p tsconfig.simulation.json && tsc -p tsconfig.json && vite build",
+    "demos": "node tools/build-demos.mjs",
+    "build": "node tools/build-demos.mjs && tsc -p tsconfig.simulation.json && tsc -p tsconfig.json && vite build",
     "test": "npm run test:fast && npm run test:simulation",
     "test:fast": "vitest run --mode fast",
     "test:simulation": "vitest run --mode simulation"

@@ -76,10 +76,12 @@ export const ISSUES: readonly Issue[] = ['no-road', 'no-power', 'no-water', 'no-
 export interface CityEvent {
   tick: number;
   /** An emergency nobody came to, or the one the service in reach dealt with. */
-  kind: (typeof emergencies)[number]['trouble' | 'handled'] | 'flood' | 'flood-helped' | 'flu' | 'robbery' | 'robbery-stopped' | 'nightmarket-open' | 'market-restocked' | 'crash' | 'crash-cleared' | 'crash-hospital' | 'crash-no-hospital';
+  kind: (typeof emergencies)[number]['trouble' | 'handled' | 'late'] | 'flood' | 'flood-helped' | 'flu' | 'robbery' | 'robbery-stopped' | 'nightmarket-open' | 'market-restocked' | 'crash' | 'crash-cleared' | 'crash-hospital' | 'crash-no-hospital';
   cell: Cell;
   /** The station that answered, when one did. */
   station?: Cell;
+  /** How long the way from the station took, in minutes, traffic and all. */
+  minutes?: number;
 }
 const EVENT_LOG = 20;
 
@@ -1658,7 +1660,7 @@ export class BuildingSystem {
         { runs: this.diary.count(person.identity!.id, 'delivering', this.clock) } : undefined,
       /** The kind of place they are ill and waiting at home to get into, because it is full. */
       waitingFor: waiting === undefined ? undefined : this.map.at(waiting),
-      activityReason: visit?.reason ? visitReasons[visit.reason] : undefined,
+      activityReason: visit?.reason ? visitReasons[visit.reason] : undefined, activityWhy: visit?.reason,
       activities: this.diary.today(person.identity!.id, this.clock),
       weatherReason: facts.way ? weatherTravel(weatherAt(this.seed, this.clock), person.car ?? 0,
         this.commutes.find(route => route.homeId === home && route.workId === person.job)?.path.length ?? 0,
@@ -2151,7 +2153,11 @@ export class BuildingSystem {
       const left = this.loans.map(months => months - 1).filter(months => months > 0);
       this.loans.splice(0, this.loans.length, ...left);
     }
-    if (tick % growth.interval !== 0) return;
+    if (tick % growth.interval !== 0) {
+      // Calls come at any hour, not only when the town grows.
+      this.rollEmergencies(tick, seed);
+      return;
+    }
     let changed = false;
     const daily = tick % calendar.ticksPerDay === 0;
     for (const [id, building] of this.buildings) {
@@ -2238,8 +2244,8 @@ export class BuildingSystem {
     // A neighbourhood gets over its fright.
     if (daily && this.scares.some(({ until }) => until <= tick)) changed = true;
     if (changed) this.refresh();
+    this.rollEmergencies(tick, seed);
     if (daily) {
-      this.rollEmergencies(tick, seed);
       this.rollCrash(tick, seed);
       if (Math.floor(tick / calendar.ticksPerDay) % 7 === 5) {
         const square = this.find({ combo: 'nightmarket' }).find(cell => this.map.get(cell) === 'square');
@@ -2270,6 +2276,27 @@ export class BuildingSystem {
     return this.doorOf(cell);
   }
 
+  /**
+   * Minutes an emergency vehicle needs from a station to a call at an hour of the day: the
+   * shortest way by road, at `services.response.speed` times a car's pace, slowed on every
+   * tile by the traffic of that hour as cars are; `held` is how much of it the traffic cost.
+   * Nothing if no road joins the two.
+   */
+  responseMinutes(station: Cell, cell: Cell, hour: number): { minutes: number; held: number } | undefined {
+    const from = this.doorOf(station);
+    const to = isRoad(this.map.get(cell)) ? cell : this.doorOf(cell);
+    const path = from && to && this.roadGraph.shortestPath(from, to)?.path;
+    if (!path) return undefined;
+    let clear = 0;
+    let held = 0;
+    for (const tile of path) {
+      const base = (this.map.get(tile) === 'avenue' ? traffic.avenue.minutesPerTile : traffic.minutesPerTile) / services.response.speed;
+      clear += base;
+      held += base * traffic.alpha * this.congestionAt(tile, hour) ** traffic.beta;
+    }
+    return { minutes: clear + held, held };
+  }
+
   /** The nearest working station of a service that has the cell in reach. */
   private nearestStation(cell: Cell, service: Service): Cell | undefined {
     let best: Cell | undefined;
@@ -2288,8 +2315,10 @@ export class BuildingSystem {
   }
 
   /**
-   * Once a day each kind of emergency may strike one building. The fire roll keeps the salts
-   * it always had, so adding the other two did not move any fire.
+   * Once a day each kind of emergency may strike one building, at an hour of its own, so that
+   * some calls come in the rush. Whether and where is rolled for the day with the salts the
+   * fire roll always had. Help has to get there by road in time (see `services.response`).
+   * Floods, flu and the rest that follow are still settled at the start of the day.
    */
   private rollEmergencies(tick: number, seed: number): void {
     const { population, perBuilding, max } = services.fires;
@@ -2298,17 +2327,22 @@ export class BuildingSystem {
     const chance = Math.min(max, this.buildings.size * perBuilding) * calm;
     const ids = [...this.buildings.keys()];
     let changed = false;
-    emergencies.forEach(({ service, trouble, handled }, index) => {
+    const dayStart = tick - tick % calendar.ticksPerDay;
+    emergencies.forEach(({ service, trouble, handled, late }, index) => {
+      if (tick - dayStart !== roll(seed, dayStart, 61 + index) % calendar.ticksPerDay) return;
       const odds = trouble === 'crime' && this.policiesOn.has('patrol') ? chance * policies.patrol.crime : chance;
-      if (roll(seed, tick, 7 + 2 * index) / 2 ** 32 >= odds) return;
-      const id = ids[roll(seed, tick, 8 + 2 * index) % ids.length];
+      if (roll(seed, dayStart, 7 + 2 * index) / 2 ** 32 >= odds) return;
+      const id = ids[roll(seed, dayStart, 8 + 2 * index) % ids.length];
       const building = this.buildings.get(id);
       // It may have burned down a moment ago.
       if (!building) return;
       const cell = cellAt(id);
-      const helped = this.covered[service][id] === 1;
-      this.events.push({ tick, kind: helped ? handled : trouble, cell,
-        station: helped ? this.nearestStation(cell, service) : undefined });
+      const station = this.covered[service][id] === 1 ? this.nearestStation(cell, service) : undefined;
+      // A station with no road to the call is taken to get there as it always was.
+      const way = station && this.responseMinutes(station, cell, hourAt(tick));
+      const helped = this.covered[service][id] === 1 && (way?.held ?? 0) <= services.response[service];
+      this.events.push({ tick, kind: helped ? handled : station ? late : trouble, cell, station,
+        minutes: way && Math.round(way.minutes) });
       if (this.events.length > EVENT_LOG) this.events.shift();
       if (helped) return;
       if (trouble !== 'sick') {
@@ -2325,6 +2359,10 @@ export class BuildingSystem {
         changed = true;
       }
     });
+    if (tick !== dayStart) {
+      if (changed) this.refresh();
+      return;
+    }
     const season = seasonAt(tick);
     const struck = (salt: number, most: number, suits: (id: number) => boolean) => {
       const open = ids.filter(id => this.buildings.has(id) && suits(id));

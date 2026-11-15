@@ -12,7 +12,7 @@ import { lineColour } from '../app/lineColours';
 
 /** Milliseconds a line's vehicle takes per tile at 1× speed. */
 const LINE_PACE = { bus: 320, metro: 250 };
-import { drawScene, sceneLength, type Scene } from './emergencyScenes';
+import { advanceScene, drawScene, sceneLength, type Scene } from './emergencyScenes';
 
 /** An emergency older than this many ticks when first seen is not played back. */
 const FRESH_TICKS = 16;
@@ -614,6 +614,7 @@ export class CityRenderer {
       }
       for (const [key, scene] of scenes) {
         const age = animationTime - scene.since;
+        advanceScene(scene, age, cell => this.crowdOn?.(cell) ?? 0);
         if (age > sceneLength(scene) || this.city.now < scene.event.tick) scenes.delete(key);
         else drawScene(effects, scene, age);
       }

@@ -1,3 +1,4 @@
+import { cellFromId } from '../simulation/FacilityAccess';
 import { weatherAt, weatherNames } from '../simulation/Weather';
 import { AutosaveSession, type AutosaveStatus } from '../storage/AutosaveSession';
 import { useEffect, useRef, useState } from 'react';
@@ -12,7 +13,7 @@ import { transit } from '../simulation/Transit';
 import { landValue } from '../simulation/LandValue';
 import type { Overlay, Tool } from './tools';
 import type { Cell, Tile } from '../simulation/TileMap';
-import { demoCity, powerPlant, waterTower, works, type DemoSize } from './demoCity';
+import { powerPlant, waterTower, works, type DemoSize } from './demoCity';
 import { workShift, rushShifts, shifts } from '../simulation/WorkShift';
 import { ISSUES, type Issue } from '../simulation/BuildingSystem';
 import { cycle, economy, milestones, type Mood } from '../simulation/Economy';
@@ -39,7 +40,7 @@ import {
   moodNames, rankNames, percent, money, facilityUse, issueNames, issueHelp, tileNames, homeKindNames, eventText,
   traitNames, newsText, howLong, wayNames, vehicleNames, placeNames, bondWord, doingText, thoughtNames,
   thoughtTags, tradeNames, comboNames, PLACES_OF, nickNames, taskNames, seasonNames, festivalNames, policyNames,
-  challengeNames, brandNames, dilemmaNames, themeNames, thoughtTone, moodWord, serviceNames, trafficName,
+  challengeNames, brandNames, dilemmaNames, themeNames, thoughtTone, moodWord, reasonNote, serviceNames, trafficName,
 } from './wording';
 import { Meter, PersonRow, Tag } from './Tag';
 
@@ -410,7 +411,7 @@ export function App() {
     if (latest && latest.tick > knownEvent.current) {
       knownEvent.current = latest.tick;
       // Only what went wrong, and fires, interrupt; routine calls just go in the list.
-      if (latest.kind === 'fire' || latest.kind === 'fire-out' || latest.kind === 'crime' || latest.kind === 'robbery' || latest.kind === 'robbery-stopped' || latest.kind === 'sick') {
+      if (latest.kind.endsWith('-late') || latest.kind === 'fire' || latest.kind === 'fire-out' || latest.kind === 'crime' || latest.kind === 'robbery' || latest.kind === 'robbery-stopped' || latest.kind === 'sick') {
         setMessage(`${eventText[latest.kind]}。`);
       }
     }
@@ -527,21 +528,32 @@ export function App() {
   function startDemo(size: DemoSize) {
     if (!mayReplace('會蓋掉現在的地圖，確定嗎？')) return;
     setChoosing(false);
-    setMessage('正在蓋城市…');
-    // The larger ones take a few seconds to put up, so the message gets on screen first.
-    window.setTimeout(() => {
-      // Whatever goes wrong, "building" must not be left on screen.
-      try {
-        const sample = new SimulationEngine({ version: 1, seed: 42, tick: 0 });
-        demoCity(sample, size);
-        replaceCity(sample, true,
-          size === 'small' ? '交給你了。先過橋，把東岸的水電、警察、消防補上。' :
-            size === 'medium' ? '交給你了。過東邊那條河，對岸的新街區還沒有水電、警察、消防。' :
-            '交給你了。往南過紅色大橋，海灣對岸的新街區還沒有水電、警察、消防。');
-      } catch {
+    const done = size === 'small' ? '交給你了。先過橋，把東岸的水電、警察、消防補上。' :
+      size === 'medium' ? '交給你了。過東邊那條河，對岸的新街區還沒有水電、警察、消防。' :
+      '交給你了。往南過紅色大橋，海灣對岸的新街區還沒有水電、警察、消防。';
+    const open = (save: unknown) => {
+      const sample = new SimulationEngine({ version: 1, seed: 42, tick: 0 });
+      sample.load(save as ReturnType<SimulationEngine['save']>);
+      replaceCity(sample, true, done);
+    };
+    setMessage('正在打開城市…');
+    // The city was built and saved when the game was (tools/build-demos.mjs), so it only has to be read.
+    fetch(`./demo/${size}.json`).then(reply => reply.json()).then(save => open({ ...save, tiles: Uint8Array.from(save.tiles) })).catch(() => {
+      // No saved city to read, as when the game is run straight from its source: build it now.
+      // The larger ones live through years first, so that is done off the page, which stays alive.
+      setMessage('正在蓋城市…');
+      const builder = new Worker(new URL('./demoWorker.ts', import.meta.url), { type: 'module' });
+      const failed = () => {
+        builder.terminate();
         setMessage('城市蓋不起來，請再試一次。');
-      }
-    }, 30);
+      };
+      builder.onerror = failed;
+      builder.onmessage = event => {
+        builder.terminate();
+        try { open(event.data); } catch { failed(); }
+      };
+      builder.postMessage(size);
+    });
   }
 
   function startNew() {
@@ -603,18 +615,21 @@ export function App() {
         tip={seen.needs.lonely ? '好幾天沒遇到人，會先去社區中心、廟、KTV 或夜市' : '在同一個地方一起活動就會認識人'} />
     </dl>
     <dl>
-      <dt>現在</dt><dd>{doingText(doing, seen.shift, seen.way)}</dd>
-      {seen.activityReason && <><dt>出門原因</dt><dd>{seen.activityReason}</dd></>}
-      {seen.weatherReason && <><dt>天氣</dt><dd>{seen.weatherReason}</dd></>}
-      <dt>住在</dt><dd>{seen.kind ? homeKindNames[seen.kind][0] : '一般住宅'}，{howLong(seen.days)}</dd>
+      <dt>現在</dt>
+      <dd title={seen.activityReason}>{doingText(doing, seen.shift, seen.way)}
+        {seen.activityWhy && reasonNote[seen.activityWhy] && `（${reasonNote[seen.activityWhy]}）`}
+        {seen.weatherReason && <small>{seen.weatherReason}</small>}</dd>
+      <dt>住在</dt><dd className="tags">{seen.kind ? homeKindNames[seen.kind][0] : '一般住宅'}，{howLong(seen.days)}
+        <Tag label="看住家" tip="把地圖移到這個人的家" onPick={() => rendererRef.current?.lookAt?.(cellFromId(seen.homeId))} /></dd>
       <dt>吃飯</dt>
       <dd title={eatingWords[seen.eating][1]}>{eatingWords[seen.eating][0]}{seen.rider &&
         <span title={`還在騎腳踏車或機車的人，沒上班、不太累的時候會接單送餐。每單賺 ${money(delivery.fee)}，但會更累`}>
           ，兼職外送{seen.rider.runs ? `（今天跑 ${seen.rider.runs} 趟）` : ''}</span>}</dd>
       <dt>健康</dt><dd>{seen.waitingFor ? `${tileNames[seen.waitingFor]}客滿，在家等候看診` : seen.health ? seen.health.state === 'recovering' ? '康復中，正在休養' : seen.health.severe ? '需要醫院治療' : '身體不舒服，安排休息或就醫' : '健康'}</dd>
       <dt>工作</dt>
-      <dd>{seen.age >= 65 ? '已退休（基本年金支應生活）' : seen.shift === undefined ? '尋找中' :
-        `${shifts[seen.shift].title} ${shifts[seen.shift].start}–${shifts[seen.shift].end} 點，${howLong(seen.workDays ?? 0)}`}</dd>
+      <dd className="tags">{seen.age >= 65 ? '已退休（基本年金支應生活）' : seen.shift === undefined ? '尋找中' :
+        `${shifts[seen.shift].title} ${shifts[seen.shift].start}–${shifts[seen.shift].end} 點，${howLong(seen.workDays ?? 0)}`}
+        {seen.jobId >= 0 && <Tag label="看公司" tip="把地圖移到這個人上班的地方" onPick={() => rendererRef.current?.lookAt?.(cellFromId(seen.jobId))} />}</dd>
       {seen.way && seen.minutes !== undefined && <>
         <dt>上班</dt><dd>{wayNames[seen.way]} {Math.max(1, Math.round(seen.minutes))} 分鐘</dd>
       </>}
@@ -631,7 +646,8 @@ export function App() {
       const minutes = Math.round(hourAt(entry.started) * 60) % 1440;
       return <li key={`${entry.started}:${entry.destination}`}>
         <time>{String(Math.floor(minutes / 60)).padStart(2, '0')}:{String(minutes % 60).padStart(2, '0')}</time>
-        <span>{doingText(entry.doing, undefined, undefined)}<small>{entry.arrived === undefined ? '已出發' : '已抵達'}・{visitReasons[entry.reason]}</small></span>
+        <span title={visitReasons[entry.reason]}>{doingText(entry.doing, undefined, undefined)}</span>
+        <small>{[reasonNote[entry.reason], entry.arrived === undefined && '路上'].filter(Boolean).join('・')}</small>
       </li>;
     })}</ol> : <p className="hint">今天還沒有外出活動紀錄。</p>}
     <h2 className="sub">認識的人</h2>

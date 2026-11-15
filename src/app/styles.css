@@ -321,7 +321,8 @@ button.tag[aria-pressed="true"] b { color: var(--ink); }
 .side .activity-diary { list-style: none; padding: 0; margin: 0; }
 .activity-diary li { display: flex; gap: 0.5rem; padding: 0.35rem 0; border-bottom: 1px solid var(--asphalt); font-size: 0.85rem; }
 .activity-diary time { flex: none; color: var(--sand); font-variant-numeric: tabular-nums; }
-.activity-diary small { display: block; color: var(--steel); line-height: 1.5; }
+.activity-diary span { flex: 1; }
+.activity-diary small { flex: none; color: var(--steel); white-space: nowrap; }
 
 /* --- City tab: trend charts */
 .trend h2 { display: flex; justify-content: space-between; }

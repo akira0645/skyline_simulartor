@@ -52,6 +52,8 @@ export class VisitSystem {
 
   /** People inside or on their way, by destination; counted afresh after any trip changes. */
   private tally?: Map<number, number>;
+  /** The cars standing at each place or on their way to it, counted with the people. */
+  private cars = new Map<number, number>();
 
   has(home: number, slot: number): boolean { return this.active.has(visitKey({ home, slot })); }
 
@@ -59,18 +61,30 @@ export class VisitSystem {
   occupancy(destination: number): number {
     if (!this.tally) {
       this.tally = new Map();
+      this.cars = new Map();
       for (const trip of this.active.values()) {
-        if (!trip.returning) this.tally.set(trip.destination, (this.tally.get(trip.destination) ?? 0) + 1);
+        if (trip.returning) continue;
+        this.tally.set(trip.destination, (this.tally.get(trip.destination) ?? 0) + 1);
+        if ((trip.ride ?? 0) >= 2) this.cars.set(trip.destination, (this.cars.get(trip.destination) ?? 0) + 1);
       }
     }
     return this.tally.get(destination) ?? 0;
   }
 
+  /** How many visitors' cars stand at a place or are on their way to it; scooters are not counted. */
+  carsAt(destination: number): number {
+    this.occupancy(destination);
+    return this.cars.get(destination) ?? 0;
+  }
+
   /** Keeps the count right when one trip ends, starts or turns into another. */
   private recount(before: ActiveVisit | undefined, after: ActiveVisit | undefined): void {
     if (!this.tally) return;
-    if (before && !before.returning) this.tally.set(before.destination, (this.tally.get(before.destination) ?? 1) - 1);
-    if (after && !after.returning) this.tally.set(after.destination, (this.tally.get(after.destination) ?? 0) + 1);
+    for (const [trip, change] of [[before, -1], [after, 1]] as const) {
+      if (!trip || trip.returning) continue;
+      this.tally.set(trip.destination, (this.tally.get(trip.destination) ?? 0) + change);
+      if ((trip.ride ?? 0) >= 2) this.cars.set(trip.destination, (this.cars.get(trip.destination) ?? 0) + change);
+    }
   }
 
   cancelResident(home: number, slot: number): void { this.active.delete(visitKey({ home, slot })); this.tally = undefined; }

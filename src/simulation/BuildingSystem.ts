@@ -4,6 +4,7 @@ import { ActivityDiary, activityDay, visitReasons } from './ActivityDiary';
 import { createIdentity, identityAt, YEAR_TICKS } from './ResidentIdentity';
 import { Relationships } from './Relationships';
 import { seats } from './Capacity';
+import { spacesAt } from './Parking';
 import { birthdayOf, eatingOf, fatigueAt, hungerAt, mealPlan, meals, needs, socialAt, type Needs } from './Needs';
 import { delivery, ridesFor } from './Delivery';
 
@@ -280,6 +281,8 @@ export class BuildingSystem {
   private readonly commuteByPair = new Map<number, Commute>();
   /** This hour: who wanted each place and found it full, and the sick who now wait at home for one. */
   private readonly crowded = new Map<number, Set<number>>();
+  /** The drivers who set out for each place this hour with no space left for their car. */
+  private readonly circled = new Map<number, number>();
   private readonly waitingFor = new Map<number, number>();
   /** Those whose meal is on its way to their door this hour. */
   private readonly fed = new Set<number>();
@@ -371,6 +374,7 @@ export class BuildingSystem {
 
   private advanceVisits(tick: number): void {
     this.crowded.clear();
+    this.circled.clear();
     this.waitingFor.clear();
     const count = (id: number, people: number) => {
       const anchor = indexOf(this.map.anchorOf(cellAt(id)) ?? cellAt(id));
@@ -1731,6 +1735,8 @@ export class BuildingSystem {
       celebrates: home => this.birthdayAt(home, tick) &&
         !this.buildings.get(home)?.people?.some(person => person.identity && this.diary.has(person.identity.id, 'cake', tick)),
       occupancy: site => this.visits.occupancy(site),
+      carsAt: site => this.visits.carsAt(site),
+      noSpace: site => this.circled.set(site, (this.circled.get(site) ?? 0) + 1),
       turnedAway: (site, home, person, waiting) => {
         const who = person.identity?.id ?? home * 64 + person.slot;
         if (!this.crowded.has(site)) this.crowded.set(site, new Set());
@@ -1783,6 +1789,16 @@ export class BuildingSystem {
     const site = indexOf(anchor);
     // Counted the way the lists of visitors are, so the panel's numbers agree between steps.
     return { seats: limit, busy: this.visitorsAt(cell, undefined, tickProgress).length, turnedAway: this.crowded.get(site)?.size ?? 0 };
+  }
+
+  /**
+   * The visitors' cars at a place: how many it has room for, how many stand there or are on
+   * their way, and how many drivers found it full this hour and went round looking.
+   */
+  carsAt(cell: Cell): { spaces: number; cars: number; looking: number } {
+    const anchor = this.map.anchorOf(cell) ?? cell;
+    const site = indexOf(anchor);
+    return { spaces: spacesAt(this.map, anchor), cars: this.visits.carsAt(site), looking: this.circled.get(site) ?? 0 };
   }
 
   visitorGroupsAt(cell: Cell, tickProgress = 0) {

@@ -569,6 +569,7 @@ export function App() {
   const crowd = selected && panelTab === 'tile' && !who ? engine.city.crowdAt(selected, clock.tickProgress) : undefined;
   const visitors = selected && info && panelTab === 'tile' && !who && visitable.includes(info.tile) ?
     engine.city.visitorGroupsAt(selected, clock.tickProgress) : undefined;
+  const parked = selected && visitors ? engine.city.carsAt(selected) : undefined;
   const building = selected && engine.city.getBuilding(selected);
   const demoTile = (cell: Cell) => engine.city.map.get(cell);
   const shift = building && building.zone !== 'residential' ? workShift(building.zone, building.id) : undefined;
@@ -861,6 +862,16 @@ export function App() {
                   tip="這個小時想來、但已經客滿的人。他們會改去別家或做別的事；生病的人會在家等。附近再蓋一間可以分散人潮" />}
               </dd>
             </>}
+            {parked && <>
+              <dt>車位</dt>
+              <dd className="tags">
+                <Tag label={parked.cars >= parked.spaces ? '停滿' : '還有車位'} value={`${Math.min(parked.cars, parked.spaces)}/${parked.spaces} 台`}
+                  tone={parked.cars >= parked.spaces ? 'bad' : undefined}
+                  tip="開車來的人要有地方停：門口路邊 2 台，大的地方自己有停車場，2 格內每蓋一座停車場多 12 台。機車不占車位" />
+                {parked.looking > 0 && <Tag label="找不到車位" value={`${parked.looking} 台`} tone="bad"
+                  tip="這個小時開車來、但車位已滿的人。他們會在附近多繞一段路找位子，路上的車也跟著變多。2 格內蓋一座停車場就能解決" />}
+              </dd>
+            </>}
             {info.brand && <>
               <dt>招牌</dt>
               <dd className="tags"><Tag label={brandNames[info.brand]} tone="good" /><Tag label="收入" value={`${money(brands[info.brand])}/月`} tone="good" /></dd>
@@ -979,7 +990,7 @@ export function App() {
             {info.building && <>
               {info.kids && info.kids.length > 0 && <>
                 <dt>小孩</dt>
-                <dd className="tags">{info.kids.map(kid => <Tag key={kid.name} label={kid.name} value={`${kid.age} 歲`} />)}</dd>
+                <dd className="tags">{info.kids.map((kid, at) => <Tag key={at} label={kid.name} value={`${kid.age} 歲`} />)}</dd>
               </>}
               {info.circle && info.bond !== undefined && <>
                 <dt title={`走路 ${circle.reach} 格內有什麼；灰色的是沒有的`}>生活圈</dt>

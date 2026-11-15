@@ -13,6 +13,7 @@ import type { Combo } from './Combos';
 import { rideFor, stayTicks, travelTicks, type FacilityVisit } from './VisitSystem';
 import { DUTIES, FOOD_PLACES, SOCIAL_PLACES } from './Needs';
 import { seats } from './Capacity';
+import { circling, spacesAt } from './Parking';
 
 export interface CivicVisitContext {
   map: TileMap;
@@ -46,6 +47,10 @@ export interface CivicVisitContext {
   /** Told when someone wanted a place and found it full; `waiting` if they are ill and now wait at home. */
   turnedAway?: (site: number, home: number, person: SavedPerson, waiting: boolean) => void;
   origin?: (home: number, person: SavedPerson) => { cell: Cell; road: Cell } | undefined;
+  /** How many visitors' cars stand at a place or are on their way. Without it, there is always room. */
+  carsAt?: (site: number) => number;
+  /** Told when a driver set out for a place with no space left, and so goes round looking. */
+  noSpace?: (site: number) => void;
 }
 
 function reasonFor(doing: Doing, rainy: boolean): VisitReason {
@@ -196,9 +201,13 @@ export function planFacilityVisits(context: CivicVisitContext, hour: number, vis
     const limit = context.occupancy && seats[context.map.get(dest)!];
     return !!limit && context.occupancy!(indexOf(dest)) + (sent.get(indexOf(dest)) ?? 0) >= limit;
   };
+  const drove = new Map<number, number>();
+  const noSpace = (site: number) => !!context.carsAt &&
+    context.carsAt(site) + (drove.get(site) ?? 0) >= spacesAt(context.map, cellAt(site));
   const send = (visit: FacilityVisit) => {
     visits.push(visit);
     sent.set(visit.destination, (sent.get(visit.destination) ?? 0) + 1);
+    if ((visit.ride ?? 0) >= 2) drove.set(visit.destination, (drove.get(visit.destination) ?? 0) + 1);
   };
   for (const [home, building] of context.buildings) {
     if (!building.people?.length || context.map.at(home) !== 'residential' || !visible(cellAt(home))) continue;
@@ -284,6 +293,9 @@ export function planFacilityVisits(context: CivicVisitContext, hour: number, vis
         if (!nearest) continue;
         // Far enough, and they take the scooter or the car, which is quicker.
         const ride = rideFor(person.car, nearest.path);
+        // A car needs somewhere to stand; with every space taken, the driver goes round looking.
+        const looking = (ride ?? 0) >= 2 && noSpace(nearest.destination);
+        if (looking) nearest.path = circling(context.map, nearest.path);
         const travel = travelTicks(nearest.path, doing, ride) * 24 / calendar.ticksPerDay;
         const activityEnd = hour + travel + stayTicks(doing) * 24 / calendar.ticksPerDay;
         const homeBy = workingToday && hour < busyStart ? Math.min(23, busyStart) : 23;
@@ -291,6 +303,7 @@ export function planFacilityVisits(context: CivicVisitContext, hour: number, vis
         if (current && !back) continue;
         const returnHours = back ? travelTicks([nearest.path.at(-1)!, ...back.path], doing, ride) * 24 / calendar.ticksPerDay : travel;
         if (activityEnd > until || activityEnd + returnHours > homeBy) continue;
+        if (looking) context.noSpace?.(nearest.destination);
         send({ home, slot: person.slot, doing, path: nearest.path, destination: nearest.destination, ...(ride ? { ride } : {}),
           reason: wanted(tile) === 0 ? 'hungry' : wanted(tile) === 1 ? 'lonely' : wanted(tile) === 2 ? (tile === 'market' ? 'groceries' : 'birthday') :
             reasonFor(doing, weatherAt(context.seed, context.clock) !== 'clear') });

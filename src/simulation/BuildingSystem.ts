@@ -317,6 +317,8 @@ export class BuildingSystem {
   /** The tick of the latest growth call, for showing how recent an event is. */
   private clock = 0;
   private readonly monthlyVisits = new Map<number, number>();
+  /** Residents on an outing by scooter (half a car each) or car over each road tile this hour. */
+  private readonly outingFlows = new Float32Array(MAP_SIZE ** 2);
 
   readonly visits = new VisitSystem();
   private parkRevision = -1;
@@ -387,7 +389,7 @@ export class BuildingSystem {
       // A rider at a customer's door is no visitor.
       if (trip.doing !== 'delivering') count(trip.destination, 1);
       const person = this.buildings.get(trip.home)?.people?.find(person => person.slot === trip.slot);
-      if (person?.identity) this.diary.arrive(person.identity.id, trip, trip.started + travelTicks(trip.path, trip.doing));
+      if (person?.identity) this.diary.arrive(person.identity.id, trip, trip.started + travelTicks(trip.path, trip.doing, trip.ride));
       const site = this.map.at(trip.destination);
       if (person?.identity && ['clinic', 'familyclinic', 'hospital', 'eldercare'].includes(site)) this.life.treat(person.identity.id, Math.ceil(tick), site === 'hospital');
     }
@@ -413,6 +415,14 @@ export class BuildingSystem {
     const outings = this.facilityVisits(hour, () => true);
     this.visits.start(outings, tick);
     const plans = [...runs, ...outings];
+    // Those out on a scooter or in a car are on the roads with everyone else this hour.
+    this.outingFlows.fill(0);
+    this.visits.each(trip => {
+      // Parked at the place they went to, they are off the road.
+      if (!trip.ride || (trip.arrived && !trip.returning)) return;
+      const weight = trip.ride >= 2 ? 1 : 0.5;
+      for (let step = 1; step < trip.path.length - 1; step++) this.outingFlows[indexOf(trip.path[step])] += weight;
+    });
     for (const plan of plans) {
       const person = this.buildings.get(plan.home)?.people?.find(person => person.slot === plan.slot);
       if (person?.identity) this.diary.depart(person.identity.id, plan, tick);
@@ -596,6 +606,7 @@ export class BuildingSystem {
     if (hour !== undefined) {
       flow = 0;
       for (const shift of rushShifts(hour)) if (this.shiftRuns(shift)) flow += this.shiftFlows[shift][id];
+      flow += this.outingFlows[id];
     }
     return this.crashDelay(cell) ? Math.max(1, congestion(flow, tile)) : congestion(flow, tile);
   }

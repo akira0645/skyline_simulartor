@@ -17,6 +17,8 @@ import { advanceScene, drawScene, sceneLength, type Scene } from './emergencySce
 /** An emergency older than this many ticks when first seen is not played back. */
 const FRESH_TICKS = 16;
 const CARS_SHOWN = 500;
+/** As many again may be out on errands in their own cars and on their scooters. */
+const RIDES_SHOWN = 200;
 import { selection, type Overlay, type Tool } from '../app/tools';
 import { Camera } from './Camera';
 import { DETAIL_ZOOM, TileRenderer } from './TileRenderer';
@@ -126,6 +128,68 @@ export class CityRenderer {
       count?: number; detour?: { path: Cell[]; stop: number; wait: number } }>();
     /** The cars that were on the road in the last frame, for the ones behind to keep clear of. */
     let cars: { x: number; y: number; hx: number; hy: number; index: number }[] = [];
+    /** Whether a car in the same lane is just ahead of this spot: one going the same way, within `reach` of a tile. */
+    const carAhead = (tileX: number, tileY: number, hx: number, hy: number, self: number, reach = 0.48) => cars.some(other => {
+      if (other.index === self || other.hx !== hx || other.hy !== hy) return false;
+      const offX = other.x - tileX;
+      const offY = other.y - tileY;
+      if (Math.abs(offX * hy - offY * hx) > 0.14) return false;
+      const forward = offX * hx + offY * hy;
+      // Two cars side by side on one spot: the earlier one goes first.
+      return (forward > 0.03 && forward < reach) || (Math.abs(forward) <= 0.03 && other.index < self);
+    });
+    /**
+     * One drive to be shown: a commuter's between home and work, or one leg of an outing made
+     * on a scooter or in a car. Both are driven the same way, in lane, behind whoever is in
+     * front and stopping at lights. `wanted` is the end the driver should be at now.
+     */
+    interface Run { key: string; homeId: number; workId: number; path: readonly Cell[]; tier: number; index: number;
+      wanted: 'home' | 'work'; walks: boolean; commute: boolean; person?: { home: number; slot: number } }
+    /**
+     * Those out on wheels. The simulation moves an outing along by the clock, far quicker than a
+     * car can be watched; so, as with commuting, the map drives each leg of it at a car's pace,
+     * one after another, and the car waits at the kerb where its driver is.
+     */
+    interface Leg { from: number; to: number; path: Cell[]; tier: number; id: number }
+    const rides = new Map<string, { home: number; slot: number; queue: Leg[]; leg?: Leg; seen: number; live: boolean }>();
+    let legs = 0;
+    const outingRuns = (most: number): Run[] => {
+      for (const ride of rides.values()) ride.live = false;
+      this.city.visits.each(trip => {
+        if (!trip.ride || trip.doing === 'delivering' || trip.path.length < 4) return;
+        const key = `${trip.home}:${trip.slot}`;
+        let ride = rides.get(key);
+        if (!ride) {
+          if (rides.size >= most) return;
+          rides.set(key, ride = { home: trip.home, slot: trip.slot, queue: [], seen: -1, live: true });
+        }
+        ride.live = true;
+        if (trip.started === ride.seen) return;
+        ride.seen = trip.started;
+        const from = trip.path[0];
+        const to = trip.path[trip.path.length - 1];
+        ride.queue.push({ from: from.y * MAP_SIZE + from.x, to: to.y * MAP_SIZE + to.x, path: trip.path.slice(1, -1), tier: trip.ride, id: legs++ });
+        // Someone who has been to three places since the car last moved skips to the latest.
+        if (ride.queue.length > 3) ride.queue.shift();
+      });
+      const runs: Run[] = [];
+      for (const [key, ride] of rides) {
+        const state = ride.leg && trips.get(`o:${ride.leg.id}`);
+        // A leg is over once the car is parked and there is somewhere else to go, or the outing has ended.
+        if (ride.leg && state?.at === 'work' && state.along === undefined && (ride.queue.length || !ride.live)) {
+          trips.delete(`o:${ride.leg.id}`);
+          ride.leg = undefined;
+        }
+        ride.leg ??= ride.queue.shift();
+        if (!ride.leg) {
+          rides.delete(key);
+          continue;
+        }
+        runs.push({ key: `o:${ride.leg.id}`, homeId: ride.leg.from, workId: ride.leg.to, path: ride.leg.path, tier: ride.leg.tier,
+          index: 100000 + ride.leg.id, wanted: 'work', walks: false, commute: false, person: { home: ride.home, slot: ride.slot } });
+      }
+      return runs;
+    };
     /** Where each commuter in sight was last drawn, for clicking on them. */
     let spots: ({ x: number; y: number; homeId: number } & ({ workId: number } | { slot: number }))[] = [];
     this.tripOf = (homeId, workId) => {
@@ -302,29 +366,36 @@ export class CityRenderer {
       const centre = (cell: Cell) => ({ x: (cell.x + 0.5) * TILE_SIZE, y: (cell.y + 0.5) * TILE_SIZE });
       // Every car on the map is someone's, driven out from their door. A very large city shows
       // only its first routes, to keep each frame quick.
+      const runs: Run[] = [];
       for (let i = 0; i < Math.min(routes.length, CARS_SHOWN); i++) {
         const real = routes[i];
         const slot = this.city.personOn(real.homeId, real.workId);
         if (slot !== undefined && this.city.visits.has(real.homeId, slot)) continue;
-        const key = `${real.homeId}:${real.workId}`;
+        const zone = this.city.map.get(cellOf(real.workId));
+        if (zone !== 'commercial' && zone !== 'industrial') continue;
+        const { start, end } = workShift(zone, real.workId);
+        const tier = this.city.carOn(real.homeId, real.workId);
+        const sinceStart = (this.hour() - start + 24) % 24;
+        // At the weekend only the shops are open, so only their people go to work.
+        const dayOff = weekendAt(this.city.now) && shiftIndex(zone, real.workId) !== SHOP_SHIFT;
+        runs.push({ key: `${real.homeId}:${real.workId}`, homeId: real.homeId, workId: real.workId, path: real.path, tier, index: i, commute: true,
+          wanted: !dayOff && (sinceStart < end - start || sinceStart >= 24 - HEAD_START) ? 'work' : 'home',
+          walks: weatherTravel(weatherAt(this.city.seed, this.city.now), tier, real.path.length).way === 'walk' });
+      }
+      // The clock runs far ahead of what can be watched, so only some of those out on wheels are
+      // shown at once: about one for every twelve commuters, or the streets would fill with them.
+      runs.push(...outingRuns(Math.min(RIDES_SHOWN, Math.max(6, Math.round(routes.length / 12)))));
+      for (const real of runs) {
+        const { key, index: i, tier, wanted } = real;
         let trip = trips.get(key);
         if (!trip) trips.set(key, trip = { at: 'home', wait: 0 });
         // On a trip by way of the filling station the car follows that way instead of the straight one.
         const route = trip.detour ? { ...real, path: trip.detour.path } : real;
         const tiles = route.path.length;
         const steps = tiles + 1;
-        const rainyWay = weatherTravel(weatherAt(this.city.seed, this.city.now), this.city.carOn(route.homeId, route.workId), real.path.length).way;
-        const driving = trip.along !== undefined && trip.driving !== undefined ? trip.driving : rainyWay !== 'walk';
+        const driving = trip.along !== undefined && trip.driving !== undefined ? trip.driving : !real.walks;
         const home = cellOf(route.homeId);
         const workplace = cellOf(route.workId);
-        const zone = this.city.map.get(workplace);
-        if (zone !== 'commercial' && zone !== 'industrial') continue;
-        const { start, end } = workShift(zone, route.workId);
-        const tier = this.city.carOn(route.homeId, route.workId);
-        const sinceStart = (this.hour() - start + 24) % 24;
-        // At the weekend only the shops are open, so only their people go to work.
-        const dayOff = weekendAt(this.city.now) && shiftIndex(zone, route.workId) !== SHOP_SHIFT;
-        const wanted = !dayOff && (sinceStart < end - start || sinceStart >= 24 - HEAD_START) ? 'work' : 'home';
         // Buildings grow, so this is looked at again at each departure.
         if (!trip.garage || trip.along === undefined && trip.at !== wanted) {
           // A car park within two tiles takes the cars of a small building off the kerb.
@@ -332,11 +403,13 @@ export class CityRenderer {
           trip.garage = { home: this.city.levelAt(home) >= 2 || trip.lot.home !== undefined,
             work: this.city.levelAt(workplace) >= 2 || trip.lot.work !== undefined };
         }
-        const followed = key === this.follow;
+        const followed = real.commute ? key === this.follow :
+          this.followVisitor?.home === real.person!.home && this.followVisitor.slot === real.person!.slot;
         if (followed) pin = centre(trip.at === 'home' ? home : workplace);
         /** Notes where this commuter is drawn. */
         const seenAt = (spot: { x: number; y: number }) => {
-          spots.push({ x: spot.x, y: spot.y, homeId: route.homeId, workId: route.workId });
+          spots.push(real.person ? { x: spot.x, y: spot.y, homeId: real.person.home, slot: real.person.slot } :
+            { x: spot.x, y: spot.y, homeId: route.homeId, workId: route.workId });
           if (followed) pin = spot;
         };
 
@@ -369,7 +442,7 @@ export class CityRenderer {
           }
           // Every fourth morning the tank is low, and the car goes by the filling station.
           trip.count = (trip.count ?? i % 4) + 1;
-          trip.detour = driving && tier >= 1 && trip.at === 'home' && trip.count % 4 === 0 ? viaStation(real) : undefined;
+          trip.detour = real.commute && driving && tier >= 1 && trip.at === 'home' && trip.count % 4 === 0 ? viaStation(real) : undefined;
           // Stagger departures a little so a household does not leave as one.
           trip.driving = driving;
           trip.along = 0;
@@ -434,17 +507,10 @@ export class CityRenderer {
             spot = { x: car.x + (spot.x - car.x) * part, y: car.y + (spot.y - car.y) * part };
             inLane = part > 0.6;
           }
-          // Keep clear of the car in front. Two cars side by side on one spot: the earlier one goes first.
+          // Keep clear of the car in front.
           const tileX = spot.x / TILE_SIZE;
           const tileY = spot.y / TILE_SIZE;
-          const blocked = cars.some(other => {
-            if (other.index === i || other.hx !== hx || other.hy !== hy) return false;
-            const offX = other.x - tileX;
-            const offY = other.y - tileY;
-            if (Math.abs(offX * hy - offY * hx) > 0.14) return false;
-            const forward = offX * hx + offY * hy;
-            return (forward > 0.03 && forward < 0.48) || (Math.abs(forward) <= 0.03 && other.index < i);
-          });
+          const blocked = carAhead(tileX, tileY, hx, hy, i);
           // A red light ahead: wait at the edge of the junction. Whoever is in it already goes on.
           const aheadX = Math.floor(tileX + hx * 0.55);
           const aheadY = Math.floor(tileY + hy * 0.55);
@@ -512,6 +578,8 @@ export class CityRenderer {
       const fraction = ((this.hour() - hourAt(this.city.now) + 24) % 24) / (24 / calendar.ticksPerDay);
       for (const trip of this.city.visits.frames(this.city.now + Math.min(1, fraction))) {
         if (trip.progress >= 1) continue;
+        // Those on wheels are driven above, with the commuters.
+        if (trip.ride && trip.doing !== 'delivering' && rides.has(`${trip.home}:${trip.slot}`)) continue;
         const origin = trip.path[0];
         const dest = trip.path.at(-1)!;
         const point = commuterPosition({ homeId: origin.y * MAP_SIZE + origin.x,
@@ -614,7 +682,8 @@ export class CityRenderer {
       }
       for (const [key, scene] of scenes) {
         const age = animationTime - scene.since;
-        advanceScene(scene, age, cell => this.crowdOn?.(cell) ?? 0);
+        const at = advanceScene(scene, age, spot => carAhead(spot.x, spot.y, spot.hx, spot.hy, -1, 0.62));
+        if (at) cars.push({ ...at, index: -1 });
         if (age > sceneLength(scene) || this.city.now < scene.event.tick) scenes.delete(key);
         else drawScene(effects, scene, age);
       }

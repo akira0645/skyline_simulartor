@@ -10,7 +10,7 @@ import { isService, type Cell, type TileMap, type Zone } from './TileMap';
 import type { RoadGraph } from './RoadGraph';
 import type { SavedBuilding, SavedPerson } from './SaveData';
 import type { Combo } from './Combos';
-import { stayTicks, travelTicks, type FacilityVisit } from './VisitSystem';
+import { rideFor, stayTicks, travelTicks, type FacilityVisit } from './VisitSystem';
 import { DUTIES, FOOD_PLACES, SOCIAL_PLACES } from './Needs';
 import { seats } from './Capacity';
 
@@ -282,14 +282,16 @@ export function planFacilityVisits(context: CivicVisitContext, hour: number, vis
             nearest = { path: [origin, ...route.path], distance: route.path.length, destination: indexOf(dest) };
         }
         if (!nearest) continue;
-        const travel = travelTicks(nearest.path) * 24 / calendar.ticksPerDay;
+        // Far enough, and they take the scooter or the car, which is quicker.
+        const ride = rideFor(person.car, nearest.path);
+        const travel = travelTicks(nearest.path, doing, ride) * 24 / calendar.ticksPerDay;
         const activityEnd = hour + travel + stayTicks(doing) * 24 / calendar.ticksPerDay;
         const homeBy = workingToday && hour < busyStart ? Math.min(23, busyStart) : 23;
         const back = current && routeToSite(context.map, context.roadGraph, nearest.path.at(-2)!, cellAt(home));
         if (current && !back) continue;
-        const returnHours = back ? travelTicks([nearest.path.at(-1)!, ...back.path]) * 24 / calendar.ticksPerDay : travel;
+        const returnHours = back ? travelTicks([nearest.path.at(-1)!, ...back.path], doing, ride) * 24 / calendar.ticksPerDay : travel;
         if (activityEnd > until || activityEnd + returnHours > homeBy) continue;
-        send({ home, slot: person.slot, doing, path: nearest.path, destination: nearest.destination,
+        send({ home, slot: person.slot, doing, path: nearest.path, destination: nearest.destination, ...(ride ? { ride } : {}),
           reason: wanted(tile) === 0 ? 'hungry' : wanted(tile) === 1 ? 'lonely' : wanted(tile) === 2 ? (tile === 'market' ? 'groceries' : 'birthday') :
             reasonFor(doing, weatherAt(context.seed, context.clock) !== 'clear') });
         break;

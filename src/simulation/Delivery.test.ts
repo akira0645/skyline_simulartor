@@ -38,9 +38,9 @@ it('brings meals in a town: riders set out, customers pay them and eat at home',
   const start = city.visits.start.bind(city.visits);
   city.visits.start = (plans, tick) => { runs.push(...plans.filter(plan => plan.doing === 'delivering')); start(plans, tick); };
   const total = () => { let sum = 0; for (const building of city.save().buildings) for (const person of building.people ?? []) sum += person.money ?? 0; return sum; };
-  // From six in the morning to two in the afternoon: lunch is ordered, and nobody is paid yet.
+  // From six in the morning to nine in the evening: lunch and dinner are ordered, and nobody is paid yet.
   const before = total();
-  engine.advance(calendar.ticksPerDay / 3);
+  engine.advance(calendar.ticksPerDay - 3);
   const today = city.deliveriesToday();
   expect(today.orders).toBeGreaterThan(0);
   expect(today.riders).toBeGreaterThan(0);

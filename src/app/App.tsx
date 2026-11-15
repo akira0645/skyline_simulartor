@@ -620,7 +620,7 @@ export function App() {
         {seen.activityWhy && reasonNote[seen.activityWhy] && `（${reasonNote[seen.activityWhy]}）`}
         {seen.weatherReason && <small>{seen.weatherReason}</small>}</dd>
       <dt>住在</dt><dd className="tags">{seen.kind ? homeKindNames[seen.kind][0] : '一般住宅'}，{howLong(seen.days)}
-        <Tag label="看住家" tip="把地圖移到這個人的家" onPick={() => rendererRef.current?.lookAt?.(cellFromId(seen.homeId))} /></dd>
+        <Tag label="定位" tip="把地圖移到這個人的家" onPick={() => rendererRef.current?.lookAt?.(cellFromId(seen.homeId))} /></dd>
       <dt>吃飯</dt>
       <dd title={eatingWords[seen.eating][1]}>{eatingWords[seen.eating][0]}{seen.rider &&
         <span title={`還在騎腳踏車或機車的人，沒上班、不太累的時候會接單送餐。每單賺 ${money(delivery.fee)}，但會更累`}>
@@ -629,7 +629,7 @@ export function App() {
       <dt>工作</dt>
       <dd className="tags">{seen.age >= 65 ? '已退休（基本年金支應生活）' : seen.shift === undefined ? '尋找中' :
         `${shifts[seen.shift].title} ${shifts[seen.shift].start}–${shifts[seen.shift].end} 點，${howLong(seen.workDays ?? 0)}`}
-        {seen.jobId >= 0 && <Tag label="看公司" tip="把地圖移到這個人上班的地方" onPick={() => rendererRef.current?.lookAt?.(cellFromId(seen.jobId))} />}</dd>
+        {seen.jobId >= 0 && <Tag label="定位" tip="把地圖移到這個人上班的地方" onPick={() => rendererRef.current?.lookAt?.(cellFromId(seen.jobId))} />}</dd>
       {seen.way && seen.minutes !== undefined && <>
         <dt>上班</dt><dd>{wayNames[seen.way]} {Math.max(1, Math.round(seen.minutes))} 分鐘</dd>
       </>}

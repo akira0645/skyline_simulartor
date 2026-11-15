@@ -18,23 +18,58 @@ export interface Scene {
   arrived?: number;
   /** The age of the scene when it was last moved on. */
   moved?: number;
+  /** How long the vehicle has stood behind a car. */
+  held?: number;
 }
 
+/** A vehicle on the road: where it is, in tiles, and which way it is heading. */
+export interface OnRoad { x: number; y: number; hx: number; hy: number }
+
+/** Where a vehicle `progress` tiles along a route is: in the right-hand lane, as the cars are. */
+export function vehicleAt(route: readonly Cell[], progress: number): OnRoad {
+  const last = route.length - 1;
+  const lane = (index: number) => {
+    const point = route[index];
+    const before = route[Math.max(0, index - 1)];
+    const after = route[Math.min(last, index + 1)];
+    return { x: point.x - Math.sign(after.y - before.y) * 0.19 + 0.5, y: point.y + Math.sign(after.x - before.x) * 0.19 + 0.5 };
+  };
+  const index = Math.max(0, Math.min(last, Math.floor(progress)));
+  const next = Math.min(last, index + 1);
+  const from = lane(index);
+  const to = lane(next);
+  const part = Math.max(0, Math.min(1, progress - index));
+  // Standing at the end of the way it keeps the direction it came from.
+  const a = route[next === index ? Math.max(0, index - 1) : index];
+  const b = route[next];
+  const upright = Math.abs(b.y - a.y) > Math.abs(b.x - a.x);
+  return { x: from.x + (to.x - from.x) * part, y: from.y + (to.y - from.y) * part,
+    hx: upright ? 0 : Math.sign(b.x - a.x), hy: upright ? Math.sign(b.y - a.y) : 0 };
+}
+
+/** How long a vehicle with its siren on stands behind a car before the car lets it by. */
+const GIVE_WAY = 1500;
+
 /**
- * Moves a scene's vehicle on to `age`. `crowd` is how full the map shows the road tile it is
- * on (see the traffic view): on a clear road it dashes, in a jam it crawls with everyone else.
+ * Moves a scene's vehicle on to `age` and says where on the road it now is, while it is on its
+ * way. `blocked` says whether a car is just ahead of a spot in the same lane: the vehicle
+ * stands behind it like anyone else, until after a moment the car lets it squeeze by. Red
+ * lights it does not stop for.
  */
-export function advanceScene(scene: Scene, age: number, crowd: (cell: Cell) => number): void {
+export function advanceScene(scene: Scene, age: number, blocked: (at: OnRoad) => boolean): OnRoad | undefined {
   const step = age - (scene.moved ?? 0);
   scene.moved = age;
-  if (!scene.route || scene.arrived !== undefined) return;
+  if (!scene.route || scene.arrived !== undefined) return undefined;
   const last = scene.route.length - 1;
-  const at = scene.route[Math.min(last, Math.floor(scene.travelled ?? 0))];
-  scene.travelled = (scene.travelled ?? 0) + step / DASH / (1 + 2 * Math.min(2, crowd(at)));
+  const at = vehicleAt(scene.route, scene.travelled ?? 0);
+  scene.held = blocked(at) ? (scene.held ?? 0) + step : 0;
+  if (scene.held > 0 && scene.held < GIVE_WAY) return at;
+  scene.travelled = (scene.travelled ?? 0) + step / DASH;
   if (scene.travelled >= last) {
     scene.travelled = last;
     scene.arrived = age;
   }
+  return vehicleAt(scene.route, scene.travelled);
 }
 
 /** Milliseconds a vehicle takes per road tile: twice as fast as a commuter's car. */
@@ -142,17 +177,10 @@ function drawMarker(g: Graphics, left: number, top: number, age: number, crime: 
 /** An emergency vehicle `progress` tiles along its route, with a light that flashes. */
 function drawVehicle(g: Graphics, route: readonly Cell[], progress: number, age: number,
   trouble: string): void {
-  const index = Math.min(route.length - 1, Math.floor(progress));
-  const from = route[index];
-  const to = route[Math.min(route.length - 1, index + 1)];
-  const part = progress - index;
-  const x = Math.round((from.x + (to.x - from.x) * part) * TILE_SIZE) + TILE_SIZE / 2;
-  const y = Math.round((from.y + (to.y - from.y) * part) * TILE_SIZE) + TILE_SIZE / 2;
-  // Parked at the scene it keeps the direction it came from.
-  const before = route[Math.max(0, index - 1)];
-  const heading = to === from ? { x: from.x - before.x, y: from.y - before.y } :
-    { x: to.x - from.x, y: to.y - from.y };
-  const vertical = heading.y !== 0;
+  const at = vehicleAt(route, progress);
+  const x = Math.round(at.x * TILE_SIZE);
+  const y = Math.round(at.y * TILE_SIZE);
+  const vertical = at.hy !== 0;
   const long = 20;
   const wide = 12;
   const width = vertical ? wide : long;

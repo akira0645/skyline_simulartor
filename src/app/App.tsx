@@ -589,15 +589,15 @@ export function App() {
       <dt>心情</dt>
       <Meter full={seen.mood} word={moodWord(seen.mood)} tone={seen.mood >= mind.glad ? 'good' : seen.mood < mind.low ? 'bad' : 'mid'}
         tip="想的事情好的多就開心，壞的多就不開心。看最下面「心裡在想」" />
-      <dt>肚子</dt>
+      <dt>飽足</dt>
       <Meter full={100 - seen.needs.hunger} word={needWords.hunger(seen.needs.hunger)}
         tone={seen.needs.hunger >= 75 ? 'bad' : seen.needs.hunger >= needLevels.hungry ? 'mid' : 'good'}
         tip={seen.needs.wantsFood ? '這一餐想在外面吃：附近有市場、烘焙坊、大型商場或夜市就會去' : '三餐多半在家或公司吃；有時會想出門吃'} />
-      <dt>精神</dt>
+      <dt>體力</dt>
       <Meter full={100 - seen.needs.fatigue} word={needWords.fatigue(seen.needs.fatigue)}
         tone={seen.needs.tired ? 'bad' : seen.needs.fatigue >= 60 ? 'mid' : 'good'}
         tip={seen.needs.tired ? '太累了，除了接送小孩不會再出門' : '上班久、通勤遠、家裡小孩多、年紀大，都會比較累'} />
-      <dt>有伴</dt>
+      <dt>社交</dt>
       <Meter full={100 - seen.needs.social} word={needWords.social(seen.needs.social)}
         tone={seen.needs.lonely ? 'bad' : seen.needs.social >= 20 ? 'mid' : 'good'}
         tip={seen.needs.lonely ? '好幾天沒遇到人，會先去社區中心、廟、KTV 或夜市' : '在同一個地方一起活動就會認識人'} />
@@ -613,7 +613,7 @@ export function App() {
           ，兼職外送{seen.rider.runs ? `（今天跑 ${seen.rider.runs} 趟）` : ''}</span>}</dd>
       <dt>健康</dt><dd>{seen.waitingFor ? `${tileNames[seen.waitingFor]}客滿，在家等候看診` : seen.health ? seen.health.state === 'recovering' ? '康復中，正在休養' : seen.health.severe ? '需要醫院治療' : '身體不舒服，安排休息或就醫' : '健康'}</dd>
       <dt>工作</dt>
-      <dd>{seen.age >= 65 ? '已退休（基本年金支應生活）' : seen.shift === undefined ? '還在找工作' :
+      <dd>{seen.age >= 65 ? '已退休（基本年金支應生活）' : seen.shift === undefined ? '尋找中' :
         `${shifts[seen.shift].title} ${shifts[seen.shift].start}–${shifts[seen.shift].end} 點，${howLong(seen.workDays ?? 0)}`}</dd>
       {seen.way && seen.minutes !== undefined && <>
         <dt>上班</dt><dd>{wayNames[seen.way]} {Math.max(1, Math.round(seen.minutes))} 分鐘</dd>

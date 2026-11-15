@@ -197,7 +197,7 @@ export function doingText(doing: Doing, shift: number | undefined, way: Way | un
     case 'working': return `在${place}上班`;
     case 'break': return shift === undefined ? '在吃午餐' : '上班到一半，休息吃飯';
     case 'to-home': return `下班了，正${going}回家`;
-    case 'job-hunting': return '在外面到處找工作';
+    case 'job-hunting': return '工作尋找中';
     case 'park': return '在家附近的公園散步';
     case 'shopping': return '在附近逛街買東西';
     case 'gardening': return '在整理家門口的花草';
@@ -388,7 +388,7 @@ export const themeNames: Record<Theme, string> = { classic: '原本', sf: '舊�
 export const thoughtTone = (thought: Thought) => thoughtWeights[thought] < 0 ? 'bad' as const : 'good' as const;
 
 /** A mood from 0 to 100 as a word. */
-export const moodWord = (mood: number) => mood >= mind.glad ? '開心' : mood >= mind.low ? '普通' : '不開心';
+export const moodWord = (mood: number) => mood >= mind.glad ? '開心' : mood >= mind.low ? '普通' : '低落';
 
 export const serviceNames: Record<Service, string> = { fire: '消防', police: '警察', school: '小學', clinic: '診所',
   community: '社區中心', familyclinic: '家庭診所', eldercare: '日間照護', memorial: '紀念花園',

@@ -166,7 +166,7 @@ export const eatingWords: Record<Eating, [string, string]> = {
 
 /** The three needs in words, for the resident's card. */
 export const needWords = {
-  hunger: (value: number) => value >= 75 ? '很餓' : value >= needs.hungry ? '有點餓' : '吃飽了',
-  fatigue: (value: number) => value >= needs.tired ? '很累' : value >= 60 ? '有點累' : '有精神',
-  social: (value: number) => value >= needs.lonely ? '想找人聊聊' : value >= 20 ? '幾天沒見人' : '剛見過人',
+  hunger: (value: number) => value >= 75 ? '很餓' : value >= needs.hungry ? '微餓' : '飽足',
+  fatigue: (value: number) => value >= needs.tired ? '疲憊' : value >= 60 ? '略累' : '充沛',
+  social: (value: number) => value >= needs.lonely ? '孤單' : value >= 20 ? '普通' : '充足',
 };

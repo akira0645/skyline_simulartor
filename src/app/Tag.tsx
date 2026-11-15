@@ -15,7 +15,7 @@ export function PersonRow({ person, atWork, onPick }: { person: Person; atWork?:
     <span>{person.age} 歲</span>
     {person.trait && <i title={traitNames[person.trait][1]}>{traitNames[person.trait][0]}</i>}
     <small className="tags">
-      {person.shift === undefined ? <Tag label="找工作中" tone="bad" /> :
+      {person.shift === undefined ? <Tag label="工作" value="尋找中" tone="bad" /> :
         <Tag label={atWork ? '做了' : workplaceNames[person.shift]} value={howLong(person.workDays ?? 0)}
           tip={shifts[person.shift].title} />}
       {!atWork && <Tag label="住了" value={howLong(person.days)} />}

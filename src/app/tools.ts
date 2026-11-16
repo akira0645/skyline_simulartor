@@ -1,8 +1,8 @@
 import { isRoad, type Cell, type Facility, type Road, type Service, type Zone } from '../simulation/TileMap';
 
-export type Tool = 'land' | 'pan' | 'inspect' | Road | Zone | Facility | Service | 'park' | 'farm' | 'bus' | 'metro' | 'line' | 'demolish' | 'viaduct';
+export type Tool = 'freight-line' | 'land' | 'pan' | 'inspect' | Road | Zone | Facility | Service | 'park' | 'farm' | 'bus' | 'metro' | 'line' | 'demolish' | 'viaduct';
 /** What the map tints on top of the tiles. */
-export type Overlay = 'none' | 'traffic' | 'pollution' | 'value' | Facility | Service | 'bus' | 'metro' | 'lines';
+export type Overlay = 'freight' | 'none' | 'traffic' | 'pollution' | 'value' | Facility | Service | 'bus' | 'metro' | 'lines';
 
 const dragged = (tool: Tool): tool is Road | Zone | 'park' | 'farm' | 'viaduct' =>
   isRoad(tool) || tool === 'residential' || tool === 'commercial' || tool === 'industrial' ||

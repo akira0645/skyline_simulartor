@@ -2,7 +2,7 @@ import { cellFromId } from '../simulation/FacilityAccess';
 import { weatherAt, weatherNames } from '../simulation/Weather';
 import { AutosaveSession, type AutosaveStatus } from '../storage/AutosaveSession';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { FreightPanel } from './FreightPanel';
+import { FreightPanel, type FreightActions } from './FreightPanel';
 import { VisitorGroups } from './VisitorGroups';
 import { visitReasons } from '../simulation/ActivityDiary';
 import { needs as needLevels, needWords, eatingWords } from '../simulation/Needs';
@@ -143,6 +143,9 @@ export function App() {
   // The line whose stops are being picked on the map, if any.
   const [editing, setEditing] = useState<number>();
   const editingRef = useRef<number>(undefined);
+  const [editingFreight, setEditingFreight] = useState<number>();
+  const editingFreightRef = useRef<number>(undefined);
+  const [selectedFreight, setSelectedFreight] = useState<string>();
   // A sample of the city every five game days, for the charts. Kept for this visit only.
   const [history, setHistory] = useState<{ tick: number; population: number; funds: number }[]>([]);
 
@@ -203,6 +206,8 @@ export function App() {
   }
 
   function resetLoadedCity() {
+    editingFreightRef.current = undefined; setEditingFreight(undefined); setSelectedFreight(undefined);
+    activeTool.current = 'inspect'; setTool('inspect');
     clock.reset();
     lastTime.current = performance.now();
     setTick(engine.getSnapshot().tick);
@@ -316,6 +321,8 @@ export function App() {
       rendererRef.current.focus = undefined;
     }
       activeTool.current = 'inspect';
+      editingFreightRef.current = undefined;
+      setEditingFreight(undefined);
       editingRef.current = undefined;
       setEditing(undefined);
       setTool('inspect');
@@ -366,6 +373,14 @@ export function App() {
   useEffect(() => {
     rendererRef.current?.setPlaying?.(!document.hidden && speed !== 0);
   }, [speed]);
+
+  useEffect(() => {
+    const renderer = rendererRef.current;
+    if (!renderer) return;
+    renderer.freightVisible = panelTab === 'freight';
+    renderer.selectedFreight = selectedFreight;
+    renderer.refresh?.();
+  }, [panelTab, selectedFreight, editingFreight]);
 
   useEffect(() => {
     const next = engine.city.getStats();
@@ -508,6 +523,8 @@ export function App() {
   /** Swaps the whole city for another one. */
   function replaceCity(next: SimulationEngine, isDemo: boolean, done: string) {
     engine.load(next.save());
+    editingFreightRef.current = undefined; setEditingFreight(undefined); setSelectedFreight(undefined);
+    activeTool.current = 'inspect'; setTool('inspect');
     clock.reset();
     lastTime.current = performance.now();
     // The demo town opens with some history behind it, so not everything starts from nothing.
@@ -697,6 +714,7 @@ export function App() {
     activeTool.current = value;
     setTool(value);
     setMessage(toolTip(value));
+    if (value !== 'freight-line') { editingFreightRef.current = undefined; setEditingFreight(undefined); }
     if (value !== 'line') {
       editingRef.current = undefined;
       setEditing(undefined);
@@ -745,7 +763,8 @@ export function App() {
     };
   }
 
-  const locateFreight = useCallback((cell: Cell, path?: readonly Cell[]) => {
+  const locateFreight = useCallback((cell: Cell) => {
+    editingFreightRef.current = undefined; setEditingFreight(undefined);
     activeTool.current = 'inspect';
     setTool('inspect');
     editingRef.current = undefined;
@@ -753,9 +772,40 @@ export function App() {
     const renderer = rendererRef.current;
     if (!renderer) return;
     renderer.focus = undefined;
-    renderer.marks = path ? [cell, ...path] : [cell];
+    renderer.marks = [];
     renderer.lookAt?.(cell);
   }, []);
+  const freightActions = useMemo<FreightActions>(() => {
+    const update = (error: string | undefined, done: string) => {
+      setStats(engine.city.getStats());
+      rendererRef.current?.refresh?.();
+      setMessage(error ?? done);
+    };
+    const edit = (id?: number) => {
+      editingFreightRef.current = id; setEditingFreight(id);
+      editingRef.current = undefined; setEditing(undefined);
+      activeTool.current = id === undefined ? 'inspect' : 'freight-line';
+      setTool(activeTool.current);
+      if (id !== undefined) setSelectedFreight(`manual:${id}`);
+      setPanelTab('freight');
+      setMessage(id === undefined ? '' : '先點工業區工廠，再依序點商業區店鋪；再次點選移除，選另一座工廠可更換起點。');
+      rendererRef.current?.refresh?.();
+    };
+    return {
+      mode: mode => { const result = engine.city.setFreightMode(mode); edit(); setSelectedFreight(undefined); update(result.error, mode === 'manual' ? '手動配送：新增物流路線後選擇工廠與配送商店。' : '已切回自動配送，手動路線設定仍會保留。'); },
+      create: () => { const result = engine.city.addFreightLine(); if (result.id !== undefined) edit(result.id); update(result.error, '已新增物流路線。先在地圖點工業區工廠，再點商業區店鋪。'); },
+      remove: id => { if (editingFreightRef.current === id) edit(); engine.city.removeFreightLine(id); setSelectedFreight(undefined); update(undefined, '物流路線已刪除。'); },
+      vehicles: (id, count) => { const result = engine.city.setFreightVehicles(id, count); update(result.error, count ? '物流配車已更新。' : '這條物流路線已停駛。'); },
+      edit,
+      stop: (id, cell) => { const result = engine.city.toggleFreightStop(id, cell); update(result.error, result.added ? '已更新物流站點。' : '站點已移除。'); },
+      select: (key, cell) => { edit(); setSelectedFreight(key); const renderer = rendererRef.current; if (renderer) { renderer.selectedFreight = key; renderer.freightVisible = true; } locateFreight(cell); },
+      locate: cell => { setSelectedFreight(undefined); locateFreight(cell); },
+    };
+  }, [engine, locateFreight]);
+  if (rendererRef.current) rendererRef.current.onFreightClick = cell => {
+    const id = editingFreightRef.current;
+    if (id !== undefined) freightActions.stop(id, cell);
+  };
   const freightReport = useMemo(() => panelTab === 'freight' ? engine.city.getLogistics() : undefined, [engine, panelTab, stats, tick]);
   const group = toolGroups[toolTab];
 
@@ -1213,7 +1263,7 @@ export function App() {
           </section>}
         </>}
 
-        {panelTab === 'freight' && freightReport && <FreightPanel report={freightReport} onLocate={locateFreight} />}
+        {panelTab === 'freight' && freightReport && <FreightPanel report={freightReport} actions={freightActions} selected={selectedFreight} editing={editingFreight} />}
 
         {panelTab === 'lines' && <>
           {lines.length === 0 && <p className="hint">先在「交通」蓋兩個站，再按下面的按鈕連起來。</p>}

@@ -1,3 +1,4 @@
+import { freightMapRoutes, freightColourId } from './routeViews';
 import { weatherAt, weatherTravel } from '../simulation/Weather';
 import { Application, Assets, Graphics, type Texture } from 'pixi.js';
 import cityUrl from '../assets/city.png';
@@ -56,6 +57,9 @@ export class CityRenderer {
   refresh?: () => void;
   /** Called with the cell clicked while the line tool is in use. */
   onLineClick?: (cell: Cell) => void;
+  onFreightClick?: (cell: Cell) => void;
+  freightVisible = false;
+  selectedFreight?: string;
   /** Clears the inspected tile. */
   deselect?: () => void;
   /** Called when a commuter on the map is clicked, with their home and workplace. */
@@ -684,20 +688,34 @@ export class CityRenderer {
         return { x: x * TILE_SIZE, y: y * TILE_SIZE, upright: hy !== 0, finished: wasReturning && !state.returning };
       };
       const freightRoutes = this.city.getFreight().filter(route => route.path.length > 1);
-      const fleetSize = freightFleetSize(freightRoutes);
-      for (const slot of freightJobs.keys()) if (slot >= fleetSize) { freightJobs.delete(slot); freightRounds.delete(slot); }
-      for (let slot = 0; slot < fleetSize; slot++) {
-        const round = freightRounds.get(slot) ?? 0;
-        const job = freightJobs.get(slot);
-        let run = job && freightRoutes.find(route => route.from === job.from && route.to === job.to);
-        if (!run) {
-          run = freightAssignment(freightRoutes, slot, round);
-          if (!run) continue;
-          freightJobs.set(slot, { from: run.from, to: run.to });
+      const movements: { key: string; run: typeof freightRoutes[number]; initial: number; slot?: number; round?: number }[] = [];
+      if (this.city.getFreightMode() === 'manual') {
+        for (const run of freightRoutes) for (let vehicle = 0; vehicle < (run.vehicles ?? 0); vehicle++) {
+          movements.push({ key: `manual-freight:${run.lineId}:${vehicle}`, run, initial: vehicle / run.vehicles! });
         }
-        const at = vehicleOnRoad(`freight:${slot}:${round}:${run.from}:${run.to}`, run.path, 400, 0);
+        freightJobs.clear(); freightRounds.clear();
+      } else {
+        const fleetSize = freightFleetSize(freightRoutes);
+        for (const slot of freightJobs.keys()) if (slot >= fleetSize) { freightJobs.delete(slot); freightRounds.delete(slot); }
+        for (let slot = 0; slot < fleetSize; slot++) {
+          const round = freightRounds.get(slot) ?? 0;
+          const job = freightJobs.get(slot);
+          let run = job && freightRoutes.find(route => route.from === job.from && route.to === job.to);
+          if (!run) {
+            run = freightAssignment(freightRoutes, slot, round);
+            if (!run) continue;
+            freightJobs.set(slot, { from: run.from, to: run.to });
+          }
+          movements.push({ key: `freight:${slot}:${round}:${run.from}:${run.to}`, run, initial: 0, slot, round });
+        }
+      }
+      for (const movement of movements) {
+        const { run } = movement;
+        const at = vehicleOnRoad(movement.key, run.path, 400, movement.initial);
         if (!at) continue;
-        if (at.finished) { freightRounds.set(slot, round + 1); freightJobs.delete(slot); }
+        if (at.finished && movement.slot !== undefined) {
+          freightRounds.set(movement.slot, movement.round! + 1); freightJobs.delete(movement.slot);
+        }
         const { x, y, upright } = at;
         if (!visible(x, y)) continue;
         const size = vehicleSizes.freight;
@@ -705,7 +723,7 @@ export class CityRenderer {
         const height = upright ? size.length : size.width;
         people.rect(x - width / 2 - 1, y - height / 2 - 1, width + 2, height + 2).fill(0x25232b)
           .rect(x - width / 2, y - height / 2, width, height).fill(0xd8d3c7)
-          .rect(x - width / 2, y - height / 2, upright ? width : 5, upright ? 5 : height).fill(0x3673a4);
+          .rect(x - width / 2, y - height / 2, upright ? width : 5, upright ? 5 : height).fill(lineColour(freightColourId(run)));
       }
 
       // Each line's vehicles, evenly spread, running to the far end and back.
@@ -1035,8 +1053,10 @@ export class CityRenderer {
           tool : layer,
         range, this.hour(),
         // Routes show while laying out transport, and in the map view for them.
-        routesShown() ? this.city.getLines() : [], this.marks, this.crowdOn,
-        aim && !drag && tool !== 'inspect' && tool !== 'pan' && tool !== 'line' && tool !== 'land' ?
+        [...(routesShown() ? this.city.getLines() : []),
+          ...(this.freightVisible || tool === 'freight-line' || layer === 'freight' ?
+            freightMapRoutes(this.city.getFreightMode(), this.city.getFreightLines(), this.city.getFreight(), this.selectedFreight) : [])], this.marks, this.crowdOn,
+        aim && !drag && tool !== 'inspect' && tool !== 'pan' && tool !== 'line' && tool !== 'freight-line' && tool !== 'land' ?
           { cells: isBig(tool) ? footprint(aim) : [aim], ok: (isBig(tool) ? footprint(aim) : [aim]).every(cell => fits(tool, cell)) } : undefined, hasFocusMatches && tool !== 'park' ? focus : undefined);
       landGrid.clear();
       landGrid.position.set(camera.x, camera.y);
@@ -1116,7 +1136,7 @@ export class CityRenderer {
         const next = (isFacility(tool) || isService(tool) || tool === 'bus' || tool === 'metro') &&
           map.get(cell) !== undefined ?
           cell : undefined;
-        const aimed = tool !== 'inspect' && tool !== 'pan' && tool !== 'line' && tool !== 'land' && map.get(cell) !== undefined ? cell : undefined;
+        const aimed = tool !== 'inspect' && tool !== 'pan' && tool !== 'line' && tool !== 'freight-line' && tool !== 'land' && map.get(cell) !== undefined ? cell : undefined;
         if (next?.x !== hover?.x || next?.y !== hover?.y || aimed?.x !== aim?.x || aimed?.y !== aim?.y) {
           hover = next;
           aim = aimed;
@@ -1164,6 +1184,8 @@ export class CityRenderer {
         const id = parcelAt(start);
         const result = this.city.buyLand(id ?? -1);
         report(result.error ?? `買下第 ${(id ?? -1) + 1} 區，花了 $${result.cost}。`);
+      } else if (tool === 'freight-line') {
+        this.onFreightClick?.(start);
       } else if (tool === 'line') {
         this.onLineClick?.(start);
       } else if (tool !== 'pan') {

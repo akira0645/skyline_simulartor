@@ -2,18 +2,39 @@ import { calendar } from '../simulation/calendar';
 import { memo, useState } from 'react';
 import type { FreightProblem, FreightReport } from '../simulation/Freight';
 import { MAP_SIZE, type Cell } from '../simulation/TileMap';
+import { freight, type FreightRoute } from '../simulation/Freight';
+import { freightLines, type FreightMode, type FreightLineProblem } from '../simulation/FreightLines';
+import { freightKey, freightColourId } from '../rendering/routeViews';
+import { lineColourCss } from './lineColours';
 import { Tag } from './Tag';
 
 const position = (id: number): Cell => ({ x: id % MAP_SIZE, y: Math.floor(id / MAP_SIZE) });
 const address = (id: number) => { const { x, y } = position(id); return `(${x}, ${y})`; };
 const problems: Record<FreightProblem, string> = {
   'no-source': '沒有運作中的工廠', disconnected: '道路不通', shortage: '工廠貨量不足',
+  unrouted: '尚未加入物流路線', 'no-vehicles': '路線尚未配車', 'manual-limit': '請檢查指定工廠貨量與路線運能',
 };
 const PAGE_SIZE = 10;
 
-export const FreightPanel = memo(function FreightPanel({ report, onLocate }: {
+export interface FreightActions {
+  mode: (mode: FreightMode) => void;
+  create: () => void;
+  remove: (id: number) => void;
+  vehicles: (id: number, count: number) => void;
+  edit: (id?: number) => void;
+  stop: (id: number, cell: Cell) => void;
+  select: (key: string, cell: Cell) => void;
+  locate: (cell: Cell) => void;
+}
+const lineProblems: Record<FreightLineProblem, string> = {
+  'need-stops': '先選工廠，再選商店', 'no-factory': '起點需要工業區工廠', 'no-shop': '配送站需要商業區店鋪',
+  'no-road': '站點道路不通', paused: '停駛', 'no-supply': '工廠尚無可配送貨量', 'no-demand': '店面需求已安排或尚未營業', capacity: '路程太長，請縮短或增加配車',
+};
+export const FreightPanel = memo(function FreightPanel({ report, actions, selected, editing }: {
   report: FreightReport;
-  onLocate: (cell: Cell, path?: readonly Cell[]) => void;
+  actions: FreightActions;
+  selected?: string;
+  editing?: number;
 }) {
   const [page, setPage] = useState(0);
   const [showAll, setShowAll] = useState(false);
@@ -23,6 +44,10 @@ export const FreightPanel = memo(function FreightPanel({ report, onLocate }: {
   return <div className="freight-panel">
     <section>
       <h2>物流總覽</h2>
+      <div className="row" role="group" aria-label="配送模式">
+        <button type="button" aria-pressed={report.mode === 'auto'} onClick={() => actions.mode('auto')}>自動配送</button>
+        <button type="button" aria-pressed={report.mode === 'manual'} onClick={() => actions.mode('manual')}>手動規劃</button>
+      </div>
       <dl>
         <dt>據點</dt><dd className="tags"><Tag label="工廠" value={report.factories} /><Tag label="商店" value={report.shops} /></dd>
         <dt>每月貨量</dt><dd className="tags"><Tag label="供應" value={`${report.supply} 份`} /><Tag label="補貨目標" value={`${report.demand} 份`} /></dd>
@@ -31,32 +56,52 @@ export const FreightPanel = memo(function FreightPanel({ report, onLocate }: {
           <Tag label="尚未分配" value={`${report.unused} 份`} tone={report.unused ? undefined : 'dim'} /></dd>
         <dt>運輸</dt><dd className="tags"><Tag label="每月" value={`${report.trips} 趟`} />
           <Tag label="每日平均" value={`${(report.trips / calendar.daysPerMonth).toFixed(1)} 趟`} />
-          <Tag label="共用貨車" value={`${report.fleet} 輛`} tip="各路線共用貨車，完成往返後接下一趟；地圖最多顯示 8 輛" /></dd>
+          <Tag label={report.mode === 'manual' ? '營運配車' : '共用貨車'} value={`${report.fleet} 輛`}
+            tip={report.mode === 'manual' ? '有配送任務的路線配車' : '各路線共用貨車，完成往返後接下一趟；地圖最多顯示 8 輛'} />
+          {report.mode === 'manual' && <Tag label="全市配車" value={`${report.vehicles}／${freight.maxVehicles} 輛`} />}</dd>
       </dl>
       <p className="hint">這裡是每月配送計畫，非即時庫存或到貨紀錄；尚未安排不代表已缺貨。進出口另按月結算。</p>
     </section>
-    <section>
-      <h2>待安排補貨{missing.length > 0 && ` · ${missing.length} 間`}</h2>
-      {!missing.length ? <p className="hint">{report.shops ? '商店的補貨目標皆已安排。' : '目前沒有營業中的商店。'}</p> : <>
-        <ul className="freight-shortages">
-          {(showAll ? missing : missing.slice(0, PAGE_SIZE)).map(shop => <li key={shop.id}>
-            <div><b>商店 {address(shop.id)}</b><span>未安排 {shop.missing} 份 · {problems[shop.problem!]}</span></div>
-            <button type="button" aria-label={`定位待補貨商店 ${address(shop.id)}`} onClick={() => onLocate(position(shop.id))}>定位</button>
-          </li>)}
-        </ul>
-        {missing.length > PAGE_SIZE && <button type="button" onClick={() => setShowAll(!showAll)}>{showAll ? '收合' : `查看全部 ${missing.length} 間`}</button>}
-      </>}
-    </section>
-    <section>
-      <h2>配送路線 · {report.routes.length} 條</h2>
-      {!report.routes.length && <p className="hint">{report.factories ? '尚無可配送的路線，請檢查道路與商店。' : '需要有員工且接路的工廠，才能安排市內送貨。'}</p>}
-      {report.routes.slice(current * PAGE_SIZE, (current + 1) * PAGE_SIZE).map(route => <article className="freight-route" key={`${route.from}:${route.to}`}>
-        <h3>工廠 {address(route.from)} → 商店 {address(route.to)}</h3>
-        <div className="tags"><Tag label="每月" value={`${route.goods} 份／${route.trucks} 趟`} />
-          <Tag label="單程估計" value={`${Math.max(1, Math.round(route.minutes))} 分`} /></div>
+    {report.mode === 'manual' ? <>
+      <p className="hint">新增路線後，在地圖先點工業區工廠，再依序點商業區店鋪。全市最多 {freight.maxVehicles} 輛，可將配車減到 0 暫停路線。</p>
+      {report.lines.map(line => <section className="line freight-route" key={line.id} data-freight-line={line.id}>
+        <h2><i style={{ background: lineColourCss(line.id) }} />物流 {line.id} 號
+          <button type="button" aria-label={`刪除物流 ${line.id} 號`} onClick={() => actions.remove(line.id)}>×</button></h2>
+        <dl>
+          <dt>站</dt><dd className="tags"><Tag label="站" value={line.stops.length} />
+            {line.problem && <Tag label={lineProblems[line.problem]} tone={line.problem === 'paused' ? 'dim' : 'bad'} />}
+            {line.active && <Tag label="營運中" tone="good" />}</dd>
+          <dt>每月</dt><dd className="tags"><Tag label="安排" value={`${line.assigned} 份`} />
+            <Tag label="運能" value={`${line.capacity} 份`} /><Tag label="車次" value={line.trips} /></dd>
+          {line.path.length > 0 && <><dt>行車</dt><dd className="tags"><Tag label="單程估計" value={`${Math.max(1, Math.round(line.minutes))} 分`} /></dd></>}
+          <dt>車輛</dt><dd className="tax">
+            <button type="button" aria-label={`物流 ${line.id} 號減少車輛`} disabled={!line.vehicles} onClick={() => actions.vehicles(line.id, line.vehicles - 1)}>−</button>
+            {line.vehicles} 輛
+            <button type="button" aria-label={`物流 ${line.id} 號增加車輛`} disabled={report.vehicles >= freight.maxVehicles} onClick={() => actions.vehicles(line.id, line.vehicles + 1)}>+</button>
+          </dd>
+        </dl>
+        {line.stops.length > 0 && <ol className="freight-stops">{line.stops.map((stop, index) => <li key={stop}>
+          <button type="button" onClick={() => actions.select(`manual:${line.id}`, position(stop))}>{index === 0 ? '起點' : `配送 ${index}`} {address(stop)}</button>
+          <button type="button" aria-label={`物流 ${line.id} 號移除站點 ${address(stop)}`} onClick={() => actions.stop(line.id, position(stop))}>×</button>
+        </li>)}</ol>}
         <div className="row">
-          <button type="button" aria-label={`定位供貨工廠 ${address(route.from)}`} onClick={() => onLocate(position(route.from), route.path)}>工廠與路線</button>
-          <button type="button" aria-label={`定位收貨商店 ${address(route.to)}`} onClick={() => onLocate(position(route.to), route.path)}>收貨商店</button>
+          <button type="button" aria-pressed={editing === line.id} onClick={() => actions.edit(editing === line.id ? undefined : line.id)}>{editing === line.id ? '完成' : '改站'}</button>
+          {line.stops.length > 0 && <button type="button" aria-pressed={selected === `manual:${line.id}`} onClick={() => actions.select(`manual:${line.id}`, position(line.stops[0]))}>查看路線</button>}
+        </div>
+      </section>)}
+      {report.lines.length < freightLines.maxLines && <button type="button" onClick={actions.create}>新增物流路線</button>}
+    </> : <section>
+      <h2>配送路線 · {report.routes.length} 條</h2>
+      <p className="hint">切換「手動規劃」可自行設定工廠、配送站與配車。</p>
+      {!report.routes.length && <p className="hint">{report.factories ? '尚無可配送的路線，請檢查道路與商店。' : '需要有員工且接路的工廠，才能安排市內送貨。'}</p>}
+      {report.routes.slice(current * PAGE_SIZE, (current + 1) * PAGE_SIZE).map((route, offset) => <article className="line freight-route" key={freightKey(route)}>
+        <h2><i style={{ background: lineColourCss(freightColourId(route)) }} />自動配送 {current * PAGE_SIZE + offset + 1}</h2>
+        <p className="freight-address">工廠 {address(route.from)} → 商店 {address(route.to)}</p>
+        <dl><dt>每月</dt><dd className="tags"><Tag label="貨量" value={`${route.goods} 份`} /><Tag label="車次" value={route.trucks} /></dd>
+          <dt>行車</dt><dd className="tags"><Tag label="單程估計" value={`${Math.max(1, Math.round(route.minutes))} 分`} /></dd></dl>
+        <div className="row">
+          <button type="button" aria-pressed={selected === freightKey(route)} onClick={() => actions.select(freightKey(route), position(route.from))}>查看路線</button>
+          <button type="button" aria-label={`定位收貨商店 ${address(route.to)}`} onClick={() => actions.select(freightKey(route), position(route.to))}>收貨商店</button>
         </div>
       </article>)}
       {lastPage > 0 && <div className="row freight-pages">
@@ -64,6 +109,19 @@ export const FreightPanel = memo(function FreightPanel({ report, onLocate }: {
         <span>{current + 1}／{lastPage + 1}</span>
         <button type="button" disabled={current === lastPage} onClick={() => setPage(current + 1)}>下一頁</button>
       </div>}
+    </section>}
+    <section>
+      <h2>待安排補貨{missing.length > 0 && ` · ${missing.length} 間`}</h2>
+      {!missing.length ? <p className="hint">{report.shops ? '商店的補貨目標皆已安排。' : '目前沒有營業中的商店。'}</p> : <>
+        <ul className="freight-shortages">
+          {(showAll ? missing : missing.slice(0, PAGE_SIZE)).map(shop => <li key={shop.id}>
+            <div><b>商店 {address(shop.id)}</b><span>未安排 {shop.missing} 份 · {problems[shop.problem!]}</span></div>
+            <button type="button" aria-label={`定位待補貨商店 ${address(shop.id)}`} onClick={() => actions.locate(position(shop.id))}>定位</button>
+          </li>)}
+        </ul>
+        {missing.length > PAGE_SIZE && <button type="button" onClick={() => setShowAll(!showAll)}>{showAll ? '收合' : `查看全部 ${missing.length} 間`}</button>}
+      </>}
     </section>
+
   </div>;
 });

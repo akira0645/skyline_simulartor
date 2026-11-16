@@ -1,3 +1,4 @@
+import { freightLines as freightRules, planFreightLines, type FreightLine, type FreightMode, type SavedFreightLine } from './FreightLines';
 import { LifeSystem, EMPTY_LIFE, type LifeResident } from './LifeSystem';
 import { planFacilityVisits, type CivicVisitContext } from './CivicVisits';
 import { ActivityDiary, activityDay, visitReasons } from './ActivityDiary';
@@ -26,7 +27,7 @@ import { brands, dilemmas, type Answer, type Boost, type Brand, type Dilemma } f
 import { comboIncome, combos, comboValue, COMBOS, taskList, tasks, type Combo, type TaskId } from './Combos';
 import { goods } from './Goods';
 import { ALL_LAND, adjoining, land, landPrice, parcelAt } from './Land';
-import { planFreight, summarizeFreight, type FreightRoute, type FreightSite } from './Freight';
+import { freight, planFreight, summarizeFreight, type FreightReport, type FreightRoute, type FreightSite } from './Freight';
 import { jobs } from './Jobs';
 import { COMPLEX_LEVEL, landValue, MAX_LEVEL } from './LandValue';
 import { childrenAt, homeSites, residentAt, traits, TRAITS, type HomeKind, type Trait } from './Residents';
@@ -294,6 +295,9 @@ export class BuildingSystem {
   private readonly shiftFlows = shifts.map(() => new Float32Array(MAP_SIZE ** 2));
   /** The busiest shift's commuters on each road tile. Routing and pollution go by this. */
   private readonly flows = new Float32Array(MAP_SIZE ** 2);
+  private freightMode: FreightMode = 'auto';
+  private readonly freightLines: SavedFreightLine[] = [];
+  private freightPlans: FreightLine[] = [];
   private freight: FreightRoute[] = [];
   private freightSources: FreightSite[] = [];
   private freightShops: FreightSite[] = [];
@@ -675,18 +679,92 @@ export class BuildingSystem {
   /** Factory-to-shop shipments derived from employment and road connectivity. */
   getFreight(): readonly FreightRoute[] { return this.freight; }
 
-  getLogistics() {
+  getFreightMode(): FreightMode { return this.freightMode; }
+  getFreightLines(): readonly FreightLine[] { return this.freightPlans; }
+
+  setFreightMode(mode: FreightMode): { error?: string } {
+    if (mode !== 'auto' && mode !== 'manual') return { error: '請選擇自動或手動配送。' };
+    this.freightMode = mode;
+    this.refresh();
+    return {};
+  }
+
+  addFreightLine(): { id?: number; error?: string } {
+    if (this.freightLines.length >= freightRules.maxLines) return { error: `最多 ${freightRules.maxLines} 條物流路線。` };
+    const id = Math.max(0, ...this.freightLines.map(line => line.id)) + 1;
+    const available = freight.maxVehicles - this.freightLines.reduce((sum, line) => sum + line.vehicles, 0);
+    this.freightLines.push({ id, stops: [], vehicles: available > 0 ? 1 : 0 });
+    this.freightMode = 'manual';
+    this.refresh();
+    return { id };
+  }
+
+  removeFreightLine(id: number): void {
+    const at = this.freightLines.findIndex(line => line.id === id);
+    if (at < 0) return;
+    this.freightLines.splice(at, 1);
+    this.refresh();
+  }
+
+  setFreightVehicles(id: number, count: number): { error?: string } {
+    const line = this.freightLines.find(line => line.id === id);
+    if (!line || !Number.isFinite(count)) return { error: '找不到這條物流路線或車輛數不正確。' };
+    const vehicles = Math.max(0, Math.min(freight.maxVehicles, Math.round(count)));
+    const others = this.freightLines.reduce((sum, item) => sum + (item.id === id ? 0 : item.vehicles), 0);
+    if (others + vehicles > freight.maxVehicles) return { error: `全市最多 ${freight.maxVehicles} 輛物流車，請先減少其他路線的配車。` };
+    line.vehicles = vehicles;
+    this.refresh();
+    return {};
+  }
+
+  toggleFreightStop(id: number, cell: Cell): { added?: boolean; error?: string } {
+    const line = this.freightLines.find(line => line.id === id);
+    if (!line || !Number.isInteger(cell.x) || !Number.isInteger(cell.y) || cell.x < 0 || cell.y < 0 || cell.x >= MAP_SIZE || cell.y >= MAP_SIZE) return { error: '找不到物流路線或站點。' };
+    const stop = indexOf(cell);
+    const at = line.stops.indexOf(stop);
+    if (at >= 0) {
+      line.stops.splice(at, 1);
+      this.refresh();
+      return { added: false };
+    }
+    const tile = this.map.get(cell);
+    if (tile === 'industrial') {
+      if (line.stops.length && this.map.at(line.stops[0]) !== 'commercial') line.stops[0] = stop;
+      else {
+        if (line.stops.length >= freightRules.maxStops) return { error: `每條最多 ${freightRules.maxStops} 個站點。` };
+        line.stops.unshift(stop);
+      }
+    } else if (tile === 'commercial') {
+      if (!line.stops.length || this.map.at(line.stops[0]) !== 'industrial') return { error: '請先點工業區工廠作為出貨起點，再點商業區店鋪。' };
+      if (line.stops.length >= freightRules.maxStops) return { error: `每條最多 ${freightRules.maxStops} 個站點。` };
+      line.stops.push(stop);
+    } else return { error: '物流站點請選工業區工廠或商業區店鋪。' };
+    this.refresh();
+    return { added: true };
+  }
+
+  getLogistics(): FreightReport {
     const components = new Set<number>();
     for (const source of this.freightSources) {
       const road = this.roadAccess(cellAt(source.id));
       const component = road && this.roadGraph.componentAt(road);
       if (component !== undefined) components.add(component);
     }
-    return summarizeFreight(this.freightSources, this.freightShops, this.freight, id => {
+    const report = summarizeFreight(this.freightSources, this.freightShops, this.freight, id => {
       const road = this.roadAccess(cellAt(id));
       const component = road && this.roadGraph.componentAt(road);
       return component !== undefined && components.has(component);
     });
+    if (this.freightMode === 'manual') for (const shop of report.destinations) {
+      if (!shop.missing) continue;
+      const serving = this.freightPlans.filter(line => line.stops.slice(1).includes(shop.id));
+      if (!serving.length) shop.problem = 'unrouted';
+      else if (serving.every(line => !line.vehicles)) shop.problem = 'no-vehicles';
+      else if (serving.every(line => line.problem === 'no-road')) shop.problem = 'disconnected';
+      else if (shop.problem === 'shortage') shop.problem = 'manual-limit';
+    }
+    return { ...report, mode: this.freightMode, lines: this.freightPlans,
+      vehicles: this.freightLines.reduce((sum, line) => sum + line.vehicles, 0) };
   }
 
   /** The bus and metro lines, with their routes, timings and riders. */
@@ -2650,7 +2728,7 @@ export class BuildingSystem {
     }
     this.freightSources = sources;
     this.freightShops = shops;
-    this.freight = planFreight(sources, shops, (from, to) => {
+    const path = (from: number, to: number) => {
       const key = `${from}:${to}`;
       if (!this.freightPaths.has(key)) {
         const start = this.roadAccess(cellAt(from));
@@ -2658,7 +2736,17 @@ export class BuildingSystem {
         this.freightPaths.set(key, start && end ? this.roadGraph.shortestPath(start, end)?.path : undefined);
       }
       return this.freightPaths.get(key);
-    });
+    };
+    if (this.freightMode === 'manual') {
+      const planned = planFreightLines(this.freightLines, sources, shops, id => this.map.at(id) === 'industrial' ? 'factory' :
+        this.map.at(id) === 'commercial' ? 'shop' : undefined, path,
+        route => route.reduce((sum, cell) => sum + tileMinutes(this.flows[indexOf(cell)], this.roadAt(indexOf(cell))), 0));
+      this.freightPlans = planned.lines;
+      this.freight = planned.routes;
+    } else {
+      this.freightPlans = [];
+      this.freight = planFreight(sources, shops, path);
+    }
     this.freightFlows.fill(0);
     for (const route of this.freight) for (const cell of route.path) this.freightFlows[indexOf(cell)] += route.trucks / calendar.daysPerMonth;
   }
@@ -3279,6 +3367,7 @@ export class BuildingSystem {
     return { tiles: this.map.save(), metros: this.map.stationTiles(), spans: this.map.spanTiles(), zones: [...this.zones.keys()],
       buildings: [...this.buildings.values()].map(building => building.people ?
         { ...building, people: building.people.map(person => ({ ...person, identity: person.identity && { ...person.identity } })) } : { ...building }),
+      freightMode: this.freightMode, freightLines: this.freightLines.map(line => ({ ...line, stops: [...line.stops] })),
       ownedLand: [...this.ownedLand].sort((a, b) => a - b),
       funds: this.funds, rank: this.rank, taxRate: this.taxRate,
       lines: this.lines.map(line => ({ ...line, stops: [...line.stops] })),
@@ -3289,7 +3378,9 @@ export class BuildingSystem {
       scares: this.scares.map(entry => ({ ...entry })), tasksRest: [...this.tasksRest], nextPersonId: this.nextPersonId, relationships: this.relationships.save(), life: this.life.save() };
   }
 
-  load({ ownedLand, tiles, zones, buildings, funds, rank, taxRate, tick, lines, goals: done, loans, seed, metros, tasks: saved, combos: known, policies: chosen, challenge, spans, dilemma, boosts, level, theme, coldStock, marketStock, monthlyVisits, activeVisits, dailyActivities, scares, tasksRest, nextPersonId, relationships, life }: SaveData): void {
+  load({ freightMode, freightLines, ownedLand, tiles, zones, buildings, funds, rank, taxRate, tick, lines, goals: done, loans, seed, metros, tasks: saved, combos: known, policies: chosen, challenge, spans, dilemma, boosts, level, theme, coldStock, marketStock, monthlyVisits, activeVisits, dailyActivities, scares, tasksRest, nextPersonId, relationships, life }: SaveData): void {
+    this.freightMode = freightMode ?? 'auto';
+    this.freightLines.splice(0, this.freightLines.length, ...(freightLines ?? []).map(line => ({ ...line, stops: [...line.stops] })));
     this.ownedLand.clear();
     for (const id of ownedLand ?? ALL_LAND) this.ownedLand.add(id);
     this.seed = seed;

@@ -2,9 +2,9 @@ import type { TransitKind } from '../simulation/Transit';
 
 /**
  * One colour per line, by the line's own number so it keeps its colour when other lines come
- * and go. There are as many colours as the simulation allows lines.
+ * and go. The shared palette also covers the eight player-managed logistics lines.
  */
-const COLOURS = [0xe5484d, 0x3b82f6, 0xf2c94c, 0xa56eff, 0xff8a3d, 0x2ec4b6];
+const COLOURS = [0xe5484d, 0x3b82f6, 0xf2c94c, 0xa56eff, 0xff8a3d, 0x2ec4b6, 0xec4899, 0x84cc16];
 
 export const lineColour = (id: number): number => COLOURS[(id - 1) % COLOURS.length];
 export const lineColourCss = (id: number): string => `#${lineColour(id).toString(16).padStart(6, '0')}`;

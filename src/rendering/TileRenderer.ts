@@ -8,7 +8,7 @@ import { industryAt } from '../simulation/Industry';
 import { Camera } from './Camera';
 
 import type { BuildingSystem } from '../simulation/BuildingSystem';
-import type { Line } from '../simulation/Transit';
+import type { MapRoute } from './routeViews';
 import type { Theme } from '../simulation/SaveData';
 import { seasonAt } from '../simulation/Seasons';
 import { lineColour } from '../app/lineColours';
@@ -143,7 +143,7 @@ export class TileRenderer {
   draw(city: BuildingSystem, camera: Camera, width: number, height: number, preview: Cell[],
     selected?: Cell, layer: Overlay = 'none',
     range?: { centre: Cell; radius: number; kind: Facility | Service | 'bus' | 'metro' }, hour?: number,
-    lines: readonly Line[] = [], marks: readonly Cell[] = [], crowdOn?: (cell: Cell) => number,
+    lines: readonly MapRoute[] = [], marks: readonly Cell[] = [], crowdOn?: (cell: Cell) => number,
     aim?: { cells: readonly Cell[]; ok: boolean }, focus?: (cell: Cell) => boolean) {
     // Terrain changes on a redraw, not every animation frame. Flatten its many atlas
     // switches into one cached texture; keep selections and overlays independent.
@@ -526,7 +526,7 @@ export class TileRenderer {
         for (let x = Math.max(0, start.x); x <= Math.min(MAP_SIZE - 1, end.x); x++) {
           const cell = { x, y };
           let colour: number | undefined;
-          if (layer === 'lines') continue;
+          if (layer === 'lines' || layer === 'freight') continue;
           if (layer === 'pollution') {
             const level = city.pollutionAt(cell);
             if (level > 0) {
@@ -570,12 +570,12 @@ export class TileRenderer {
         const left = Math.min(from.x, to.x) * TILE_SIZE + half - band / 2;
         const top = Math.min(from.y, to.y) * TILE_SIZE + half - band / 2;
         overlay.rect(left, top, Math.abs(to.x - from.x) * TILE_SIZE + band, Math.abs(to.y - from.y) * TILE_SIZE + band)
-          .fill({ color: colour, alpha: 0.85 });
+          .fill({ color: colour, alpha: line.dim ? 0.15 : 0.85 });
       }
       for (const stop of line.stops) {
         const x = stop % MAP_SIZE * TILE_SIZE;
         const y = Math.floor(stop / MAP_SIZE) * TILE_SIZE;
-        overlay.rect(x + 1, y + 1, TILE_SIZE - 2, TILE_SIZE - 2).stroke({ color: colour, width: 4 });
+        overlay.rect(x + 1, y + 1, TILE_SIZE - 2, TILE_SIZE - 2).stroke({ color: colour, width: 4, alpha: line.dim ? 0.2 : 1 });
       }
     }
 

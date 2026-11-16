@@ -58,11 +58,12 @@ export type PanelTab = (typeof panelTabs)[number][0];
 
 /** What one tile of a tool costs; nothing for the tool that only looks. */
 export const toolCost = (tool: Tool) =>
-  tool === 'land' || tool === 'pan' || tool === 'inspect' || tool === 'line' ? undefined :
+  tool === 'freight-line' || tool === 'land' || tool === 'pan' || tool === 'inspect' || tool === 'line' ? undefined :
   tileCost(tool === 'demolish' ? 'grass' : tool);
 
 /** One short line on how to use each tool, shown when it is picked. */
 export function toolTip(tool: Tool): string {
+  if (tool === 'freight-line') return '先點工業區工廠，再依序點商業區店鋪；再次點選移除，換一座工廠可更換起點。';
   if (tool === 'land') return '買地：點選與已有土地共邊相鄰的 32×32 區塊；價格會隨擴張提高。';
   if (isService(tool)) {
     const extra = tool === 'fire' ? '沒救到的火會嚇跑附近的人。' :
@@ -106,6 +107,7 @@ export const overlays: [Overlay, string, string][] = [
   ['traffic', '車流', '現在路上的車：綠色順暢，黃色車多，橘紅塞車。沒人上下班時全綠。'],
   ['pollution', '污染', '越紫越髒。太髒的住宅沒人搬來。'],
   ['value', '地價', '綠色好，紅色差。地價夠高才會升級。'],
+  ['freight', '物流', '物流路線與配送站點，顏色對應物流面板。'],
   ['lines', '路線', '公車和捷運的路線，框起來的是站。'],
   ['power', '供電', '綠色有電，紅色沒有。'],
   ['water', '供水', '綠色有水，紅色沒有。'],

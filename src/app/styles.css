@@ -540,3 +540,9 @@ button.tag[aria-pressed="true"] b { color: var(--ink); }
 .freight-shortages b, .freight-shortages span { display: block; font-size: 0.85rem; }
 .freight-shortages span { color: #e8b987; }
 .freight-pages { justify-content: space-between; align-items: center; }
+
+.freight-route h2 { font-size: 0.95rem; flex-wrap: wrap; }
+.freight-address { margin: 0.2rem 0 0.5rem; font-size: 0.85rem; }
+.freight-stops { padding-left: 1.4rem; margin: 0.4rem 0; }
+.freight-stops li { padding: 0.2rem 0; }
+.freight-stops button { font-size: 0.8rem; margin-right: 0.25rem; }

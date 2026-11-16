@@ -8,6 +8,7 @@ import tilesUrl from '../assets/tiles.png';
 import { footprint, isBig, isFacility, isRoad, isService, MAP_SIZE, TILE_SIZE, type Cell } from '../simulation/TileMap';
 import { services } from '../simulation/Services';
 import { transit } from '../simulation/Transit';
+import { freightAssignment, freightFleetSize } from '../simulation/Freight';
 import { vehicleSizes } from './vehicleSizes';
 import { CarQueue } from './CarQueue';
 import { land, parcelAt, parcelCentre, parcelOrigin } from '../simulation/Land';
@@ -142,6 +143,8 @@ export class CityRenderer {
      * building itself; at a house or a small shop it waits by the kerb. `held` is how long the
      * car has stood behind another.
      */
+    const freightRounds = new Map<number, number>();
+    const freightJobs = new Map<number, { from: number; to: number }>();
     let roadVehicleRevision = -1;
     const roadVehicles = new Map<string, RoadVehicle>();
     const trips = new Map<string, { at: 'home' | 'work'; along?: number; wait: number; driving?: boolean;
@@ -639,6 +642,8 @@ export class CityRenderer {
 
       if (roadVehicleRevision !== map.layoutRevision) {
         roadVehicles.clear();
+        freightRounds.clear();
+        freightJobs.clear();
         roadVehicleRevision = map.layoutRevision;
       }
       const liveVehicles = new Set<string>();
@@ -665,6 +670,7 @@ export class CityRenderer {
         const aheadY = Math.floor(y + hy * 0.55);
         const red = (aheadX !== Math.floor(x) || aheadY !== Math.floor(y)) &&
           junctions.has(aheadY * MAP_SIZE + aheadX) && greenUpright(aheadX, aheadY) !== (hy !== 0);
+        const wasReturning = state.returning;
         advanceRoadVehicle(state, last, elapsed, pace,
           this.city.congestionAt(path[index], this.hour()), blocked, red, LIGHT);
         if (elapsed > 0) {
@@ -675,13 +681,23 @@ export class CityRenderer {
           counted[id] += blocked ? 3 : 1;
           crowded.add(id);
         }
-        return { x: x * TILE_SIZE, y: y * TILE_SIZE, upright: hy !== 0 };
+        return { x: x * TILE_SIZE, y: y * TILE_SIZE, upright: hy !== 0, finished: wasReturning && !state.returning };
       };
-      for (const run of this.city.getFreight()) {
-        // One representative per route, at most 80: quantities remain in the simulation.
-        if (liveVehicles.size >= 80) break;
-        const at = vehicleOnRoad(`freight:${run.from}:${run.to}`, run.path, 400, (run.from % 17) / 17);
+      const freightRoutes = this.city.getFreight().filter(route => route.path.length > 1);
+      const fleetSize = freightFleetSize(freightRoutes);
+      for (const slot of freightJobs.keys()) if (slot >= fleetSize) { freightJobs.delete(slot); freightRounds.delete(slot); }
+      for (let slot = 0; slot < fleetSize; slot++) {
+        const round = freightRounds.get(slot) ?? 0;
+        const job = freightJobs.get(slot);
+        let run = job && freightRoutes.find(route => route.from === job.from && route.to === job.to);
+        if (!run) {
+          run = freightAssignment(freightRoutes, slot, round);
+          if (!run) continue;
+          freightJobs.set(slot, { from: run.from, to: run.to });
+        }
+        const at = vehicleOnRoad(`freight:${slot}:${round}:${run.from}:${run.to}`, run.path, 400, 0);
         if (!at) continue;
+        if (at.finished) { freightRounds.set(slot, round + 1); freightJobs.delete(slot); }
         const { x, y, upright } = at;
         if (!visible(x, y)) continue;
         const size = vehicleSizes.freight;

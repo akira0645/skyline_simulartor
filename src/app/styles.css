@@ -530,3 +530,13 @@ button.tag[aria-pressed="true"] b { color: var(--ink); }
 .land-grid .owned { color: #ffdc80; border-color: #ffdc80; opacity: 1; }
 
 .land-grid button span { white-space: nowrap; font-size: 0.85rem; letter-spacing: normal; }
+
+.freight-route { border-top: 1px solid #555; padding: 0.6rem 0; }
+.freight-route h3 { margin: 0 0 0.4rem; font-size: 0.85rem; line-height: 1.5; overflow-wrap: anywhere; }
+.freight-route .row { margin-top: 0.4rem; flex-wrap: wrap; }
+.freight-shortages { list-style: none; padding: 0; margin: 0 0 0.5rem; max-height: 18rem; overflow-y: auto; }
+.freight-shortages li { display: flex; align-items: center; gap: 0.5rem; border-bottom: 1px solid #555; padding: 0.5rem 0; }
+.freight-shortages li > div { flex: 1; min-width: 0; }
+.freight-shortages b, .freight-shortages span { display: block; font-size: 0.85rem; }
+.freight-shortages span { color: #e8b987; }
+.freight-pages { justify-content: space-between; align-items: center; }

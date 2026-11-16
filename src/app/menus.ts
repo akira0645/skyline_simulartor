@@ -52,7 +52,7 @@ export const iconStyle = (tool: Tool) => {
   return at && { boxShadow: 'none', backgroundImage: `url(${cityUrl})`, backgroundPosition: `-${at[0] * 32}px -${at[1] * 32}px` };
 };
 
-export const panelTabs = [['tile', '地塊'], ['city', '城市'], ['tasks', '任務'], ['goals', '成就'], ['book', '手冊'], ['lines', '路線'], ['log', '紀錄']] as const;
+export const panelTabs = [['tile', '地塊'], ['city', '城市'], ['tasks', '任務'], ['goals', '成就'], ['book', '手冊'], ['lines', '路線'], ['freight', '物流'], ['log', '紀錄']] as const;
 
 export type PanelTab = (typeof panelTabs)[number][0];
 

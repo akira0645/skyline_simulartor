@@ -26,7 +26,7 @@ import { brands, dilemmas, type Answer, type Boost, type Brand, type Dilemma } f
 import { comboIncome, combos, comboValue, COMBOS, taskList, tasks, type Combo, type TaskId } from './Combos';
 import { goods } from './Goods';
 import { ALL_LAND, adjoining, land, landPrice, parcelAt } from './Land';
-import { planFreight, type FreightRoute } from './Freight';
+import { planFreight, summarizeFreight, type FreightRoute, type FreightSite } from './Freight';
 import { jobs } from './Jobs';
 import { COMPLEX_LEVEL, landValue, MAX_LEVEL } from './LandValue';
 import { childrenAt, homeSites, residentAt, traits, TRAITS, type HomeKind, type Trait } from './Residents';
@@ -295,6 +295,8 @@ export class BuildingSystem {
   /** The busiest shift's commuters on each road tile. Routing and pollution go by this. */
   private readonly flows = new Float32Array(MAP_SIZE ** 2);
   private freight: FreightRoute[] = [];
+  private freightSources: FreightSite[] = [];
+  private freightShops: FreightSite[] = [];
   private readonly freightFlows = new Float32Array(MAP_SIZE ** 2);
   private freightRevision = -1;
   private readonly freightPaths = new Map<string, Cell[] | undefined>();
@@ -672,6 +674,20 @@ export class BuildingSystem {
 
   /** Factory-to-shop shipments derived from employment and road connectivity. */
   getFreight(): readonly FreightRoute[] { return this.freight; }
+
+  getLogistics() {
+    const components = new Set<number>();
+    for (const source of this.freightSources) {
+      const road = this.roadAccess(cellAt(source.id));
+      const component = road && this.roadGraph.componentAt(road);
+      if (component !== undefined) components.add(component);
+    }
+    return summarizeFreight(this.freightSources, this.freightShops, this.freight, id => {
+      const road = this.roadAccess(cellAt(id));
+      const component = road && this.roadGraph.componentAt(road);
+      return component !== undefined && components.has(component);
+    });
+  }
 
   /** The bus and metro lines, with their routes, timings and riders. */
   getLines(): readonly Line[] {
@@ -2548,6 +2564,8 @@ export class BuildingSystem {
       this.connectTransfers();
       this.assignJobs();
     }
+    for (const route of this.freight) route.minutes = route.path.reduce((sum, cell) => sum + tileMinutes(
+      this.flows[indexOf(cell)] + this.freightFlows[indexOf(cell)], this.roadAt(indexOf(cell))), 0);
     this.shareCustom();
     // Vehicles and the fuel they burn, which needs the routes and the stations' reach.
     this.countCars();
@@ -2630,6 +2648,8 @@ export class BuildingSystem {
       if (this.map.at(id) === 'industrial') sources.push({ id, amount: building.occupants * goods.perWorker });
       if (this.map.at(id) === 'commercial') shops.push({ id, amount: building.occupants * goods.perClerk });
     }
+    this.freightSources = sources;
+    this.freightShops = shops;
     this.freight = planFreight(sources, shops, (from, to) => {
       const key = `${from}:${to}`;
       if (!this.freightPaths.has(key)) {
@@ -2640,11 +2660,7 @@ export class BuildingSystem {
       return this.freightPaths.get(key);
     });
     this.freightFlows.fill(0);
-    for (const route of this.freight) for (const cell of route.path) this.freightFlows[indexOf(cell)] += route.trucks;
-    for (const route of this.freight) {
-      route.minutes = route.path.reduce((sum, cell) => sum + tileMinutes(
-        this.flows[indexOf(cell)] + this.freightFlows[indexOf(cell)], this.roadAt(indexOf(cell))), 0);
-    }
+    for (const route of this.freight) for (const cell of route.path) this.freightFlows[indexOf(cell)] += route.trucks / calendar.daysPerMonth;
   }
 
   /**

@@ -1,6 +1,7 @@
+import { calendar } from './calendar';
 import { MAP_SIZE, type Cell } from './TileMap';
 
-export const freight = { load: 24 };
+export const freight = { load: 24, maxVehicles: 8 };
 export interface FreightRoute {
   from: number;
   to: number;
@@ -35,3 +36,47 @@ export function planFreight(sources: readonly { id: number; amount: number }[],
   }
   return result;
 }
+
+export interface FreightSite { id: number; amount: number }
+export type FreightProblem = 'no-source' | 'disconnected' | 'shortage';
+
+/** A small shared representative fleet, sized by average daily trips rather than monthly routes. */
+export function freightFleetSize(routes: readonly FreightRoute[]): number {
+  const trips = routes.reduce((sum, route) => sum + (route.path.length > 1 ? route.trucks : 0), 0);
+  return Math.min(freight.maxVehicles, Math.ceil(trips / calendar.daysPerMonth));
+}
+
+/** Rotate assignments after a full round trip, weighted by each route's monthly runs. */
+export function freightAssignment(routes: readonly FreightRoute[], slot: number, round: number): FreightRoute | undefined {
+  const moving = routes.filter(route => route.path.length > 1);
+  const total = moving.reduce((sum, route) => sum + route.trucks, 0);
+  if (!total) return undefined;
+  let pick = (slot + round * freightFleetSize(routes)) % total;
+  for (const route of moving) {
+    if (pick < route.trucks) return route;
+    pick -= route.trucks;
+  }
+}
+
+/** This reports planned shipments, not inventory or completed deliveries. */
+export function summarizeFreight(sources: readonly FreightSite[], shops: readonly FreightSite[],
+  routes: readonly FreightRoute[], connected: (shop: number) => boolean) {
+  const assigned = new Map<number, number>();
+  for (const route of routes) assigned.set(route.to, (assigned.get(route.to) ?? 0) + route.goods);
+  const supply = sources.reduce((sum, source) => sum + source.amount, 0);
+  const demand = shops.reduce((sum, shop) => sum + shop.amount, 0);
+  const planned = routes.reduce((sum, route) => sum + route.goods, 0);
+  const destinations = shops.map(shop => {
+    const allocated = assigned.get(shop.id) ?? 0;
+    const missing = Math.max(0, shop.amount - allocated);
+    const problem: FreightProblem | undefined = !missing ? undefined : !sources.length ? 'no-source' :
+      !connected(shop.id) ? 'disconnected' : 'shortage';
+    return { id: shop.id, demand: shop.amount, allocated, missing, problem };
+  });
+  return { factories: sources.length, shops: shops.length, supply, demand, planned,
+    unused: Math.max(0, supply - planned), missing: Math.max(0, demand - planned),
+    trips: routes.reduce((sum, route) => sum + route.trucks, 0), fleet: freightFleetSize(routes),
+    routes, destinations };
+}
+
+export type FreightReport = ReturnType<typeof summarizeFreight>;

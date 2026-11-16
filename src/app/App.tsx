@@ -1,7 +1,8 @@
 import { cellFromId } from '../simulation/FacilityAccess';
 import { weatherAt, weatherNames } from '../simulation/Weather';
 import { AutosaveSession, type AutosaveStatus } from '../storage/AutosaveSession';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { FreightPanel } from './FreightPanel';
 import { VisitorGroups } from './VisitorGroups';
 import { visitReasons } from '../simulation/ActivityDiary';
 import { needs as needLevels, needWords, eatingWords } from '../simulation/Needs';
@@ -744,6 +745,18 @@ export function App() {
     };
   }
 
+  const locateFreight = useCallback((cell: Cell, path?: readonly Cell[]) => {
+    activeTool.current = 'inspect';
+    setTool('inspect');
+    editingRef.current = undefined;
+    setEditing(undefined);
+    const renderer = rendererRef.current;
+    if (!renderer) return;
+    renderer.focus = undefined;
+    renderer.marks = path ? [cell, ...path] : [cell];
+    renderer.lookAt?.(cell);
+  }, []);
+  const freightReport = useMemo(() => panelTab === 'freight' ? engine.city.getLogistics() : undefined, [engine, panelTab, stats, tick]);
   const group = toolGroups[toolTab];
 
   return (
@@ -1092,7 +1105,7 @@ export function App() {
                   <><Tag label="夠用" tone={stats.goods.needed ? 'good' : 'dim'} /><Tag label="外銷" value={`+${money(stats.goods.trade)}/月`} /></> :
                   <><Tag label="不夠" tone="bad" /><Tag label="進口" value={`−${money(-stats.goods.trade)}/月`} tone="bad" /></>}
                 <Tag label="市內貨運" value={`${engine.city.getFreight().reduce((sum, run) => sum + run.trucks, 0)} 趟／月`}
-                  tip="工廠送往商店的貨運計畫；進出口仍由城市統一結算" />
+                  tip="查看物流總覽、補貨缺口與配送路線" onPick={() => { setPanelTab('freight'); setSideOpen(true); }} />
                 <Tag label="農田" value={stats.goods.farmed} tone={stats.goods.farmed ? undefined : 'dim'} tip="農田每月種出來的份數" />
                 <Tag label="購物需求未滿足" value={`${stats.goods.needed - stats.goods.served} 人`}
                   tone={stats.goods.served < stats.goods.needed ? 'bad' : 'dim'} tip="商店不夠，這麼多人買不到東西" />
@@ -1199,6 +1212,8 @@ export function App() {
             </div>
           </section>}
         </>}
+
+        {panelTab === 'freight' && freightReport && <FreightPanel report={freightReport} onLocate={locateFreight} />}
 
         {panelTab === 'lines' && <>
           {lines.length === 0 && <p className="hint">先在「交通」蓋兩個站，再按下面的按鈕連起來。</p>}

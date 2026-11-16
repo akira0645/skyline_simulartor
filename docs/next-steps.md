@@ -14,12 +14,12 @@
 7. **車流顯示**：顏色已改成跟著地圖上的車（見 traffic-view-follows-cars 規格）。
 8. **吃飯習慣與兼職外送**：已加入（見 eating-and-delivery 規格）。
 10. **生活店面**（2026-11-16）：烘焙坊、花店、蛋糕店已加入，市場與夜市的營業時間已修正，人物卡改成狀態條（見 `2026-11-16-shops-and-person-card.md`）。還沒做：夜市的攤位與規模、中大示範城市的廣場離住宅太遠、城市頁的標籤整理。
-11. **版本與上架**：版本號 0.2.0，`CHANGELOG.md` 照 Keep a Changelog 寫，發版三步驟寫在 README 最後一節。使用者想上架，建議先放 itch.io（把 `dist/` 壓成 zip 上傳）或 GitHub Pages；還沒做任何上架動作，等使用者決定。
-9. **公路加深**（使用者已選方向，尚未開始，建議順序）：
+11. **版本與上架**：版本號 0.3.0，`CHANGELOG.md` 照 Keep a Changelog 寫，發版三步驟寫在 README 最後一節。已上架 GitHub Pages：`https://akira0645.github.io/skyline_simulartor/`，推送 main 由 Actions 自動建置部署。
+9. **公路加深**（使用者已選方向，依序實作）：
    1. ~~去設施的人也開車、騎車，並算進車流~~ 已完成（2026-11-16，見 `2026-11-16-outings-on-wheels.md`）；救災車也改成排在車後面。
    2. ~~停車：車要找得到位子，找不到會繞路。~~ 已完成（2026-11-16，見 `docs/superpowers/specs/2026-11-16-parking.md`）。
-   3. 貨車送貨、公車會被塞住。
-   4. 買地擴張：地圖本身已是 128×128，做法是開局只開放中間一塊，其餘用錢一塊一塊買。
+   3. ~~貨車送貨、公車會被塞住。~~ 已完成首版：工廠到商店的有限貨量與接路路線、貨車／公車排隊和號誌、公車塞車班距與運能（見 `2026-11-16-freight-and-bus-traffic.md`）。進出口仍沿用月結，尚無逐車庫存與到貨期限。
+   4. ~~買地擴張~~ 已完成：新城市先開中央 32×32 一區，花錢購買共邊相鄰區塊，保留舊存檔與示範城市範圍（見 `2026-11-16-land-expansion.md`）。
    5. 路的種類：單行道、快速道路與交流道、圓環。使用者認為要城市夠大才看得出來，所以排在買地之後。
 
 12. **第二輪（2026-11-16）**：示範城市改為建置時預先存檔（`tools/build-demos.mjs` → `public/demo/*.json`，不進版控；沒有檔案時由 `src/app/demoWorker.ts` 在背景現算）。救災車輛受車流影響（`services.response`：被車流多拖 4／4／6 分鐘以上就來不及，事件 `fire-late`／`crime-late`／`sick-late`；量到中、大城一年約 1–4 次）。緊急事件改在一天中擲出的時刻發生。人物卡：狀態條用詞、原因合併（`reasonNote`）、看住家／看公司。GitHub Pages 由 `.github/workflows/pages.yml` 部署，使用者需在 Settings → Pages 選「GitHub Actions」。

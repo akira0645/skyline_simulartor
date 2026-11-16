@@ -96,6 +96,8 @@ const hash = (x: number, y: number) =>
 export class TileRenderer {
   readonly view = new Container();
   private readonly tiles = new Graphics();
+  private readonly terrain = new Container();
+  private cacheResolution = 0;
   // Highlights get their own layer: a Graphics keeps the alpha of its last fill, even
   // across clear(), and applies it to every texture drawn afterwards.
   private readonly overlay = new Graphics();
@@ -106,7 +108,8 @@ export class TileRenderer {
 
   constructor(private readonly kenney: TextureSource, private readonly sheets: Record<Theme, TextureSource>) {
     this.city = sheets.classic;
-    this.view.addChild(this.tiles, this.overlay);
+    this.terrain.addChild(this.tiles);
+    this.view.addChild(this.terrain, this.overlay);
   }
 
   /** A building of two tiles by two from the city sheet, by its place in the row of them. */
@@ -142,6 +145,14 @@ export class TileRenderer {
     range?: { centre: Cell; radius: number; kind: Facility | Service | 'bus' | 'metro' }, hour?: number,
     lines: readonly Line[] = [], marks: readonly Cell[] = [], crowdOn?: (cell: Cell) => number,
     aim?: { cells: readonly Cell[]; ok: boolean }, focus?: (cell: Cell) => boolean) {
+    // Terrain changes on a redraw, not every animation frame. Flatten its many atlas
+    // switches into one cached texture; keep selections and overlays independent.
+    const resolution = camera.scale >= 1 ? 1 : camera.scale >= 0.5 ? 0.5 : 0.25;
+    if (resolution !== this.cacheResolution) {
+      this.terrain.cacheAsTexture({ resolution, antialias: false, scaleMode: 'nearest' });
+      this.cacheResolution = resolution;
+    }
+    this.terrain.updateCacheTexture();
     const map = city.map;
     const { theme } = city;
     this.city = this.sheets[theme];

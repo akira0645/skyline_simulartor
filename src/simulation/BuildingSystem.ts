@@ -25,6 +25,8 @@ import { fuelPrice, goodsPrice, prices } from './Prices';
 import { brands, dilemmas, type Answer, type Boost, type Brand, type Dilemma } from './Dilemmas';
 import { comboIncome, combos, comboValue, COMBOS, taskList, tasks, type Combo, type TaskId } from './Combos';
 import { goods } from './Goods';
+import { ALL_LAND, adjoining, land, landPrice, parcelAt } from './Land';
+import { planFreight, type FreightRoute } from './Freight';
 import { jobs } from './Jobs';
 import { COMPLEX_LEVEL, landValue, MAX_LEVEL } from './LandValue';
 import { childrenAt, homeSites, residentAt, traits, TRAITS, type HomeKind, type Trait } from './Residents';
@@ -292,6 +294,10 @@ export class BuildingSystem {
   private readonly shiftFlows = shifts.map(() => new Float32Array(MAP_SIZE ** 2));
   /** The busiest shift's commuters on each road tile. Routing and pollution go by this. */
   private readonly flows = new Float32Array(MAP_SIZE ** 2);
+  private freight: FreightRoute[] = [];
+  private readonly freightFlows = new Float32Array(MAP_SIZE ** 2);
+  private freightRevision = -1;
+  private readonly freightPaths = new Map<string, Cell[] | undefined>();
   /** Residents with a job and their average commute, by home. */
   private readonly employed = new Map<number, number>();
   private readonly commuteMinutes = new Map<number, number>();
@@ -612,6 +618,7 @@ export class BuildingSystem {
       for (const shift of rushShifts(hour)) if (this.shiftRuns(shift)) flow += this.shiftFlows[shift][id];
       flow += this.outingFlows[id];
     }
+    flow += this.freightFlows[id];
     return this.crashDelay(cell) ? Math.max(1, congestion(flow, tile)) : congestion(flow, tile);
   }
 
@@ -630,6 +637,41 @@ export class BuildingSystem {
   hasTransit(cell: Cell): boolean {
     return this.map.get(cell) !== undefined && this.transitCover[indexOf(cell)] === 1;
   }
+
+  /** Building permissions; legacy saves retain every parcel. */
+  private readonly ownedLand = new Set(ALL_LAND);
+
+  /** Only a brand-new playable city starts with a restricted parcel. */
+  startExpansion(): void {
+    if (this.buildings.size || this.zones.size) throw new Error('只能在新城市設定起始土地。');
+    this.ownedLand.clear();
+    this.ownedLand.add(land.start);
+  }
+
+  owns(cell: Cell): boolean {
+    const id = parcelAt(cell);
+    return id !== undefined && this.ownedLand.has(id);
+  }
+
+  getLand() {
+    const price = landPrice(this.ownedLand.size, this.level);
+    return ALL_LAND.map(id => ({ id, owned: this.ownedLand.has(id),
+      available: !this.ownedLand.has(id) && adjoining(id, this.ownedLand), price }));
+  }
+
+  buyLand(id: number): { error?: string; cost: number } {
+    const plot = this.getLand().find(plot => plot.id === id);
+    if (!plot) return { error: '這塊土地不在地圖裡。', cost: 0 };
+    if (plot.owned) return { error: '這塊土地已經是你的。', cost: 0 };
+    if (!plot.available) return { error: '只能購買與已有土地共邊相鄰的區塊。', cost: 0 };
+    if (this.funds < plot.price) return { error: `錢不夠：買地要 $${plot.price}。`, cost: 0 };
+    this.funds -= plot.price;
+    this.ownedLand.add(id);
+    return { cost: plot.price };
+  }
+
+  /** Factory-to-shop shipments derived from employment and road connectivity. */
+  getFreight(): readonly FreightRoute[] { return this.freight; }
 
   /** The bus and metro lines, with their routes, timings and riders. */
   getLines(): readonly Line[] {
@@ -2039,6 +2081,7 @@ export class BuildingSystem {
     }
     let cost = 0;
     const result = { ...this.map.execute(command, changes => {
+      if (changes.some(({ cell }) => !this.owns(cell))) return '這裡還沒買下來，請先用「買地」擴張。';
       let price = 0;
       for (const { tile } of changes) price += tileCost(tile);
       price = Math.round(price * this.level);
@@ -2496,6 +2539,15 @@ export class BuildingSystem {
     this.planLines();
     this.connectTransfers();
     this.assignJobs();
+    this.planFreight();
+    // A bounded two-pass estimate: empty-road demand first, then the traffic it creates.
+    // Always start afresh, so loading a save cannot inherit a previous refresh's timings.
+    if (this.lines.some(line => line.kind === 'bus' && line.stops.length >= 2)) {
+      const traffic = Float32Array.from(this.flows, (flow, id) => flow + this.freightFlows[id]);
+      this.planLines(traffic);
+      this.connectTransfers();
+      this.assignJobs();
+    }
     this.shareCustom();
     // Vehicles and the fuel they burn, which needs the routes and the stations' reach.
     this.countCars();
@@ -2566,13 +2618,42 @@ export class BuildingSystem {
       trade: made >= needed ? (made - needed) * goods.exportPrice : -(needed - made) * goods.importCost };
   }
 
+  private planFreight(): void {
+    if (this.freightRevision !== this.map.layoutRevision) {
+      this.freightRevision = this.map.layoutRevision;
+      this.freightPaths.clear();
+    }
+    const sources: { id: number; amount: number }[] = [];
+    const shops: { id: number; amount: number }[] = [];
+    for (const [id, building] of this.buildings) {
+      if (!building.occupants) continue;
+      if (this.map.at(id) === 'industrial') sources.push({ id, amount: building.occupants * goods.perWorker });
+      if (this.map.at(id) === 'commercial') shops.push({ id, amount: building.occupants * goods.perClerk });
+    }
+    this.freight = planFreight(sources, shops, (from, to) => {
+      const key = `${from}:${to}`;
+      if (!this.freightPaths.has(key)) {
+        const start = this.roadAccess(cellAt(from));
+        const end = this.roadAccess(cellAt(to));
+        this.freightPaths.set(key, start && end ? this.roadGraph.shortestPath(start, end)?.path : undefined);
+      }
+      return this.freightPaths.get(key);
+    });
+    this.freightFlows.fill(0);
+    for (const route of this.freight) for (const cell of route.path) this.freightFlows[indexOf(cell)] += route.trucks;
+    for (const route of this.freight) {
+      route.minutes = route.path.reduce((sum, cell) => sum + tileMinutes(
+        this.flows[indexOf(cell)] + this.freightFlows[indexOf(cell)], this.roadAt(indexOf(cell))), 0);
+    }
+  }
+
   /**
    * Works out each line's route and timings. A bus runs along the roads from stop to stop at
-   * the pace of an empty road; a metro train runs along the row and then the column between
+   * the supplied road traffic pace (empty on the first pass); a metro train runs along the row and then the column between
    * stations. A vehicle goes to the end of the line and back, so the time between departures
    * is the round trip divided among the vehicles.
    */
-  private planLines(): void {
+  private planLines(roadFlows?: Float32Array): void {
     this.plans.length = 0;
     this.transferStops.clear();
     this.transitCover.fill(0);
@@ -2581,6 +2662,7 @@ export class BuildingSystem {
       const spec = transit[line.kind];
       const path: Cell[] = [];
       const times: number[] = [];
+      let freeMinutes = 0;
       let active = line.stops.length >= 2;
       let minutes = 0;
       for (let index = 0; active && index < line.stops.length; index++) {
@@ -2597,7 +2679,7 @@ export class BuildingSystem {
           const from = this.roadAccess(before);
           const to = this.roadAccess(cell);
           leg = from && to ? this.roadGraph.shortestPath(from, to)?.path : undefined;
-          for (const tile of leg ?? []) legMinutes += tileMinutes(0, this.roadAt(indexOf(tile)));
+          for (const tile of leg ?? []) legMinutes += tileMinutes(roadFlows?.[indexOf(tile)] ?? 0, this.roadAt(indexOf(tile)));
         } else {
           leg = [];
           let { x, y } = before;
@@ -2613,11 +2695,14 @@ export class BuildingSystem {
           const last = path.at(-1);
           if (!last || last.x !== tile.x || last.y !== tile.y) path.push(tile);
         }
+        freeMinutes += (line.kind === 'bus' ? (leg ?? []).reduce((sum, cell) =>
+          sum + tileMinutes(0, this.roadAt(indexOf(cell))), 0) : legMinutes) + transit.dwell;
         minutes += legMinutes + transit.dwell;
         times.push(minutes);
       }
       const headway = active ? 2 * minutes / line.vehicles : 0;
       const plan = { ...line, stops: [...line.stops], active, path: active ? path : [], times, headway,
+        delay: active ? Math.max(0, minutes - freeMinutes) : 0,
         capacity: active ? Math.floor(transit.peakMinutes / headway * spec.capacity) : 0,
         busiest: 0, riders: 0, loads: shifts.map(() => 0) };
       this.plans.push(plan);
@@ -3178,6 +3263,7 @@ export class BuildingSystem {
     return { tiles: this.map.save(), metros: this.map.stationTiles(), spans: this.map.spanTiles(), zones: [...this.zones.keys()],
       buildings: [...this.buildings.values()].map(building => building.people ?
         { ...building, people: building.people.map(person => ({ ...person, identity: person.identity && { ...person.identity } })) } : { ...building }),
+      ownedLand: [...this.ownedLand].sort((a, b) => a - b),
       funds: this.funds, rank: this.rank, taxRate: this.taxRate,
       lines: this.lines.map(line => ({ ...line, stops: [...line.stops] })),
       goals: [...this.goalsDone], loans: [...this.loans], tasks: [...this.tasksOn],
@@ -3187,7 +3273,9 @@ export class BuildingSystem {
       scares: this.scares.map(entry => ({ ...entry })), tasksRest: [...this.tasksRest], nextPersonId: this.nextPersonId, relationships: this.relationships.save(), life: this.life.save() };
   }
 
-  load({ tiles, zones, buildings, funds, rank, taxRate, tick, lines, goals: done, loans, seed, metros, tasks: saved, combos: known, policies: chosen, challenge, spans, dilemma, boosts, level, theme, coldStock, marketStock, monthlyVisits, activeVisits, dailyActivities, scares, tasksRest, nextPersonId, relationships, life }: SaveData): void {
+  load({ ownedLand, tiles, zones, buildings, funds, rank, taxRate, tick, lines, goals: done, loans, seed, metros, tasks: saved, combos: known, policies: chosen, challenge, spans, dilemma, boosts, level, theme, coldStock, marketStock, monthlyVisits, activeVisits, dailyActivities, scares, tasksRest, nextPersonId, relationships, life }: SaveData): void {
+    this.ownedLand.clear();
+    for (const id of ownedLand ?? ALL_LAND) this.ownedLand.add(id);
     this.seed = seed;
     this.nextPersonId = nextPersonId ?? 0;
     this.life.load(life ?? EMPTY_LIFE());

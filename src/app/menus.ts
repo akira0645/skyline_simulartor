@@ -58,11 +58,12 @@ export type PanelTab = (typeof panelTabs)[number][0];
 
 /** What one tile of a tool costs; nothing for the tool that only looks. */
 export const toolCost = (tool: Tool) =>
-  tool === 'pan' || tool === 'inspect' || tool === 'line' ? undefined :
+  tool === 'land' || tool === 'pan' || tool === 'inspect' || tool === 'line' ? undefined :
   tileCost(tool === 'demolish' ? 'grass' : tool);
 
 /** One short line on how to use each tool, shown when it is picked. */
 export function toolTip(tool: Tool): string {
+  if (tool === 'land') return '買地：點選與已有土地共邊相鄰的 32×32 區塊；價格會隨擴張提高。';
   if (isService(tool)) {
     const extra = tool === 'fire' ? '沒救到的火會嚇跑附近的人。' :
       tool === 'police' ? '滿 100 人後，沒警察的地方地價低。' :

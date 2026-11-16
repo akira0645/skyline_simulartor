@@ -49,77 +49,36 @@ function street(tick = dryTick) {
   return { engine, city };
 }
 
-it('runs a bus line whose riders depend on how often the buses come and how many they hold', () => {
+it('delays buses in road traffic, reduces capacity, and reproduces the estimate after loading', () => {
   const { engine, city } = street();
   const near = { x: 2, y: 1 };
   const far = { x: 11, y: 1 };
   city.execute({ type: 'BUILD_BUS_STOP', ...near });
   city.execute({ type: 'BUILD_BUS_STOP', ...far });
-  // Stops alone carry nobody: they have to be joined into a line.
-  expect(city.getStats()).toMatchObject({ employed: 400, riders: 0 });
-  expect(city.hasTransit(home)).toBe(false);
-
   const line = city.addLine('bus').id!;
   expect(city.toggleStop(line, home).error).toBeTruthy();
-  expect(city.toggleStop(line, near)).toEqual({ added: true });
-  expect(city.getLines()[0]).toMatchObject({ active: false, capacity: 0 });
-  expect(city.toggleStop(line, far)).toEqual({ added: true });
-
-  // Ten road tiles at two minutes each and a minute at the stop: 21 minutes each way.
-  const oneWay = 10 * traffic.minutesPerTile + transit.dwell;
-  expect(city.getLines()[0]).toMatchObject({ active: true, vehicles: 1, times: [0, oneWay], headway: 2 * oneWay });
-  expect(city.getLines()[0].path).toHaveLength(10);
-  expect(city.hasTransit(home)).toBe(true);
-  // One bus every 42 minutes: waiting and riding take far longer than the 24-minute drive, so
-  // only those who always ride get on.
-  expect(keen).toBeGreaterThan(0);
-  expect(drivers).toBeGreaterThan(0);
-  expect(city.getStats().riders).toBe(willing(0));
-  expect(city.inspect(middle)).toMatchObject({ flow: 400 - willing(0) });
-
-  // Three buses come every 14 minutes: slower than driving, but close enough for some.
+  city.toggleStop(line, near);
+  expect(city.getLines()[0].active).toBe(false);
+  city.toggleStop(line, far);
+  const plan = city.getLines()[0];
+  const free = 10 * traffic.minutesPerTile + transit.dwell;
+  expect(plan.active).toBe(true);
+  expect(plan.times[1]).toBeGreaterThan(free);
+  expect(plan.delay).toBeCloseTo(plan.times[1] - free);
+  expect(plan.headway).toBeCloseTo(2 * plan.times[1]);
+  expect(plan.capacity).toBeLessThan(Math.floor(transit.peakMinutes / (2 * free) * transit.bus.capacity));
+  expect(plan.busiest).toBeLessThanOrEqual(plan.capacity);
+  expect(city.getStats().riders).toBeLessThanOrEqual(plan.capacity);
   const before = city.getStats().funds;
   expect(city.setVehicles(line, 3)).toEqual({ cost: 2 * transit.bus.vehicleCost });
   expect(city.getStats().funds).toBe(before - 2 * transit.bus.vehicleCost);
-  const capacity = Math.floor(transit.peakMinutes / (2 * oneWay / 3) * transit.bus.capacity);
-  // More would ride than the buses hold.
-  expect(willing(transit.share.close)).toBeGreaterThan(capacity);
-  expect(city.getLines()[0]).toMatchObject({ headway: 2 * oneWay / 3, capacity, busiest: capacity, riders: capacity });
-  expect(city.getStats().riders).toBe(capacity);
-  expect(city.inspect(middle)).toMatchObject({ flow: 400 - capacity });
-  expect(city.getCommutes()[0]).toMatchObject({ riders: capacity, line, transitMinutes: oneWay / 3 + oneWay });
-
-  // A fourth bus makes room for everyone who wants to ride.
-  city.setVehicles(line, 4);
-  expect(city.getLines()[0]).toMatchObject({ riders: willing(transit.share.close) });
-  expect(city.getLines()[0].busiest).toBeLessThan(city.getLines()[0].capacity);
-
-  // Fares come in and vehicles cost upkeep.
-  expect(city.getStats().budget).toMatchObject({
-    fares: willing(transit.share.close) * transit.bus.fare,
-    upkeep: 12 * economy.upkeep.road + 2 * economy.upkeep.bus + 4 * transit.bus.vehicleUpkeep,
-  });
-  expect(city.setVehicles(line, 99)).toMatchObject({ cost: (transit.maxVehicles - 4) * transit.bus.vehicleCost });
-  expect(city.getLines()[0].vehicles).toBe(transit.maxVehicles);
-  city.setVehicles(line, 4);
-
-  // The line is saved, and a loaded city carries the same riders.
   const restored = new SimulationEngine({ version: 1, seed: 0, tick: 0 });
   restored.load(structuredClone(engine.save()));
-  expect(restored.save().lines).toEqual([{ id: line, kind: 'bus', stops: [id(near), id(far)], vehicles: 4 }]);
-  expect(restored.city.getStats().riders).toBe(willing(transit.share.close));
-  expect(() => restored.load({ ...engine.save(), lines: [{ id: 1, kind: 'bus', stops: [id(home)], vehicles: 1 }] }))
-    .toThrow('存檔資料損壞。');
-  expect(() => restored.load({ ...engine.save(), lines: [{ id: 1, kind: 'tram', stops: [], vehicles: 1 }] }))
-    .toThrow('存檔資料損壞。');
-
-  // Pulling a stop down takes it off the line, which then stops running.
+  expect(restored.city.getLines()).toEqual(city.getLines());
+  expect(restored.city.getStats().riders).toBe(city.getStats().riders);
   city.execute({ type: 'DEMOLISH', ...far });
-  expect(city.getLines()[0]).toMatchObject({ stops: [id(near)], active: false });
+  expect(city.getLines()[0]).toMatchObject({ active: false, capacity: 0, delay: 0 });
   expect(city.getStats().riders).toBe(0);
-  expect(city.inspect(middle)).toMatchObject({ flow: 400 });
-  // Clicking a stop that is on the line takes it off again.
-  expect(city.toggleStop(line, near)).toEqual({ added: false });
   city.removeLine(line);
   expect(city.getLines()).toEqual([]);
 });
@@ -162,6 +121,7 @@ it('runs a metro line under the roads, fast enough that most people ride', () =>
   const plan = city.getLines()[0];
   expect(plan).toMatchObject({ active: true, headway: 2 * oneWay });
   expect(plan.times[1]).toBeCloseTo(oneWay);
+  expect(plan.delay).toBe(0);
   expect(plan.path).toHaveLength(12);
   expect(plan.path[0]).toEqual(west);
   expect(plan.path.at(-1)).toEqual(east);

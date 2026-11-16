@@ -521,3 +521,12 @@ button.tag[aria-pressed="true"] b { color: var(--ink); }
   .speed-controls button { flex: 1; min-width: 0; }
   .menu { justify-content: flex-end; }
 }
+
+.land-purchase { position: absolute; z-index: 5; left: 0.6rem; top: calc(var(--below-top) + 1rem); width: min(22rem, calc(100% - 1.2rem)); padding: 0.8rem; max-height: calc(100% - var(--top-height) - 8rem); overflow-y: auto; }
+.land-purchase h2 { margin: 0 0 0.5rem; }
+.land-purchase p { margin: 0 0 0.6rem; font-size: 0.85rem; }
+.land-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.3rem; margin-bottom: 0.6rem; }
+.land-grid button { display: flex; flex-direction: column; align-items: center; padding: 0.5rem 0.2rem; min-height: 3.6rem; }
+.land-grid .owned { color: #ffdc80; border-color: #ffdc80; opacity: 1; }
+
+.land-grid button span { white-space: nowrap; font-size: 0.85rem; letter-spacing: normal; }

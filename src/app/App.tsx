@@ -1,7 +1,7 @@
 import { cellFromId } from '../simulation/FacilityAccess';
 import { weatherAt, weatherNames } from '../simulation/Weather';
 import { AutosaveSession, type AutosaveStatus } from '../storage/AutosaveSession';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { VisitorGroups } from './VisitorGroups';
 import { visitReasons } from '../simulation/ActivityDiary';
 import { needs as needLevels, needWords, eatingWords } from '../simulation/Needs';
@@ -42,6 +42,7 @@ import {
   thoughtTags, tradeNames, comboNames, PLACES_OF, nickNames, taskNames, seasonNames, festivalNames, policyNames,
   challengeNames, brandNames, dilemmaNames, themeNames, thoughtTone, moodWord, reasonNote, serviceNames, trafficName,
 } from './wording';
+import { land, parcelCentre } from '../simulation/Land';
 import { Meter, PersonRow, Tag } from './Tag';
 
 /** A new city on a map nobody has seen: the seed, and so the water, is different every time. */
@@ -49,6 +50,7 @@ function freshCity(): SimulationEngine {
   const seed = Math.floor(Math.random() * 2 ** 31);
   const engine = new SimulationEngine({ version: 1, seed, tick: 0 });
   engine.city.map.generateTerrain(seed);
+  engine.city.startExpansion();
   // Every new map wears one of the looks, by its seed.
   engine.city.theme = THEMES[seed % THEMES.length];
   return engine;
@@ -216,6 +218,7 @@ export function App() {
       rendererRef.current.marks = [];
       rendererRef.current.focus = undefined;
     }
+    rendererRef.current?.resetView?.();
     setMessage('讀好了。');
   }
 
@@ -228,6 +231,7 @@ export function App() {
       clock.reset();
       lastTime.current = performance.now();
       clock.suspended = document.hidden;
+      rendererRef.current?.setPlaying?.(!clock.suspended && clock.speed !== 0);
     }
   }
 
@@ -242,7 +246,7 @@ export function App() {
       }
       setTick(next);
       setHour(hourAt(next, clock.tickProgress));
-    }, 40);
+    }, 100);
     return () => window.clearInterval(timer);
   }, [engine, clock]);
 
@@ -283,6 +287,7 @@ export function App() {
       setTick(engine.getSnapshot().tick);
       setStats(now);
       rendererRef.current?.refresh?.();
+      if (restored) rendererRef.current?.resetView?.();
       if (restored) setMessage('回到上次離開的城市。');
     });
     const keep = () => { void autosave.save(); };
@@ -291,6 +296,7 @@ export function App() {
       clock.suspended = document.hidden || autosave.status.phase === 'loading';
       clock.reset();
       lastTime.current = performance.now();
+      rendererRef.current?.setPlaying?.(!clock.suspended && clock.speed !== 0);
       if (document.hidden) keep();
     };
     document.addEventListener('visibilitychange', onVisibility);
@@ -342,6 +348,8 @@ export function App() {
       const station = map.hasStation(anchor) && toolGroups[index][1].some(([type]) => type === 'metro');
       const type = station ? 'metro' : map.get(anchor);
       if (type) highlightTools(index, type);
+    }).then(() => {
+      if (!lifetime.signal.aborted) renderer.setPlaying?.(!document.hidden && clock.speed !== 0);
     }).catch((error: unknown) => {
       if (lifetime.signal.aborted) return;
       console.error('PixiJS initialization failed', error);
@@ -353,6 +361,10 @@ export function App() {
       renderer.destroy();
     };
   }, [engine]);
+
+  useEffect(() => {
+    rendererRef.current?.setPlaying?.(!document.hidden && speed !== 0);
+  }, [speed]);
 
   useEffect(() => {
     const next = engine.city.getStats();
@@ -522,6 +534,7 @@ export function App() {
     void autosave.save();
     setStats(engine.city.getStats());
     rendererRef.current?.refresh?.();
+    rendererRef.current?.resetView?.();
     setMessage(done);
   }
 
@@ -561,7 +574,7 @@ export function App() {
   }
 
   const date = dateAt(tick);
-  const info = selected && engine.city.inspect(selected);
+  const info = useMemo(() => selected && engine.city.inspect(selected), [engine, selected, stats, tick]);
   const monthlyVisits = selected && engine.city.visitCountAt(selected);
   const siteSummary = selected && engine.city.siteSummary(selected);
   const meals = engine.city.deliveriesToday();
@@ -582,7 +595,7 @@ export function App() {
     seen.doing === 'to-work' && trip === 'work' ? 'working' :
     seen.doing === 'to-home' && trip === 'home' ? 'home' : seen.doing;
   const pickPerson = (person: { homeId: number; slot: number }) => setWho({ home: person.homeId, slot: person.slot });
-  const voices = panelTab === 'city' ? engine.city.voices() : undefined;
+  const voices = useMemo(() => panelTab === 'city' ? engine.city.voices() : undefined, [engine, panelTab, stats, tick]);
   const worries = voices?.thoughts.filter(([thought]) => thoughtWeights[thought] < 0).slice(0, 3) ?? [];
   const joys = voices?.thoughts.filter(([thought]) => thoughtWeights[thought] > 0 && thought !== 'new-here').slice(0, 2) ?? [];
   // The sentence on show: the picked thought if this person has it, or else their first.
@@ -1078,6 +1091,8 @@ export function App() {
                 {stats.goods.made >= stats.goods.needed ?
                   <><Tag label="夠用" tone={stats.goods.needed ? 'good' : 'dim'} /><Tag label="外銷" value={`+${money(stats.goods.trade)}/月`} /></> :
                   <><Tag label="不夠" tone="bad" /><Tag label="進口" value={`−${money(-stats.goods.trade)}/月`} tone="bad" /></>}
+                <Tag label="市內貨運" value={`${engine.city.getFreight().reduce((sum, run) => sum + run.trucks, 0)} 趟／月`}
+                  tip="工廠送往商店的貨運計畫；進出口仍由城市統一結算" />
                 <Tag label="農田" value={stats.goods.farmed} tone={stats.goods.farmed ? undefined : 'dim'} tip="農田每月種出來的份數" />
                 <Tag label="購物需求未滿足" value={`${stats.goods.needed - stats.goods.served} 人`}
                   tone={stats.goods.served < stats.goods.needed ? 'bad' : 'dim'} tip="商店不夠，這麼多人買不到東西" />
@@ -1205,6 +1220,7 @@ export function App() {
                   <dt>載客</dt>
                   <dd className="tags">
                     <Tag label="班距" value={`${line.headway < 10 ? line.headway.toFixed(1) : Math.round(line.headway)} 分`} />
+                    {line.kind === 'bus' && line.delay >= 0.1 && <Tag label="塞車多花" value={`${Math.round(line.delay)} 分／單程`} tone="bad" />}
                     <Tag label="最忙" value={`${line.busiest}/${line.capacity}`} tone={line.busiest >= line.capacity ? 'bad' : undefined}
                       tip="最忙時載的人／最多能載" />
                     <Tag label="每天" value={`${line.riders} 人`} />
@@ -1310,6 +1326,23 @@ export function App() {
         ))}
       </div>
 
+      {tool === 'land' && <section className="hud land-purchase" aria-label="買地擴張">
+        <h2>買地擴張</h2>
+        <p>每區 32×32 格，只能買共邊相鄰的土地。點地圖或下方區塊購買。</p>
+        <div className="land-grid">
+          {engine.city.getLand().map(plot => <button type="button" key={plot.id} data-parcel={plot.id}
+            disabled={!plot.available || stats.funds < plot.price} aria-label={`第 ${plot.id + 1} 區${plot.owned ? '，已擁有' : `，${money(plot.price)}`}`}
+            className={plot.owned ? 'owned' : ''} onClick={() => {
+              const result = engine.city.buyLand(plot.id);
+              setStats(engine.city.getStats());
+              setMessage(result.error ?? `買下第 ${plot.id + 1} 區，花了 ${money(result.cost)}。`);
+              rendererRef.current?.refresh?.();
+            }}>
+            <span>第 {plot.id + 1} 區</span><small>{plot.owned ? '已擁有' : plot.available ? money(plot.price) : '未相鄰'}</small>
+          </button>)}
+        </div>
+        <button type="button" onClick={() => pick('inspect')}>完成</button>
+      </section>}
       <nav className="hud build" aria-label="工具">
         <div className="tray" role="group" aria-label={group[0]} id="build-panel" hidden={!buildOpen}>
           {group[1].map(([value, label]) => {
@@ -1330,6 +1363,10 @@ export function App() {
         <div className="tabs">
           <button type="button" className="look" aria-pressed={tool === 'inspect'} title="快速鍵：Esc"
             onClick={() => selectMapTool('inspect')}>查看</button>
+          <button type="button" aria-pressed={tool === 'land'} onClick={() => {
+            pick('land');
+            rendererRef.current?.lookAt?.(parcelCentre(land.start));
+          }}>買地</button>
           <button type="button" className="remove" aria-pressed={tool === 'demolish'}
             onClick={() => selectMapTool('demolish')}>拆除</button>
           {toolGroups.map(([name], index) => (

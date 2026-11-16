@@ -8,7 +8,10 @@ import tilesUrl from '../assets/tiles.png';
 import { footprint, isBig, isFacility, isRoad, isService, MAP_SIZE, TILE_SIZE, type Cell } from '../simulation/TileMap';
 import { services } from '../simulation/Services';
 import { transit } from '../simulation/Transit';
+import { CarQueue } from './CarQueue';
+import { land, parcelAt, parcelCentre, parcelOrigin } from '../simulation/Land';
 import { lineColour } from '../app/lineColours';
+import { advanceRoadVehicle, type RoadVehicle } from './roadVehicle';
 
 /** Milliseconds a line's vehicle takes per tile at 1× speed. */
 const LINE_PACE = { bus: 320, metro: 250 };
@@ -70,6 +73,9 @@ export class CityRenderer {
    */
   crowdOn?: (cell: Cell) => number;
 
+  resetView?: () => void;
+  setPlaying?: (playing: boolean) => void;
+
   constructor(private readonly city: BuildingSystem, private readonly speed: () => number,
     private readonly hour: () => number, private readonly overlay: () => Overlay) {}
   private app?: Application;
@@ -97,10 +103,23 @@ export class CityRenderer {
     // The panels float over the map: leave room to drag any corner out from under them, and
     // start with the map's corner clear of the top bar.
     camera.margin = 260;
-    camera.pan(24, 96, app.screen.width, app.screen.height);
+    const frameCity = () => {
+      camera.scale = 1;
+      camera.x = 24;
+      camera.y = 96;
+      if (this.city.getLand().some(plot => !plot.owned)) {
+        const centre = parcelCentre(land.start);
+        camera.x = app.screen.width / 2 - centre.x * TILE_SIZE;
+        camera.y = app.screen.height / 2 - centre.y * TILE_SIZE;
+      }
+      camera.pan(0, 0, app.screen.width, app.screen.height);
+    };
+    frameCity();
     const tiles = new TileRenderer(sheets[0].source, { classic: sheets[1].source, sf: sheets[2].source, california: sheets[3].source, newyork: sheets[4].source });
     const canvas = app.canvas;
     app.stage.addChild(tiles.view);
+    const landGrid = new Graphics();
+    app.stage.addChild(landGrid);
     const people = new Graphics();
     // Flames, smoke and emergency vehicles, above the commuters.
     const effects = new Graphics();
@@ -122,6 +141,8 @@ export class CityRenderer {
      * building itself; at a house or a small shop it waits by the kerb. `held` is how long the
      * car has stood behind another.
      */
+    let roadVehicleRevision = -1;
+    const roadVehicles = new Map<string, RoadVehicle>();
     const trips = new Map<string, { at: 'home' | 'work'; along?: number; wait: number; driving?: boolean;
       garage?: { home: boolean; work: boolean }; lot?: { home?: number; work?: number }; held?: number;
       /** How many times they have set out, and the way by the filling station when this trip goes that way. */
@@ -129,15 +150,9 @@ export class CityRenderer {
     /** The cars that were on the road in the last frame, for the ones behind to keep clear of. */
     let cars: { x: number; y: number; hx: number; hy: number; index: number }[] = [];
     /** Whether a car in the same lane is just ahead of this spot: one going the same way, within `reach` of a tile. */
-    const carAhead = (tileX: number, tileY: number, hx: number, hy: number, self: number, reach = 0.48) => cars.some(other => {
-      if (other.index === self || other.hx !== hx || other.hy !== hy) return false;
-      const offX = other.x - tileX;
-      const offY = other.y - tileY;
-      if (Math.abs(offX * hy - offY * hx) > 0.14) return false;
-      const forward = offX * hx + offY * hy;
-      // Two cars side by side on one spot: the earlier one goes first.
-      return (forward > 0.03 && forward < reach) || (Math.abs(forward) <= 0.03 && other.index < self);
-    });
+    const queue = new CarQueue();
+    const carAhead = (x: number, y: number, hx: number, hy: number, self: number, reach = 0.48) =>
+      queue.ahead(x, y, hx, hy, self, reach);
     /**
      * One drive to be shown: a commuter's between home and work, or one leg of an outing made
      * on a scooter or in a car. Both are driven the same way, in lane, behind whoever is in
@@ -202,7 +217,13 @@ export class CityRenderer {
     // A lane is about a third of a tile wide, and a car must fit in it with room to spare.
     const SIZES = [[7, 3], [8, 4], [10, 6], [12, 6], [13, 7]];
     const streetOpacity = () => Math.max(0, Math.min(1, (camera.scale - 0.45) / 0.55));
+    const visible = (x: number, y: number, margin = 32) => {
+      const sx = x * camera.scale + camera.x;
+      const sy = y * camera.scale + camera.y;
+      return sx >= -margin && sy >= -margin && sx <= app.screen.width + margin && sy <= app.screen.height + margin;
+    };
     const drawCar = (cx: number, cy: number, vertical: boolean, index: number, tier: number) => {
+      if (!visible(cx, cy)) return;
       if (streetOpacity() === 0) return;
       if (camera.scale < 0.85) {
         people.rect(Math.round(cx) - 2, Math.round(cy) - 2, vertical ? 3 : 6, vertical ? 6 : 3).fill(0xc0c5c9);
@@ -262,6 +283,7 @@ export class CityRenderer {
       advancePedestrian(roads, origin, along, advance, returning, (entry, vertical) =>
         !junctions.has(entry.y * MAP_SIZE + entry.x) || greenUpright(entry.x, entry.y) === vertical);
     const drawWalker = (cx: number, cy: number, index: number) => {
+      if (!visible(cx, cy)) return;
       if (streetOpacity() === 0) return;
       if (camera.scale < 0.85) {
         people.rect(Math.round(cx) - 1, Math.round(cy) - 2, 2, 4).fill(0xe8c7a0);
@@ -349,6 +371,7 @@ export class CityRenderer {
     this.visitorsAt = cell => this.city.visitorsAt(cell);
 
     const drawPeople = (elapsed = 0) => {
+      queue.reset(cars);
       people.clear();
       people.alpha = streetOpacity();
       wet = rainingAt(this.city.seed, this.city.now);
@@ -546,10 +569,12 @@ export class CityRenderer {
       }
       if (elapsed > 0) {
         cars = moving;
-        settleCrowd(elapsed);
+        queue.reset(cars);
+
       }
       // The cars standing in each car park: up to six, in its bays.
       for (const [lot, count] of lotCars) {
+        if (!visible(lot % MAP_SIZE * TILE_SIZE, Math.floor(lot / MAP_SIZE) * TILE_SIZE, 64)) continue;
         const left = lot % MAP_SIZE * TILE_SIZE;
         const top = Math.floor(lot / MAP_SIZE) * TILE_SIZE;
         for (let bay = 0; bay < Math.min(count, 6); bay++) {
@@ -611,6 +636,60 @@ export class CityRenderer {
         people.rect(x - 4, y - 7, 9, 4).rect(x - 2, y - 3, 5, 2).rect(x, y - 1, 1, 2).fill(0xffd95a);
       }
 
+      if (roadVehicleRevision !== map.layoutRevision) {
+        roadVehicles.clear();
+        roadVehicleRevision = map.layoutRevision;
+      }
+      const liveVehicles = new Set<string>();
+      // Freight and buses use the same lanes, queue and lights as residents' cars.
+      const vehicleOnRoad = (key: string, path: readonly Cell[], pace: number, initial: number) => {
+        liveVehicles.add(key);
+        const last = path.length - 1;
+        if (last < 1) return undefined;
+        let state = roadVehicles.get(key);
+        if (!state) roadVehicles.set(key, state = { along: initial * last, returning: false, held: 0, wait: 0 });
+        state.along = Math.min(last, state.along);
+        const index = Math.min(last - 1, Math.floor(state.along));
+        const from = path[index];
+        const to = path[index + 1];
+        const part = state.along - index;
+        const direction = state.returning ? -1 : 1;
+        const hx = Math.sign(to.x - from.x) * direction;
+        const hy = Math.sign(to.y - from.y) * direction;
+        const x = from.x + (to.x - from.x) * part + 0.5 - hy * 0.16;
+        const y = from.y + (to.y - from.y) * part + 0.5 + hx * 0.16;
+        const self = -1000 - liveVehicles.size;
+        const blocked = carAhead(x, y, hx, hy, self, 0.8);
+        const aheadX = Math.floor(x + hx * 0.55);
+        const aheadY = Math.floor(y + hy * 0.55);
+        const red = (aheadX !== Math.floor(x) || aheadY !== Math.floor(y)) &&
+          junctions.has(aheadY * MAP_SIZE + aheadX) && greenUpright(aheadX, aheadY) !== (hy !== 0);
+        advanceRoadVehicle(state, last, elapsed, pace,
+          this.city.congestionAt(path[index], this.hour()), blocked, red, LIGHT);
+        if (elapsed > 0) {
+          const car = { x, y, hx, hy, index: self };
+          cars.push(car);
+          queue.add(car);
+          const id = Math.floor(y) * MAP_SIZE + Math.floor(x);
+          counted[id] += blocked ? 3 : 1;
+          crowded.add(id);
+        }
+        return { x: x * TILE_SIZE, y: y * TILE_SIZE, upright: hy !== 0 };
+      };
+      for (const run of this.city.getFreight()) {
+        // One representative per route, at most 80: quantities remain in the simulation.
+        if (liveVehicles.size >= 80) break;
+        const at = vehicleOnRoad(`freight:${run.from}:${run.to}`, run.path, 400, (run.from % 17) / 17);
+        if (!at) continue;
+        const { x, y, upright } = at;
+        if (!visible(x, y)) continue;
+        const width = upright ? 12 : 23;
+        const height = upright ? 23 : 12;
+        people.rect(x - width / 2 - 1, y - height / 2 - 1, width + 2, height + 2).fill(0x25232b)
+          .rect(x - width / 2, y - height / 2, width, height).fill(0xd8d3c7)
+          .rect(x - width / 2, y - height / 2, upright ? width : 6, upright ? 6 : height).fill(0x3673a4);
+      }
+
       // Each line's vehicles, evenly spread, running to the far end and back.
       for (const line of this.city.getLines()) {
         const last = line.path.length - 1;
@@ -637,10 +716,13 @@ export class CityRenderer {
           const outbound = turn < 0.5;
           const progress = Math.min(1, (turn * lap % halfLap) / travel);
           const along = (outbound ? progress : 1 - progress) * last;
+          const bus = line.kind === 'bus' ? vehicleOnRoad(`bus:${line.id}:${vehicle}`, line.path,
+            LINE_PACE.bus, vehicle / line.vehicles) : undefined;
           // A bus is one box; a train is three cars, the later ones trailing behind the first.
           const cars = line.kind === 'metro' ? 3 : 1;
           for (let car = 0; car < cars; car++) {
-            const { x, y, upright } = at(along - (outbound ? 1 : -1) * car * 0.55);
+            const { x, y, upright } = bus ?? at(along - (outbound ? 1 : -1) * car * 0.55);
+            if (!visible(x, y)) continue;
             const long = line.kind === 'metro' ? 16 : 22;
             const wide = 12;
             const width = upright ? wide : long;
@@ -666,6 +748,8 @@ export class CityRenderer {
           }
         }
       }
+      for (const key of roadVehicles.keys()) if (!liveVehicles.has(key)) roadVehicles.delete(key);
+      if (elapsed > 0) settleCrowd(elapsed);
     };
     const drawEffects = () => {
       effects.clear();
@@ -683,7 +767,11 @@ export class CityRenderer {
       for (const [key, scene] of scenes) {
         const age = animationTime - scene.since;
         const at = advanceScene(scene, age, spot => carAhead(spot.x, spot.y, spot.hx, spot.hy, -1, 0.62));
-        if (at) cars.push({ ...at, index: -1 });
+        if (at) {
+          const car = { ...at, index: -1 };
+          cars.push(car);
+          queue.add(car);
+        }
         if (age > sceneLength(scene) || this.city.now < scene.event.tick) scenes.delete(key);
         else drawScene(effects, scene, age);
       }
@@ -881,7 +969,7 @@ export class CityRenderer {
       repaint -= ticker.deltaMS;
       if (repaint <= 0 && this.overlay() === 'traffic') {
         repaint = 250;
-        draw();
+        draw(false);
       }
     });
     app.start();
@@ -898,7 +986,7 @@ export class CityRenderer {
     let lastRevision = -1;
     let hasFocusMatches = false;
     let repaint = 0;
-    const draw = () => {
+    const draw = (actors = true) => {
       const focus = this.focus;
       if (focus !== lastFocus || lastRevision !== map.layoutRevision) {
         lastFocus = focus;
@@ -931,16 +1019,31 @@ export class CityRenderer {
         range, this.hour(),
         // Routes show while laying out transport, and in the map view for them.
         routesShown() ? this.city.getLines() : [], this.marks, this.crowdOn,
-        aim && !drag && tool !== 'inspect' && tool !== 'pan' && tool !== 'line' ?
+        aim && !drag && tool !== 'inspect' && tool !== 'pan' && tool !== 'line' && tool !== 'land' ?
           { cells: isBig(tool) ? footprint(aim) : [aim], ok: (isBig(tool) ? footprint(aim) : [aim]).every(cell => fits(tool, cell)) } : undefined, hasFocusMatches && tool !== 'park' ? focus : undefined);
-      drawPeople();
-      drawEffects();
-      app.render();
+      landGrid.clear();
+      landGrid.position.set(camera.x, camera.y);
+      landGrid.scale.set(camera.scale);
+      const plots = this.city.getLand();
+      if (tool === 'land' || plots.some(plot => !plot.owned)) for (const plot of plots) {
+        const origin = parcelOrigin(plot.id);
+        const x = origin.x * TILE_SIZE;
+        const y = origin.y * TILE_SIZE;
+        const size = land.size * TILE_SIZE;
+        if (!plot.owned) landGrid.rect(x, y, size, size).fill({ color: 0x141b22, alpha: 0.5 });
+        landGrid.rect(x + 1, y + 1, size - 2, size - 2).stroke({ color: plot.owned ? 0xffd95a : plot.available ? 0x8bc8e8 : 0x555b63,
+          width: 2 / camera.scale, alpha: 0.85 });
+      }
+      if (actors) {
+        drawPeople();
+        drawEffects();
+        app.render();
+      }
     };
     /** Whether a tool could be used on a tile, as far as what stands there goes; money is not looked at. */
     const fits = (tool: Tool, cell: Cell): boolean => {
       const tile = map.get(cell);
-      if (tile === undefined) return false;
+      if (tile === undefined || !this.city.owns(cell)) return false;
       if (tool === 'viaduct') return true;
       if (tool === 'demolish') return (tile !== 'grass' && tile !== 'river') || map.hasSpan(cell);
       if (tool === 'metro') return (tile === 'road' || tile === 'avenue') && !map.hasStation(cell);
@@ -949,6 +1052,11 @@ export class CityRenderer {
       return !isBig(tool) || !(tile === 'annex' || isBig(tile));
     };
     this.refresh = draw;
+    this.setPlaying = playing => {
+      if (playing) app.start();
+      else { app.stop(); app.render(); }
+    };
+    this.resetView = () => { frameCity(); draw(); };
     this.lookAt = cell => {
       camera.x = app.screen.width / 2 - (cell.x + 0.5) * TILE_SIZE * camera.scale;
       camera.y = app.screen.height / 2 - (cell.y + 0.5) * TILE_SIZE * camera.scale;
@@ -991,7 +1099,7 @@ export class CityRenderer {
         const next = (isFacility(tool) || isService(tool) || tool === 'bus' || tool === 'metro') &&
           map.get(cell) !== undefined ?
           cell : undefined;
-        const aimed = map.get(cell) !== undefined ? cell : undefined;
+        const aimed = tool !== 'inspect' && tool !== 'pan' && tool !== 'line' && tool !== 'land' && map.get(cell) !== undefined ? cell : undefined;
         if (next?.x !== hover?.x || next?.y !== hover?.y || aimed?.x !== aim?.x || aimed?.y !== aim?.y) {
           hover = next;
           aim = aimed;
@@ -1035,6 +1143,10 @@ export class CityRenderer {
           selected = start;
           inspect(start);
         }
+      } else if (tool === 'land') {
+        const id = parcelAt(start);
+        const result = this.city.buyLand(id ?? -1);
+        report(result.error ?? `買下第 ${(id ?? -1) + 1} 區，花了 $${result.cost}。`);
       } else if (tool === 'line') {
         this.onLineClick?.(start);
       } else if (tool !== 'pan') {
@@ -1084,6 +1196,8 @@ export class CityRenderer {
 
   destroy(): void {
     this.refresh = undefined;
+    this.resetView = undefined;
+    this.setPlaying = undefined;
     this.observer?.disconnect();
     this.app?.destroy(true, { children: true });
     this.app = undefined;

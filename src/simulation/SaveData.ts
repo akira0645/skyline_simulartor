@@ -1,3 +1,4 @@
+import { parseLand } from './Land';
 import { parseDiary, type ActivityEntry } from './ActivityDiary';
 import { parseLife } from './SavedLife';
 import type { LifeSave } from './LifeSystem';
@@ -19,19 +20,20 @@ import { challenges, type Challenge } from './Seasons';
 import { brands, dilemmas, type Boost, type Brand, type Dilemma } from './Dilemmas';
 
 /**
+ * 7 adds purchased land parcels; earlier saves keep the full map.
  * 6 adds bounded daily activity diaries and reasons for continuous venue trips.
  * 5 adds persistent visits, resident identities, relationships, life events and cooldowns.
  * 4 added funds, the milestone rank and avenue tiles; 3 added power and water facility tiles;
  * 2 added per-building capacity and occupants.
  */
-export const SCHEMA_VERSION = 6;
+export const SCHEMA_VERSION = 7;
 /**
  * How a city looks: which city's colours its homes and shops wear, and the trees, cars and
  * bridges that go with them. Nothing in the simulation goes by it.
  */
 export const THEMES = ['classic', 'sf', 'california', 'newyork'] as const;
 export type Theme = (typeof THEMES)[number];
-const READABLE = [1, 2, 3, 4, 5, SCHEMA_VERSION];
+const READABLE = [1, 2, 3, 4, 5, 6, SCHEMA_VERSION];
 
 export interface SavedBuilding {
   id: number;
@@ -71,6 +73,7 @@ export interface SavedPerson {
 
 export interface SaveData {
   schemaVersion: number;
+  ownedLand?: number[];
   seed: number;
   tick: number;
   /** One tile code per cell, indexing TILES. */
@@ -321,6 +324,7 @@ export function parseSave(data: unknown): SaveData {
     return { a: edge.a, b: edge.b, familiarity: edge.familiarity, lastDay: edge.lastDay };
   });
   return { schemaVersion: SCHEMA_VERSION, seed: seed as number, tick, tiles: layout, zones, buildings: records,
+    ownedLand: parseLand((data as Record<string, unknown>).ownedLand),
     funds: funds as number, rank, taxRate, metros: [...metros].sort((a, b) => a - b),
     spans: parseSpans((data as Record<string, unknown>).spans),
     lines: parseLines((data as Record<string, unknown>).lines, tiles, metros),

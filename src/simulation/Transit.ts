@@ -45,6 +45,8 @@ export interface Line extends SavedLine {
   times: number[];
   /** Minutes between one departure and the next from any stop. */
   headway: number;
+  /** Extra one-way minutes from road congestion in the demand estimate. */
+  delay: number;
   /** Riders the line can take per shift. */
   capacity: number;
   /** Riders on the busiest shift, and on all shifts together. */

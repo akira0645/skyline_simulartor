@@ -8,6 +8,7 @@ import tilesUrl from '../assets/tiles.png';
 import { footprint, isBig, isFacility, isRoad, isService, MAP_SIZE, TILE_SIZE, type Cell } from '../simulation/TileMap';
 import { services } from '../simulation/Services';
 import { transit } from '../simulation/Transit';
+import { vehicleSizes } from './vehicleSizes';
 import { CarQueue } from './CarQueue';
 import { land, parcelAt, parcelCentre, parcelOrigin } from '../simulation/Land';
 import { lineColour } from '../app/lineColours';
@@ -683,11 +684,12 @@ export class CityRenderer {
         if (!at) continue;
         const { x, y, upright } = at;
         if (!visible(x, y)) continue;
-        const width = upright ? 12 : 23;
-        const height = upright ? 23 : 12;
+        const size = vehicleSizes.freight;
+        const width = upright ? size.width : size.length;
+        const height = upright ? size.length : size.width;
         people.rect(x - width / 2 - 1, y - height / 2 - 1, width + 2, height + 2).fill(0x25232b)
           .rect(x - width / 2, y - height / 2, width, height).fill(0xd8d3c7)
-          .rect(x - width / 2, y - height / 2, upright ? width : 6, upright ? 6 : height).fill(0x3673a4);
+          .rect(x - width / 2, y - height / 2, upright ? width : 5, upright ? 5 : height).fill(0x3673a4);
       }
 
       // Each line's vehicles, evenly spread, running to the far end and back.
@@ -723,8 +725,7 @@ export class CityRenderer {
           for (let car = 0; car < cars; car++) {
             const { x, y, upright } = bus ?? at(along - (outbound ? 1 : -1) * car * 0.55);
             if (!visible(x, y)) continue;
-            const long = line.kind === 'metro' ? 16 : 22;
-            const wide = 12;
+            const { length: long, width: wide } = vehicleSizes[line.kind];
             const width = upright ? wide : long;
             const height = upright ? long : wide;
             people.rect(x - width / 2 - 1, y - height / 2 - 1, width + 2, height + 2).fill(0x1b1d22);
@@ -741,10 +742,10 @@ export class CityRenderer {
             }
             // A bus wears its line's colour as a stripe; a train as its whole body, with pale windows.
             if (line.kind === 'bus') {
-              people.rect(x - width / 2, y - height / 2, upright ? 3 : width, upright ? height : 3).fill(colour);
+              people.rect(x - width / 2, y - height / 2, upright ? 2 : width, upright ? height : 2).fill(colour);
             }
-            people.rect(x - (upright ? 3 : width / 2 - 3), y - (upright ? height / 2 - 3 : 3),
-              upright ? 6 : width - 6, upright ? height - 6 : 6).fill(0xdfeef2);
+            people.rect(x - (upright ? 1.5 : width / 2 - 3), y - (upright ? height / 2 - 3 : 1.5),
+              upright ? 3 : width - 6, upright ? height - 6 : 3).fill(0xdfeef2);
           }
         }
       }

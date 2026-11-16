@@ -1,3 +1,4 @@
+import { vehicleSizes } from './vehicleSizes';
 import type { Graphics } from 'pixi.js';
 import type { CityEvent } from '../simulation/BuildingSystem';
 import { TILE_SIZE, type Cell } from '../simulation/TileMap';
@@ -181,8 +182,7 @@ function drawVehicle(g: Graphics, route: readonly Cell[], progress: number, age:
   const x = Math.round(at.x * TILE_SIZE);
   const y = Math.round(at.y * TILE_SIZE);
   const vertical = at.hy !== 0;
-  const long = 20;
-  const wide = 12;
+  const { length: long, width: wide } = vehicleSizes[trouble === 'crime' ? 'crime' : trouble === 'sick' ? 'sick' : 'fire'];
   const width = vertical ? wide : long;
   const height = vertical ? long : wide;
   const left = x - width / 2;
@@ -190,16 +190,16 @@ function drawVehicle(g: Graphics, route: readonly Cell[], progress: number, age:
   g.rect(left - 1, top - 1, width + 2, height + 2).fill(OUTLINE);
   g.rect(left, top, width, height).fill(BODY[trouble]);
   if (trouble === 'sick') {
-    g.rect(x - 1, y - 4, 2, 8).rect(x - 4, y - 1, 8, 2).fill(0xe04a3c);
+    g.rect(x - 1, y - 3, 2, 6).rect(x - 3, y - 1, 6, 2).fill(0xe04a3c);
   } else if (trouble === 'crime') {
-    g.rect(left + (vertical ? 0 : 6), top + (vertical ? 6 : 0), vertical ? wide : 8, vertical ? 8 : wide)
+    g.rect(left + (vertical ? 0 : (long - 5) / 2), top + (vertical ? (long - 5) / 2 : 0), vertical ? wide : 5, vertical ? 5 : wide)
       .fill(0xf4f6f8);
   } else {
-    g.rect(left + (vertical ? 3 : 4), top + (vertical ? 4 : 3), vertical ? 6 : 12, vertical ? 12 : 6)
+    g.rect(left + (vertical ? 2 : 3), top + (vertical ? 3 : 2), vertical ? wide - 4 : long - 6, vertical ? long - 6 : wide - 4)
       .fill(0xf1e3c2);
   }
   // The light bar: two lamps that take turns.
   const flash = Math.floor(age / 140) % 2;
-  g.rect(x - 4, y - 2, 4, 4).fill(flash ? 0xff3b30 : 0x7a1f1a);
-  g.rect(x, y - 2, 4, 4).fill(flash ? 0x1d3c8a : 0x4d8dff);
+  g.rect(x - 2, y - 1, 2, 2).fill(flash ? 0xff3b30 : 0x7a1f1a);
+  g.rect(x, y - 1, 2, 2).fill(flash ? 0x1d3c8a : 0x4d8dff);
 }

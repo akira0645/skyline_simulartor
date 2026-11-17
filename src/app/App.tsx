@@ -1,3 +1,4 @@
+import { VehiclePanel } from './VehiclePanel';
 import { cellFromId } from '../simulation/FacilityAccess';
 import { weatherAt, weatherNames } from '../simulation/Weather';
 import { AutosaveSession, type AutosaveStatus } from '../storage/AutosaveSession';
@@ -146,6 +147,8 @@ export function App() {
   const [editingFreight, setEditingFreight] = useState<number>();
   const editingFreightRef = useRef<number>(undefined);
   const [selectedFreight, setSelectedFreight] = useState<string>();
+  const [showAllFreight, setShowAllFreight] = useState(false);
+  const [selectedVehicle, setSelectedVehicle] = useState<string>();
   // A sample of the city every five game days, for the charts. Kept for this visit only.
   const [history, setHistory] = useState<{ tick: number; population: number; funds: number }[]>([]);
 
@@ -207,6 +210,7 @@ export function App() {
 
   function resetLoadedCity() {
     editingFreightRef.current = undefined; setEditingFreight(undefined); setSelectedFreight(undefined);
+    setSelectedVehicle(undefined); setShowAllFreight(false);
     activeTool.current = 'inspect'; setTool('inspect');
     clock.reset();
     lastTime.current = performance.now();
@@ -345,6 +349,7 @@ export function App() {
       setMessage(message);
       setStats(engine.city.getStats());
     }, cell => {
+      setSelectedVehicle(undefined);
       setWho(undefined);
       setSelected(cell);
       const match = /^tools:(\d+)(?::|$)/.exec(spot.current.key);
@@ -378,9 +383,17 @@ export function App() {
     const renderer = rendererRef.current;
     if (!renderer) return;
     renderer.freightVisible = panelTab === 'freight';
+    renderer.allFreightRoutes = showAllFreight;
     renderer.selectedFreight = selectedFreight;
     renderer.refresh?.();
-  }, [panelTab, selectedFreight, editingFreight]);
+  }, [panelTab, selectedFreight, editingFreight, showAllFreight]);
+
+  useEffect(() => {
+    const renderer = rendererRef.current;
+    if (!renderer) return;
+    renderer.selectedVehicle = selectedVehicle;
+    renderer.refresh?.();
+  }, [selectedVehicle]);
 
   useEffect(() => {
     const next = engine.city.getStats();
@@ -524,6 +537,7 @@ export function App() {
   function replaceCity(next: SimulationEngine, isDemo: boolean, done: string) {
     engine.load(next.save());
     editingFreightRef.current = undefined; setEditingFreight(undefined); setSelectedFreight(undefined);
+    setSelectedVehicle(undefined); setShowAllFreight(false);
     activeTool.current = 'inspect'; setTool('inspect');
     clock.reset();
     lastTime.current = performance.now();
@@ -612,7 +626,7 @@ export function App() {
   const doing = !seen ? undefined : trip === 'to-work' || trip === 'to-home' ? trip :
     seen.doing === 'to-work' && trip === 'work' ? 'working' :
     seen.doing === 'to-home' && trip === 'home' ? 'home' : seen.doing;
-  const pickPerson = (person: { homeId: number; slot: number }) => setWho({ home: person.homeId, slot: person.slot });
+  const pickPerson = (person: { homeId: number; slot: number }) => { setSelectedVehicle(undefined); setWho({ home: person.homeId, slot: person.slot }); };
   const voices = useMemo(() => panelTab === 'city' ? engine.city.voices() : undefined, [engine, panelTab, stats, tick]);
   const worries = voices?.thoughts.filter(([thought]) => thoughtWeights[thought] < 0).slice(0, 3) ?? [];
   const joys = voices?.thoughts.filter(([thought]) => thoughtWeights[thought] > 0 && thought !== 'new-here').slice(0, 2) ?? [];
@@ -750,6 +764,7 @@ export function App() {
     rendererRef.current.onPerson = (homeId, person) => {
       const slot = 'slot' in person ? person.slot : engine.city.personOn(homeId, person.workId);
       if (slot === undefined) return;
+      setSelectedVehicle(undefined);
       setWho({ home: homeId, slot });
       setPanelTab('tile');
     };
@@ -800,12 +815,22 @@ export function App() {
       stop: (id, cell) => { const result = engine.city.toggleFreightStop(id, cell); update(result.error, result.added ? '已更新物流站點。' : '站點已移除。'); },
       select: (key, cell) => { edit(); setSelectedFreight(key); const renderer = rendererRef.current; if (renderer) { renderer.selectedFreight = key; renderer.freightVisible = true; } locateFreight(cell); },
       locate: cell => { setSelectedFreight(undefined); locateFreight(cell); },
+      showAll: setShowAllFreight,
     };
   }, [engine, locateFreight]);
   if (rendererRef.current) rendererRef.current.onFreightClick = cell => {
     const id = editingFreightRef.current;
     if (id !== undefined) freightActions.stop(id, cell);
   };
+  if (rendererRef.current) rendererRef.current.onVehicle = key => {
+    setSelectedVehicle(key); setWho(undefined); setSelected(undefined); setPanelTab('tile');
+  };
+  const vehicle = selectedVehicle ? rendererRef.current?.getVehicle?.(selectedVehicle) : undefined;
+  const vehicleCard = selectedVehicle ? <VehiclePanel vehicle={vehicle} onClose={() => setSelectedVehicle(undefined)}
+    onLocate={cell => rendererRef.current?.lookAt?.(cell)} onRoute={info => {
+      if (info.kind === 'freight' && info.routeKey) { setShowAllFreight(false); freightActions.select(info.routeKey, info.cell); }
+      else { setPanelTab('lines'); activeOverlay.current = 'lines'; setOverlay('lines'); rendererRef.current?.refresh?.(); }
+    }} /> : undefined;
   const freightReport = useMemo(() => panelTab === 'freight' ? engine.city.getLogistics() : undefined, [engine, panelTab, stats, tick]);
   const group = toolGroups[toolTab];
 
@@ -909,7 +934,7 @@ export function App() {
             <button type="button" onClick={() => changeLines(() => engine.city.borrow(), `借到 ${money(economy.loan.amount)}。`)}>借 {money(economy.loan.amount)}</button>
           </>}
         </section>}
-        {panelTab === 'tile' && (personCard ? personCard : selected && info ? <section>
+        {panelTab === 'tile' && (vehicleCard ? vehicleCard : personCard ? personCard : selected && info ? <section>
           <h2>{info.brand ? brandNames[info.brand] : info.nick ? nickNames[info.nick] : info.combo && PLACES_OF.includes(info.combo) ? comboNames[info.combo][0] :
             info.complex ? '集合住宅' : info.bigPark ? '大公園' : info.kind ? homeKindNames[info.kind][0] : info.tile === 'industrial' && info.building ? industryNames[industryAt(selected)] : info.tile === 'commercial' && building ? workShift('commercial', building.id).title : tileNames[info.tile]}</h2>
           {info.kind && <p className="hint">{homeKindNames[info.kind][1]}</p>}
@@ -1263,7 +1288,7 @@ export function App() {
           </section>}
         </>}
 
-        {panelTab === 'freight' && freightReport && <FreightPanel report={freightReport} actions={freightActions} selected={selectedFreight} editing={editingFreight} />}
+        {panelTab === 'freight' && freightReport && <FreightPanel report={freightReport} actions={freightActions} selected={selectedFreight} editing={editingFreight} showAll={showAllFreight} />}
 
         {panelTab === 'lines' && <>
           {lines.length === 0 && <p className="hint">先在「交通」蓋兩個站，再按下面的按鈕連起來。</p>}

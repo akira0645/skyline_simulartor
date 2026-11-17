@@ -1,3 +1,4 @@
+import { numberBadge } from './routeBadges';
 import { Container, Graphics, Rectangle, Texture, type TextureSource } from 'pixi.js';
 import { isBig, isFacility, isRoad, isService, MAP_SIZE, TILE_SIZE, type Cell, type Facility, type Service,
   type Zone } from '../simulation/TileMap';
@@ -571,11 +572,21 @@ export class TileRenderer {
         const top = Math.min(from.y, to.y) * TILE_SIZE + half - band / 2;
         overlay.rect(left, top, Math.abs(to.x - from.x) * TILE_SIZE + band, Math.abs(to.y - from.y) * TILE_SIZE + band)
           .fill({ color: colour, alpha: line.dim ? 0.15 : 0.85 });
+        if (line.kind === 'freight' && !line.dim && step % 3 === 1) {
+          const cx = (from.x + to.x + 1) * TILE_SIZE / 2;
+          const cy = (from.y + to.y + 1) * TILE_SIZE / 2;
+          const hx = Math.sign(to.x - from.x), hy = Math.sign(to.y - from.y);
+          overlay.poly([cx + hx * 5, cy + hy * 5, cx - hx * 4 - hy * 4, cy - hy * 4 + hx * 4,
+            cx - hx * 4 + hy * 4, cy - hy * 4 - hx * 4]).fill(0x1b1d22);
+          overlay.poly([cx + hx * 4, cy + hy * 4, cx - hx * 2 - hy * 2, cy - hy * 2 + hx * 2,
+            cx - hx * 2 + hy * 2, cy - hy * 2 - hx * 2]).fill(0xffffff);
+        }
       }
-      for (const stop of line.stops) {
+      for (const [index, stop] of line.stops.entries()) {
         const x = stop % MAP_SIZE * TILE_SIZE;
         const y = Math.floor(stop / MAP_SIZE) * TILE_SIZE;
         overlay.rect(x + 1, y + 1, TILE_SIZE - 2, TILE_SIZE - 2).stroke({ color: colour, width: 4, alpha: line.dim ? 0.2 : 1 });
+        if (line.kind === 'freight' && !line.dim) numberBadge(overlay, x + TILE_SIZE - 16, y - 5, index + 1, colour);
       }
     }
 

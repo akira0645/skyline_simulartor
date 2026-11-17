@@ -1,4 +1,6 @@
-import { freightMapRoutes, freightColourId } from './routeViews';
+import { hitVehicle, nextDeliveryStop, deliveryStopIndices, type VehicleInfo, type VehicleActivity } from './vehicleInspection';
+import { numberBadge } from './routeBadges';
+import { freightMapRoutes, freightColourId, selectedFreightKey } from './routeViews';
 import { weatherAt, weatherTravel } from '../simulation/Weather';
 import { Application, Assets, Graphics, type Texture } from 'pixi.js';
 import cityUrl from '../assets/city.png';
@@ -14,11 +16,11 @@ import { vehicleSizes } from './vehicleSizes';
 import { CarQueue } from './CarQueue';
 import { land, parcelAt, parcelCentre, parcelOrigin } from '../simulation/Land';
 import { lineColour } from '../app/lineColours';
-import { advanceRoadVehicle, type RoadVehicle } from './roadVehicle';
+import { advancePathVehicle, roadVehiclePose, roadPathKey, type RoadVehicle } from './roadVehicle';
 
 /** Milliseconds a line's vehicle takes per tile at 1× speed. */
 const LINE_PACE = { bus: 320, metro: 250 };
-import { advanceScene, drawScene, sceneLength, type Scene } from './emergencyScenes';
+import { advanceScene, drawScene, sceneLength, sceneVehicle, type Scene } from './emergencyScenes';
 
 /** An emergency older than this many ticks when first seen is not played back. */
 const FRESH_TICKS = 16;
@@ -60,6 +62,10 @@ export class CityRenderer {
   onFreightClick?: (cell: Cell) => void;
   freightVisible = false;
   selectedFreight?: string;
+  allFreightRoutes = false;
+  selectedVehicle?: string;
+  onVehicle?: (key: string) => void;
+  getVehicle?: (key: string) => VehicleInfo | undefined;
   /** Clears the inspected tile. */
   deselect?: () => void;
   /** Called when a commuter on the map is clicked, with their home and workplace. */
@@ -149,7 +155,11 @@ export class CityRenderer {
      */
     const freightRounds = new Map<number, number>();
     const freightJobs = new Map<number, { from: number; to: number }>();
-    let roadVehicleRevision = -1;
+    let vehicleFrames: VehicleInfo[] = [];
+    this.getVehicle = key => vehicleFrames.find(vehicle => vehicle.key === key);
+    const roadVehiclePaths = new Map<string, string>();
+    const pathKeys = new WeakMap<readonly Cell[], string>();
+    const stopIndices = new WeakMap<readonly Cell[], { key: string; indices: number[] }>();
     const roadVehicles = new Map<string, RoadVehicle>();
     const trips = new Map<string, { at: 'home' | 'work'; along?: number; wait: number; driving?: boolean;
       garage?: { home: boolean; work: boolean }; lot?: { home?: number; work?: number }; held?: number;
@@ -380,6 +390,7 @@ export class CityRenderer {
 
     const drawPeople = (elapsed = 0) => {
       queue.reset(cars);
+      vehicleFrames = [];
       people.clear();
       people.alpha = streetOpacity();
       wet = rainingAt(this.city.seed, this.city.now);
@@ -644,54 +655,50 @@ export class CityRenderer {
         people.rect(x - 4, y - 7, 9, 4).rect(x - 2, y - 3, 5, 2).rect(x, y - 1, 1, 2).fill(0xffd95a);
       }
 
-      if (roadVehicleRevision !== map.layoutRevision) {
-        roadVehicles.clear();
-        freightRounds.clear();
-        freightJobs.clear();
-        roadVehicleRevision = map.layoutRevision;
-      }
       const liveVehicles = new Set<string>();
       // Freight and buses use the same lanes, queue and lights as residents' cars.
       const vehicleOnRoad = (key: string, path: readonly Cell[], pace: number, initial: number) => {
         liveVehicles.add(key);
         const last = path.length - 1;
         if (last < 1) return undefined;
+        let signature = pathKeys.get(path);
+        if (signature === undefined) { signature = roadPathKey(path); pathKeys.set(path, signature); }
         let state = roadVehicles.get(key);
-        if (!state) roadVehicles.set(key, state = { along: initial * last, returning: false, held: 0, wait: 0 });
+        if (!state || roadVehiclePaths.get(key) !== signature) {
+          state = { along: initial * last, returning: false, held: 0, wait: 0 };
+          roadVehicles.set(key, state); roadVehiclePaths.set(key, signature);
+        }
         state.along = Math.min(last, state.along);
-        const index = Math.min(last - 1, Math.floor(state.along));
-        const from = path[index];
-        const to = path[index + 1];
-        const part = state.along - index;
-        const direction = state.returning ? -1 : 1;
-        const hx = Math.sign(to.x - from.x) * direction;
-        const hy = Math.sign(to.y - from.y) * direction;
-        const x = from.x + (to.x - from.x) * part + 0.5 - hy * 0.16;
-        const y = from.y + (to.y - from.y) * part + 0.5 + hx * 0.16;
+        const before = roadVehiclePose(path, state);
+        const { x, y, hx, hy } = before;
         const self = -1000 - liveVehicles.size;
         const blocked = carAhead(x, y, hx, hy, self, 0.8);
         const aheadX = Math.floor(x + hx * 0.55);
         const aheadY = Math.floor(y + hy * 0.55);
         const red = (aheadX !== Math.floor(x) || aheadY !== Math.floor(y)) &&
-          junctions.has(aheadY * MAP_SIZE + aheadX) && greenUpright(aheadX, aheadY) !== (hy !== 0);
-        const wasReturning = state.returning;
-        advanceRoadVehicle(state, last, elapsed, pace,
-          this.city.congestionAt(path[index], this.hour()), blocked, red, LIGHT);
+          junctions.has(aheadY * MAP_SIZE + aheadX) && greenUpright(aheadX, aheadY) !== before.upright;
+        const load = this.city.congestionAt(path[before.index], this.hour());
+        const completed = advancePathVehicle(state, path, elapsed, pace, load, blocked, red, LIGHT);
+        const pose = roadVehiclePose(path, state);
+        const held = state.held > 0 && state.held <= (red ? 2 * LIGHT + 600 : 3500);
+        const activity: VehicleActivity = state.turnFrom !== undefined ? 'turning' : held ? red ? 'red' : 'queued' : load > 1 ? 'slow' : 'moving';
         if (elapsed > 0) {
-          const car = { x, y, hx, hy, index: self };
+          const car = { x: pose.x, y: pose.y, hx: pose.hx, hy: pose.hy, index: self };
           cars.push(car);
           queue.add(car);
           const id = Math.floor(y) * MAP_SIZE + Math.floor(x);
           counted[id] += blocked ? 3 : 1;
           crowded.add(id);
         }
-        return { x: x * TILE_SIZE, y: y * TILE_SIZE, upright: hy !== 0, finished: wasReturning && !state.returning };
+        return { x: pose.x * TILE_SIZE, y: pose.y * TILE_SIZE, upright: pose.upright, angle: pose.angle,
+          finished: completed === 'home', returning: state.returning, along: state.along, held: state.held,
+          activity, progress: state.returning ? 1 - state.along / last : state.along / last };
       };
       const freightRoutes = this.city.getFreight().filter(route => route.path.length > 1);
-      const movements: { key: string; run: typeof freightRoutes[number]; initial: number; slot?: number; round?: number }[] = [];
+      const movements: { key: string; run: typeof freightRoutes[number]; initial: number; vehicleKey: string; number: number; slot?: number; round?: number }[] = [];
       if (this.city.getFreightMode() === 'manual') {
         for (const run of freightRoutes) for (let vehicle = 0; vehicle < (run.vehicles ?? 0); vehicle++) {
-          movements.push({ key: `manual-freight:${run.lineId}:${vehicle}`, run, initial: vehicle / run.vehicles! });
+          movements.push({ key: `manual-freight:${run.lineId}:${vehicle}`, run, initial: vehicle / run.vehicles!, vehicleKey: `freight:manual:${run.lineId}:${vehicle}`, number: vehicle + 1 });
         }
         freightJobs.clear(); freightRounds.clear();
       } else {
@@ -706,9 +713,11 @@ export class CityRenderer {
             if (!run) continue;
             freightJobs.set(slot, { from: run.from, to: run.to });
           }
-          movements.push({ key: `freight:${slot}:${round}:${run.from}:${run.to}`, run, initial: 0, slot, round });
+          movements.push({ key: `freight:${slot}:${round}:${run.from}:${run.to}`, run, initial: 0, vehicleKey: `freight:auto:${slot}`, number: slot + 1, slot, round });
         }
       }
+      const freightRouteShown = this.freightVisible || this.overlay() === 'freight' || getTool() === 'freight-line';
+      const chosenFreight = freightRouteShown ? selectedFreightKey(this.city.getFreightMode(), this.city.getFreightLines(), this.city.getFreight(), this.selectedFreight) : undefined;
       for (const movement of movements) {
         const { run } = movement;
         const at = vehicleOnRoad(movement.key, run.path, 400, movement.initial);
@@ -716,14 +725,38 @@ export class CityRenderer {
         if (at.finished && movement.slot !== undefined) {
           freightRounds.set(movement.slot, movement.round! + 1); freightJobs.delete(movement.slot);
         }
-        const { x, y, upright } = at;
-        if (!visible(x, y)) continue;
         const size = vehicleSizes.freight;
-        const width = upright ? size.width : size.length;
-        const height = upright ? size.length : size.width;
-        people.rect(x - width / 2 - 1, y - height / 2 - 1, width + 2, height + 2).fill(0x25232b)
-          .rect(x - width / 2, y - height / 2, width, height).fill(0xd8d3c7)
-          .rect(x - width / 2, y - height / 2, upright ? width : 5, upright ? 5 : height).fill(lineColour(freightColourId(run)));
+        const colour = lineColour(freightColourId(run));
+        const manual = run.lineId !== undefined;
+        const routeNumber = manual ? run.lineId! : this.city.getFreight().indexOf(run) + 1;
+        const stops = manual ? this.city.getFreightLines().find(line => line.id === run.lineId)!.stops : [run.from, run.to];
+        const stopKey = stops.join(';');
+        let lookup = stopIndices.get(run.path);
+        if (!lookup || lookup.key !== stopKey) {
+          lookup = { key: stopKey, indices: deliveryStopIndices(run.path, stops, cell => this.city.roadBeside(cell), MAP_SIZE) };
+          stopIndices.set(run.path, lookup);
+        }
+        const info: VehicleInfo = { key: movement.vehicleKey, kind: 'freight', name: `物流車 ${movement.number}`,
+          routeKey: manual ? `manual:${run.lineId}` : `auto:${run.from}:${run.to}`, lineId: run.lineId,
+          routeName: manual ? `物流 ${run.lineId} 號` : `自動配送 ${routeNumber}`, colour,
+          x: at.x, y: at.y, angle: at.angle, length: size.length, width: size.width,
+          visible: visible(at.x, at.y) && people.alpha > 0, cell: { x: Math.floor(at.x / TILE_SIZE), y: Math.floor(at.y / TILE_SIZE) },
+          destination: nextDeliveryStop(run.path, stops, at.along, at.returning, cell => this.city.roadBeside(cell), MAP_SIZE, lookup.indices),
+          returning: at.returning, activity: at.activity, progress: at.progress, held: at.held,
+          plannedGoods: run.goods, plannedTrips: run.trucks };
+        vehicleFrames.push(info);
+        if (!info.visible) continue;
+        // Draw in the direction of travel, so returning trucks no longer reverse backwards.
+        people.save().translateTransform(at.x, at.y).rotateTransform(at.angle)
+          .rect(-size.length / 2 - 1, -size.width / 2 - 1, size.length + 2, size.width + 2).fill(0x25232b)
+          .rect(-size.length / 2, -size.width / 2, size.length, size.width).fill(0xd8d3c7)
+          .rect(size.length / 2 - 5, -size.width / 2, 5, size.width).fill(colour)
+          .rect(size.length / 2 - 2, -size.width / 2 + 1, 1, size.width - 2).fill(0xdfeef2);
+        if (this.selectedVehicle === info.key) people.rect(-size.length / 2 - 2, -size.width / 2 - 2, size.length + 4, size.width + 4).stroke({ color: 0xffffff, width: 1 });
+        people.restore();
+        if (camera.scale >= 0.85 && (this.selectedVehicle === info.key || freightRouteShown && (this.allFreightRoutes || chosenFreight === info.routeKey))) {
+          numberBadge(people, at.x - 6, at.y - 24, routeNumber, colour);
+        }
       }
 
       // Each line's vehicles, evenly spread, running to the far end and back.
@@ -741,7 +774,7 @@ export class CityRenderer {
           const to = line.path[index + 1];
           const part = clamped - index;
           return { x: (from.x + (to.x - from.x) * part + 0.5) * TILE_SIZE,
-            y: (from.y + (to.y - from.y) * part + 0.5) * TILE_SIZE, upright: to.x === from.x };
+            y: (from.y + (to.y - from.y) * part + 0.5) * TILE_SIZE, upright: to.x === from.x, angle: Math.atan2(to.y - from.y, to.x - from.x) };
         };
         const travel = last * LINE_PACE[line.kind];
         const layover = line.kind === 'metro' ? 650 : 0;
@@ -757,9 +790,20 @@ export class CityRenderer {
           // A bus is one box; a train is three cars, the later ones trailing behind the first.
           const cars = line.kind === 'metro' ? 3 : 1;
           for (let car = 0; car < cars; car++) {
-            const { x, y, upright } = bus ?? at(along - (outbound ? 1 : -1) * car * 0.55);
-            if (!visible(x, y)) continue;
+            const spot = bus ?? at(along - (outbound ? 1 : -1) * car * 0.55);
+            const angle = bus ? bus.angle : spot.angle + (outbound ? 0 : Math.PI);
             const { length: long, width: wide } = vehicleSizes[line.kind];
+            const info: VehicleInfo = { key: `${line.kind}:${line.id}:${vehicle}`, kind: line.kind,
+              name: `${line.kind === 'bus' ? '公車' : '捷運'} ${line.id} 號・車 ${vehicle + 1}`,
+              routeName: `${line.kind === 'bus' ? '公車' : '捷運'} ${line.id} 號`, lineId: line.id, colour,
+              x: spot.x, y: spot.y, angle, length: long, width: wide, visible: visible(spot.x, spot.y) && people.alpha > 0,
+              cell: { x: Math.floor(spot.x / TILE_SIZE), y: Math.floor(spot.y / TILE_SIZE) },
+              destination: cellOf((bus?.returning ?? !outbound) ? line.stops[0] : line.stops.at(-1)!),
+              returning: bus?.returning ?? !outbound, activity: bus?.activity ?? 'moving', progress: bus?.progress ?? progress, held: bus?.held ?? 0 };
+            vehicleFrames.push(info);
+            if (!info.visible) continue;
+            people.save().translateTransform(spot.x, spot.y).rotateTransform(angle);
+            const x = 0, y = 0, upright = false;
             const width = upright ? wide : long;
             const height = upright ? long : wide;
             people.rect(x - width / 2 - 1, y - height / 2 - 1, width + 2, height + 2).fill(0x1b1d22);
@@ -780,10 +824,12 @@ export class CityRenderer {
             }
             people.rect(x - (upright ? 1.5 : width / 2 - 3), y - (upright ? height / 2 - 3 : 1.5),
               upright ? 3 : width - 6, upright ? height - 6 : 3).fill(0xdfeef2);
+            if (this.selectedVehicle === info.key) people.rect(-long / 2 - 2, -wide / 2 - 2, long + 4, wide + 4).stroke({ color: 0xffffff, width: 1 });
+            people.restore();
           }
         }
       }
-      for (const key of roadVehicles.keys()) if (!liveVehicles.has(key)) roadVehicles.delete(key);
+      for (const key of roadVehicles.keys()) if (!liveVehicles.has(key)) { roadVehicles.delete(key); roadVehiclePaths.delete(key); }
       if (elapsed > 0) settleCrowd(elapsed);
     };
     const drawEffects = () => {
@@ -808,7 +854,19 @@ export class CityRenderer {
           queue.add(car);
         }
         if (age > sceneLength(scene) || this.city.now < scene.event.tick) scenes.delete(key);
-        else drawScene(effects, scene, age);
+        else {
+          drawScene(effects, scene, age);
+          const vehicle = sceneVehicle(scene, age);
+          if (vehicle) {
+            const size = vehicleSizes[vehicle.trouble === 'crime' ? 'crime' : vehicle.trouble === 'sick' ? 'sick' : 'fire'];
+            const x = vehicle.x * TILE_SIZE, y = vehicle.y * TILE_SIZE;
+            vehicleFrames.push({ key: `rescue:${key}`, kind: 'rescue', name: vehicle.trouble === 'crime' ? '警車' : vehicle.trouble === 'sick' ? '救護車' : '消防車',
+              colour: vehicle.trouble === 'crime' ? 0x3f5f98 : vehicle.trouble === 'sick' ? 0xf4f6f8 : 0xd9423a,
+              x, y, angle: vehicle.angle, length: size.length, width: size.width, visible: visible(x, y),
+              cell: { x: Math.floor(vehicle.x), y: Math.floor(vehicle.y) }, destination: vehicle.returning ? scene.event.station ?? scene.route![0] : scene.event.cell,
+              returning: vehicle.returning, activity: vehicle.activity, progress: vehicle.progress, held: scene.held ?? 0 });
+          }
+        }
       }
       drawLife();
     };
@@ -1055,7 +1113,7 @@ export class CityRenderer {
         // Routes show while laying out transport, and in the map view for them.
         [...(routesShown() ? this.city.getLines() : []),
           ...(this.freightVisible || tool === 'freight-line' || layer === 'freight' ?
-            freightMapRoutes(this.city.getFreightMode(), this.city.getFreightLines(), this.city.getFreight(), this.selectedFreight) : [])], this.marks, this.crowdOn,
+            freightMapRoutes(this.city.getFreightMode(), this.city.getFreightLines(), this.city.getFreight(), this.selectedFreight, this.allFreightRoutes) : [])], this.marks, this.crowdOn,
         aim && !drag && tool !== 'inspect' && tool !== 'pan' && tool !== 'line' && tool !== 'freight-line' && tool !== 'land' ?
           { cells: isBig(tool) ? footprint(aim) : [aim], ok: (isBig(tool) ? footprint(aim) : [aim]).every(cell => fits(tool, cell)) } : undefined, hasFocusMatches && tool !== 'park' ? focus : undefined);
       landGrid.clear();
@@ -1093,7 +1151,7 @@ export class CityRenderer {
       if (playing) app.start();
       else { app.stop(); app.render(); }
     };
-    this.resetView = () => { frameCity(); draw(); };
+    this.resetView = () => { roadVehicles.clear(); roadVehiclePaths.clear(); freightJobs.clear(); freightRounds.clear(); frameCity(); draw(); };
     this.lookAt = cell => {
       camera.x = app.screen.width / 2 - (cell.x + 0.5) * TILE_SIZE * camera.scale;
       camera.y = app.screen.height / 2 - (cell.y + 0.5) * TILE_SIZE * camera.scale;
@@ -1174,7 +1232,11 @@ export class CityRenderer {
           const distance = Math.hypot(spot.x - worldX, spot.y - worldY);
           if (distance < reach) [reach, picked] = [distance, spot];
         }
-        if (picked && this.onPerson) {
+        const vehicle = hitVehicle(vehicleFrames, worldX, worldY, camera.scale);
+        if (vehicle && this.onVehicle) {
+          selected = undefined;
+          this.onVehicle(vehicle.key);
+        } else if (picked && this.onPerson) {
           this.onPerson(picked.homeId, picked);
         } else if (map.get(start) !== undefined) {
           selected = start;
@@ -1237,6 +1299,8 @@ export class CityRenderer {
     this.refresh = undefined;
     this.resetView = undefined;
     this.setPlaying = undefined;
+    this.getVehicle = undefined;
+    this.onVehicle = undefined;
     this.observer?.disconnect();
     this.app?.destroy(true, { children: true });
     this.app = undefined;

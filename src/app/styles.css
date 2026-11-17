@@ -546,3 +546,8 @@ button.tag[aria-pressed="true"] b { color: var(--ink); }
 .freight-stops { padding-left: 1.4rem; margin: 0.4rem 0; }
 .freight-stops li { padding: 0.2rem 0; }
 .freight-stops button { font-size: 0.8rem; margin-right: 0.25rem; }
+
+.vehicle-panel h2 { display: flex; align-items: center; gap: 0.5rem; }
+.vehicle-panel h2 i { flex: none; width: 0.9rem; height: 0.9rem; border: 2px solid var(--shadow); }
+.vehicle-panel .row { flex-wrap: wrap; gap: 0.4rem; }
+.freight-panel > section > .row { flex-wrap: wrap; margin-bottom: 0.35rem; }

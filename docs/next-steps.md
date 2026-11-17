@@ -14,7 +14,7 @@
 7. **車流顯示**：顏色已改成跟著地圖上的車（見 traffic-view-follows-cars 規格）。
 8. **吃飯習慣與兼職外送**：已加入（見 eating-and-delivery 規格）。
 10. **生活店面**（2026-11-16）：烘焙坊、花店、蛋糕店已加入，市場與夜市的營業時間已修正，人物卡改成狀態條（見 `2026-11-16-shops-and-person-card.md`）。還沒做：夜市的攤位與規模、中大示範城市的廣場離住宅太遠、城市頁的標籤整理。
-11. **版本與上架**：版本號 0.4.0，`CHANGELOG.md` 照 Keep a Changelog 寫，發版三步驟寫在 README 最後一節。已上架 GitHub Pages：`https://akira0645.github.io/skyline_simulartor/`，推送 main 由 Actions 自動建置部署。
+11. **版本與上架**：版本號 0.4.1，`CHANGELOG.md` 照 Keep a Changelog 寫，發版三步驟寫在 README 最後一節。已上架 GitHub Pages：`https://akira0645.github.io/skyline_simulartor/`，推送 main 由 Actions 自動建置部署。
 9. **公路加深**（使用者已選方向，依序實作）：
    1. ~~去設施的人也開車、騎車，並算進車流~~ 已完成（2026-11-16，見 `2026-11-16-outings-on-wheels.md`）；救災車也改成排在車後面。
    2. ~~停車：車要找得到位子，找不到會繞路。~~ 已完成（2026-11-16，見 `docs/superpowers/specs/2026-11-16-parking.md`）。

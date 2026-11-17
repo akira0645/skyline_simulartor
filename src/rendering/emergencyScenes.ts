@@ -203,3 +203,16 @@ function drawVehicle(g: Graphics, route: readonly Cell[], progress: number, age:
   g.rect(x - 2, y - 1, 2, 2).fill(flash ? 0xff3b30 : 0x7a1f1a);
   g.rect(x, y - 1, 2, 2).fill(flash ? 0x1d3c8a : 0x4d8dff);
 }
+
+/** The same response vehicle position used by drawing, for direct inspection of its current task. */
+export function sceneVehicle(scene: Scene, age: number) {
+  if (!scene.route?.length || age > sceneLength(scene)) return undefined;
+  const returning = scene.event.kind === 'crash-hospital' && scene.arrived !== undefined && age > scene.arrived + ON_SCENE;
+  const progress = returning ? Math.max(0, scene.route.length - 1 - (age - scene.arrived! - ON_SCENE) / DASH) : scene.travelled ?? 0;
+  const pose = vehicleAt(scene.route, progress);
+  const trouble = scene.event.kind === 'crash-hospital' ? 'sick' : scene.event.kind.startsWith('crash') || scene.event.kind.startsWith('robbery') ? 'crime' : scene.event.kind.split('-')[0];
+  return { ...pose, angle: Math.atan2(pose.hy, pose.hx) + (returning ? Math.PI : 0), trouble,
+    returning, activity: returning ? 'moving' as const : scene.arrived !== undefined ? 'working' as const :
+      (scene.held ?? 0) > 0 && (scene.held ?? 0) < GIVE_WAY ? 'queued' as const : 'moving' as const,
+    progress: scene.route.length > 1 ? (returning ? scene.route.length - 1 - progress : progress) / (scene.route.length - 1) : 1 };
+}

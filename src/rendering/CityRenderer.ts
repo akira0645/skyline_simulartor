@@ -1,3 +1,5 @@
+import { animationElapsed } from './animationElapsed';
+import type { SimulationSpeed } from '../simulation/SimulationClock';
 import { hitVehicle, nextDeliveryStop, deliveryStopIndices, type VehicleInfo, type VehicleActivity } from './vehicleInspection';
 import { numberBadge } from './routeBadges';
 import { freightMapRoutes, freightColourId, selectedFreightKey } from './routeViews';
@@ -88,7 +90,7 @@ export class CityRenderer {
   resetView?: () => void;
   setPlaying?: (playing: boolean) => void;
 
-  constructor(private readonly city: BuildingSystem, private readonly speed: () => number,
+  constructor(private readonly city: BuildingSystem, private readonly speed: () => SimulationSpeed,
     private readonly hour: () => number, private readonly overlay: () => Overlay) {}
   private app?: Application;
   private observer?: ResizeObserver;
@@ -1055,11 +1057,12 @@ export class CityRenderer {
       const speed = this.speed();
       // Facility outings and life events also animate in towns without commuters.
       if (!speed) return;
-      animationTime += ticker.deltaMS * speed;
-      drawPeople(ticker.deltaMS * speed);
+      const elapsed = animationElapsed(ticker.elapsedMS, speed);
+      animationTime += elapsed;
+      drawPeople(elapsed);
       drawEffects();
       // The traffic colours follow the cars, so they are painted again a few times a second.
-      repaint -= ticker.deltaMS;
+      repaint -= ticker.elapsedMS;
       if (repaint <= 0 && this.overlay() === 'traffic') {
         repaint = 250;
         draw(false);

@@ -39,7 +39,7 @@ export function advanceRoadVehicle(state: RoadVehicle, last: number, elapsed: nu
 }
 
 /** Also turn in the road when an ordered stop itinerary doubles back at an intermediate node. */
-export function advancePathVehicle(state: RoadVehicle, path: readonly Cell[], elapsed: number, pace: number,
+function advancePathStep(state: RoadVehicle, path: readonly Cell[], elapsed: number, pace: number,
   load: number, blocked: boolean, red: boolean, lightCycle: number): 'home' | undefined {
   const before = state.along;
   const returning = state.returning;
@@ -88,3 +88,18 @@ export function roadVehiclePose(path: readonly Cell[], state: RoadVehicle) {
 
 /** Compare geometry, not map layout revisions: unrelated building edits must not restart a trip. */
 export const roadPathKey = (path: readonly Cell[]) => path.map(cell => `${cell.x},${cell.y}`).join(';');
+
+/** Consume the entire frame in small movement steps, including low-FPS and fast-speed frames. */
+export function advancePathVehicle(state: RoadVehicle, path: readonly Cell[], elapsed: number, pace: number,
+  load: number, blocked: boolean, red: boolean, lightCycle: number): 'home' | undefined {
+  if (!Number.isFinite(elapsed) || elapsed <= 0 || path.length < 2) return;
+  const step = Math.max(1, Math.min(50, pace / 4));
+  let remaining = elapsed;
+  while (remaining > 0) {
+    // Split exactly at a turn's end; a home completion must reach the caller before reassignment.
+    const slice = Math.min(remaining, state.wait > 0 ? state.wait : step);
+    const completed = advancePathStep(state, path, slice, pace, load, blocked, red, lightCycle);
+    remaining -= slice;
+    if (completed) return completed;
+  }
+}

@@ -15,8 +15,9 @@ export class SimulationEngine {
     this.city.seed = initialState.seed;
   }
 
-  advance(ticks: number): number {
+  advance(ticks: number, advanceFreight = true): number {
     for (let step = 0; step < ticks; step++) {
+      if (advanceFreight) this.city.advanceFreight(1000);
       this.state.tick++;
       this.city.grow(this.state.tick, this.state.seed);
     }

@@ -343,7 +343,7 @@ export function App() {
 
     const lifetime = new AbortController();
     const renderer = new CityRenderer(engine.city, () => clock.speed,
-      () => hourAt(engine.getSnapshot().tick, clock.tickProgress), () => activeOverlay.current);
+      () => hourAt(engine.getSnapshot().tick, clock.tickProgress), () => activeOverlay.current, () => step(engine, clock, lastTime, tickMs));
     rendererRef.current = renderer;
     void renderer.mount(host, lifetime.signal, () => activeTool.current, message => {
       setMessage(message);
@@ -831,7 +831,7 @@ export function App() {
       if (info.kind === 'freight' && info.routeKey) { setShowAllFreight(false); freightActions.select(info.routeKey, info.cell); }
       else { setPanelTab('lines'); activeOverlay.current = 'lines'; setOverlay('lines'); rendererRef.current?.refresh?.(); }
     }} /> : undefined;
-  const freightReport = useMemo(() => panelTab === 'freight' ? engine.city.getLogistics() : undefined, [engine, panelTab, stats, tick]);
+  const freightReport = useMemo(() => panelTab === 'freight' ? engine.city.getLogistics() : undefined, [engine, panelTab, stats, tick, hour]);
   const group = toolGroups[toolTab];
 
   return (

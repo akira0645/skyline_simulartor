@@ -1,3 +1,5 @@
+import { roadVehiclePose } from './RoadVehicle';
+import { FreightRuntime, freightRuntimeKey } from './FreightRuntime';
 import { freightLines as freightRules, planFreightLines, type FreightLine, type FreightMode, type SavedFreightLine } from './FreightLines';
 import { LifeSystem, EMPTY_LIFE, type LifeResident } from './LifeSystem';
 import { planFacilityVisits, type CivicVisitContext } from './CivicVisits';
@@ -295,6 +297,7 @@ export class BuildingSystem {
   private readonly shiftFlows = shifts.map(() => new Float32Array(MAP_SIZE ** 2));
   /** The busiest shift's commuters on each road tile. Routing and pollution go by this. */
   private readonly flows = new Float32Array(MAP_SIZE ** 2);
+  readonly shipments = new FreightRuntime();
   private freightMode: FreightMode = 'auto';
   private readonly freightLines: SavedFreightLine[] = [];
   private freightPlans: FreightLine[] = [];
@@ -764,7 +767,7 @@ export class BuildingSystem {
       else if (shop.problem === 'shortage') shop.problem = 'manual-limit';
     }
     return { ...report, mode: this.freightMode, lines: this.freightPlans,
-      vehicles: this.freightLines.reduce((sum, line) => sum + line.vehicles, 0) };
+      vehicles: this.freightLines.reduce((sum, line) => sum + line.vehicles, 0), operations: this.shipments.report() };
   }
 
   /** The bus and metro lines, with their routes, timings and riders. */
@@ -2644,6 +2647,7 @@ export class BuildingSystem {
     }
     for (const route of this.freight) route.minutes = route.path.reduce((sum, cell) => sum + tileMinutes(
       this.flows[indexOf(cell)] + this.freightFlows[indexOf(cell)], this.roadAt(indexOf(cell))), 0);
+    this.syncShipments();
     this.shareCustom();
     // Vehicles and the fuel they burn, which needs the routes and the stations' reach.
     this.countCars();
@@ -2712,6 +2716,32 @@ export class BuildingSystem {
     this.market = { made, needed, farmed,
       served: Math.min(needed, clerks * goods.perClerk + markets * services.market.shoppers),
       trade: made >= needed ? (made - needed) * goods.exportPrice : -(needed - made) * goods.importCost };
+  }
+
+  private syncShipments(): void {
+    this.shipments.sync(this.freight.map(route => {
+      const stops = (route.deliveries ?? [{ to: route.to, goods: route.goods }]).map(delivery => delivery.to);
+      let cursor = 0;
+      return { ...route, key: freightRuntimeKey(route), stops: stops.map(to => {
+        const road = this.roadAccess(cellAt(to));
+        const index = road ? route.path.findIndex((cell, at) => at >= cursor && cell.x === road.x && cell.y === road.y) : -1;
+        cursor = Math.max(cursor, index);
+        return { to, index: Math.max(0, index) };
+      }) };
+    }), this.freightSources, this.freightShops);
+  }
+
+  advanceFreight(elapsedMs: number): void {
+    this.shipments.advance(elapsedMs, (route, along, vehicle, time) => {
+      const cell = route.path[Math.min(route.path.length - 1, Math.floor(along))];
+      const pose = roadVehiclePose(route.path, vehicle);
+      const x = Math.floor(pose.x + pose.hx * 0.55), y = Math.floor(pose.y + pose.hy * 0.55);
+      let roads = 0;
+      for (const [dx, dy] of [[0, -1], [1, 0], [0, 1], [-1, 0]]) if (isRoad(this.map.get({ x: x + dx, y: y + dy }))) roads++;
+      const red = (x !== Math.floor(pose.x) || y !== Math.floor(pose.y)) && roads >= 3 &&
+        ((Math.floor(time / 2600) + x + y) % 2 === 0) !== pose.upright;
+      return { load: cell ? this.congestionAt(cell) : 0, red };
+    });
   }
 
   private planFreight(): void {
@@ -3367,7 +3397,7 @@ export class BuildingSystem {
     return { tiles: this.map.save(), metros: this.map.stationTiles(), spans: this.map.spanTiles(), zones: [...this.zones.keys()],
       buildings: [...this.buildings.values()].map(building => building.people ?
         { ...building, people: building.people.map(person => ({ ...person, identity: person.identity && { ...person.identity } })) } : { ...building }),
-      freightMode: this.freightMode, freightLines: this.freightLines.map(line => ({ ...line, stops: [...line.stops] })),
+      freightRuntime: this.shipments.save(), freightMode: this.freightMode, freightLines: this.freightLines.map(line => ({ ...line, stops: [...line.stops] })),
       ownedLand: [...this.ownedLand].sort((a, b) => a - b),
       funds: this.funds, rank: this.rank, taxRate: this.taxRate,
       lines: this.lines.map(line => ({ ...line, stops: [...line.stops] })),
@@ -3378,7 +3408,8 @@ export class BuildingSystem {
       scares: this.scares.map(entry => ({ ...entry })), tasksRest: [...this.tasksRest], nextPersonId: this.nextPersonId, relationships: this.relationships.save(), life: this.life.save() };
   }
 
-  load({ freightMode, freightLines, ownedLand, tiles, zones, buildings, funds, rank, taxRate, tick, lines, goals: done, loans, seed, metros, tasks: saved, combos: known, policies: chosen, challenge, spans, dilemma, boosts, level, theme, coldStock, marketStock, monthlyVisits, activeVisits, dailyActivities, scares, tasksRest, nextPersonId, relationships, life }: SaveData): void {
+  load({ freightRuntime, freightMode, freightLines, ownedLand, tiles, zones, buildings, funds, rank, taxRate, tick, lines, goals: done, loans, seed, metros, tasks: saved, combos: known, policies: chosen, challenge, spans, dilemma, boosts, level, theme, coldStock, marketStock, monthlyVisits, activeVisits, dailyActivities, scares, tasksRest, nextPersonId, relationships, life }: SaveData): void {
+    this.shipments.load(freightRuntime, tick);
     this.freightMode = freightMode ?? 'auto';
     this.freightLines.splice(0, this.freightLines.length, ...(freightLines ?? []).map(line => ({ ...line, stops: [...line.stops] })));
     this.ownedLand.clear();

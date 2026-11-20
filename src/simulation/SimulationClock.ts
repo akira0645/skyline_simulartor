@@ -8,6 +8,7 @@ export const SUSPEND_GAP_MS = 15000;
 export class SimulationClock {
   speed: SimulationSpeed = 1;
   private accumulated = 0;
+  private freightProgress = 0;
   suspended = false;
   interrupted = false;
 
@@ -21,6 +22,7 @@ export class SimulationClock {
   /** Drops the partial tick, e.g. after a save is loaded. */
   reset(): void {
     this.accumulated = 0;
+    this.freightProgress = 0;
   }
 
   advance(elapsedMs: number): number {
@@ -35,7 +37,15 @@ export class SimulationClock {
     }
     this.accumulated += elapsedMs * this.speed;
     const ticks = Math.min(MAX_TICKS_PER_POLL, Math.floor(this.accumulated / TICK_MS));
-    this.accumulated -= ticks * TICK_MS;
-    return this.engine.advance(ticks);
+    for (let tick = 0; tick < ticks; tick++) {
+      this.engine.city.advanceFreight(TICK_MS - this.freightProgress);
+      this.engine.advance(1, false);
+      this.accumulated -= TICK_MS;
+      this.freightProgress = 0;
+    }
+    const progress = Math.min(TICK_MS, this.accumulated);
+    this.engine.city.advanceFreight(Math.max(0, progress - this.freightProgress));
+    this.freightProgress = progress;
+    return this.engine.getSnapshot().tick;
   }
 }

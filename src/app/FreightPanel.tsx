@@ -1,3 +1,4 @@
+import { FreightOperations } from './FreightOperations';
 import { calendar } from '../simulation/calendar';
 import { memo, useState } from 'react';
 import type { FreightProblem, FreightReport } from '../simulation/Freight';
@@ -38,6 +39,7 @@ export const FreightPanel = memo(function FreightPanel({ report, actions, select
   editing?: number;
   showAll?: boolean;
 }) {
+  const [view, setView] = useState<'routes' | 'operations'>('routes');
   const [page, setPage] = useState(0);
   const [showAllMissing, setShowAllMissing] = useState(false);
   const lastPage = Math.max(0, Math.ceil(report.routes.length / PAGE_SIZE) - 1);
@@ -67,8 +69,14 @@ export const FreightPanel = memo(function FreightPanel({ report, actions, select
             tip={report.mode === 'manual' ? '有配送任務的路線配車' : '各路線共用貨車，完成往返後接下一趟；地圖最多顯示 8 輛'} />
           {report.mode === 'manual' && <Tag label="全市配車" value={`${report.vehicles}／${freight.maxVehicles} 輛`} />}</dd>
       </dl>
-      <p className="hint">這裡是每月配送計畫，非即時庫存或到貨紀錄；尚未安排不代表已缺貨。進出口另按月結算。</p>
+      <p className="hint">上方是每月配送計畫；實際庫存、在途貨量與交付紀錄列於下方。計畫已安排不代表已到貨。</p>
     </section>
+    <div className="row" role="group" aria-label="物流面板內容">
+      <button type="button" aria-pressed={view === 'routes'} onClick={() => setView('routes')}>路線管理</button>
+      <button type="button" aria-pressed={view === 'operations'} onClick={() => setView('operations')}>庫存與報表</button>
+    </div>
+    {view === 'operations' && <FreightOperations report={report} locate={actions.locate} />}
+    <div hidden={view !== 'routes'}>
     {report.mode === 'manual' ? <>
       <p className="hint">新增路線後，在地圖先點工業區工廠，再依序點商業區店鋪。全市最多 {freight.maxVehicles} 輛，可將配車減到 0 暫停路線。</p>
       {report.lines.map(line => <section className="line freight-route" key={line.id} data-freight-line={line.id}>
@@ -129,6 +137,6 @@ export const FreightPanel = memo(function FreightPanel({ report, actions, select
         {missing.length > PAGE_SIZE && <button type="button" onClick={() => setShowAllMissing(!showAllMissing)}>{showAllMissing ? '收合' : `查看全部 ${missing.length} 間`}</button>}
       </>}
     </section>
-
+    </div>
   </div>;
 });

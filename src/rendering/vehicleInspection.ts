@@ -20,6 +20,8 @@ export interface VehicleInfo {
   activity: VehicleActivity;
   progress: number;
   held: number;
+  cargo?: number;
+  capacity?: number;
   plannedGoods?: number;
   plannedTrips?: number;
 }

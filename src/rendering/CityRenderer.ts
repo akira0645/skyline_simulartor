@@ -1,6 +1,6 @@
 import { animationElapsed } from './animationElapsed';
 import type { SimulationSpeed } from '../simulation/SimulationClock';
-import { hitVehicle, nextDeliveryStop, deliveryStopIndices, type VehicleInfo, type VehicleActivity } from './vehicleInspection';
+import { hitVehicle, nextDeliveryStop, type VehicleInfo, type VehicleActivity } from './vehicleInspection';
 import { numberBadge } from './routeBadges';
 import { freightMapRoutes, freightColourId, selectedFreightKey } from './routeViews';
 import { weatherAt, weatherTravel } from '../simulation/Weather';
@@ -13,7 +13,6 @@ import tilesUrl from '../assets/tiles.png';
 import { footprint, isBig, isFacility, isRoad, isService, MAP_SIZE, TILE_SIZE, type Cell } from '../simulation/TileMap';
 import { services } from '../simulation/Services';
 import { transit } from '../simulation/Transit';
-import { freightAssignment, freightFleetSize } from '../simulation/Freight';
 import { vehicleSizes } from './vehicleSizes';
 import { CarQueue } from './CarQueue';
 import { land, parcelAt, parcelCentre, parcelOrigin } from '../simulation/Land';
@@ -91,7 +90,7 @@ export class CityRenderer {
   setPlaying?: (playing: boolean) => void;
 
   constructor(private readonly city: BuildingSystem, private readonly speed: () => SimulationSpeed,
-    private readonly hour: () => number, private readonly overlay: () => Overlay) {}
+    private readonly hour: () => number, private readonly overlay: () => Overlay, private readonly advance?: () => void) {}
   private app?: Application;
   private observer?: ResizeObserver;
 
@@ -155,13 +154,10 @@ export class CityRenderer {
      * building itself; at a house or a small shop it waits by the kerb. `held` is how long the
      * car has stood behind another.
      */
-    const freightRounds = new Map<number, number>();
-    const freightJobs = new Map<number, { from: number; to: number }>();
     let vehicleFrames: VehicleInfo[] = [];
     this.getVehicle = key => vehicleFrames.find(vehicle => vehicle.key === key);
     const roadVehiclePaths = new Map<string, string>();
     const pathKeys = new WeakMap<readonly Cell[], string>();
-    const stopIndices = new WeakMap<readonly Cell[], { key: string; indices: number[] }>();
     const roadVehicles = new Map<string, RoadVehicle>();
     const trips = new Map<string, { at: 'home' | 'work'; along?: number; wait: number; driving?: boolean;
       garage?: { home: boolean; work: boolean }; lot?: { home?: number; work?: number }; held?: number;
@@ -296,7 +292,7 @@ export class CityRenderer {
       }
     };
     /** Whether the light at a junction is green for traffic going up and down; otherwise for across. */
-    const greenUpright = (x: number, y: number) => (Math.floor(animationTime / LIGHT) + x + y) % 2 === 0;
+    const greenUpright = (x: number, y: number) => (Math.floor(this.city.shipments.elapsedMs / LIGHT) + x + y) % 2 === 0;
     /** Whether it is raining just now; set once a frame. */
     let wet = false;
     const walkForward = (roads: readonly Cell[], origin: Cell, along: number, advance: number, returning: boolean) =>
@@ -696,57 +692,32 @@ export class CityRenderer {
           finished: completed === 'home', returning: state.returning, along: state.along, held: state.held,
           activity, progress: state.returning ? 1 - state.along / last : state.along / last };
       };
-      const freightRoutes = this.city.getFreight().filter(route => route.path.length > 1);
-      const movements: { key: string; run: typeof freightRoutes[number]; initial: number; vehicleKey: string; number: number; slot?: number; round?: number }[] = [];
-      if (this.city.getFreightMode() === 'manual') {
-        for (const run of freightRoutes) for (let vehicle = 0; vehicle < (run.vehicles ?? 0); vehicle++) {
-          movements.push({ key: `manual-freight:${run.lineId}:${vehicle}`, run, initial: vehicle / run.vehicles!, vehicleKey: `freight:manual:${run.lineId}:${vehicle}`, number: vehicle + 1 });
-        }
-        freightJobs.clear(); freightRounds.clear();
-      } else {
-        const fleetSize = freightFleetSize(freightRoutes);
-        for (const slot of freightJobs.keys()) if (slot >= fleetSize) { freightJobs.delete(slot); freightRounds.delete(slot); }
-        for (let slot = 0; slot < fleetSize; slot++) {
-          const round = freightRounds.get(slot) ?? 0;
-          const job = freightJobs.get(slot);
-          let run = job && freightRoutes.find(route => route.from === job.from && route.to === job.to);
-          if (!run) {
-            run = freightAssignment(freightRoutes, slot, round);
-            if (!run) continue;
-            freightJobs.set(slot, { from: run.from, to: run.to });
-          }
-          movements.push({ key: `freight:${slot}:${round}:${run.from}:${run.to}`, run, initial: 0, vehicleKey: `freight:auto:${slot}`, number: slot + 1, slot, round });
-        }
-      }
       const freightRouteShown = this.freightVisible || this.overlay() === 'freight' || getTool() === 'freight-line';
       const chosenFreight = freightRouteShown ? selectedFreightKey(this.city.getFreightMode(), this.city.getFreightLines(), this.city.getFreight(), this.selectedFreight) : undefined;
-      for (const movement of movements) {
-        const { run } = movement;
-        const at = vehicleOnRoad(movement.key, run.path, 400, movement.initial);
-        if (!at) continue;
-        if (at.finished && movement.slot !== undefined) {
-          freightRounds.set(movement.slot, movement.round! + 1); freightJobs.delete(movement.slot);
-        }
+      for (const shipment of this.city.shipments.frames()) {
+        const run = shipment.route;
+        const pose = roadVehiclePose(run.path, shipment);
+        const at = { x: pose.x * TILE_SIZE, y: pose.y * TILE_SIZE, angle: pose.angle,
+          along: shipment.along, returning: shipment.returning, activity: shipment.activity,
+          held: shipment.held, progress: shipment.returning ? 1 - shipment.along / Math.max(1, run.path.length - 1) : shipment.along / Math.max(1, run.path.length - 1) };
         const size = vehicleSizes.freight;
         const colour = lineColour(freightColourId(run));
         const manual = run.lineId !== undefined;
-        const routeNumber = manual ? run.lineId! : this.city.getFreight().indexOf(run) + 1;
-        const stops = manual ? this.city.getFreightLines().find(line => line.id === run.lineId)!.stops : [run.from, run.to];
-        const stopKey = stops.join(';');
-        let lookup = stopIndices.get(run.path);
-        if (!lookup || lookup.key !== stopKey) {
-          lookup = { key: stopKey, indices: deliveryStopIndices(run.path, stops, cell => this.city.roadBeside(cell), MAP_SIZE) };
-          stopIndices.set(run.path, lookup);
-        }
-        const info: VehicleInfo = { key: movement.vehicleKey, kind: 'freight', name: `物流車 ${movement.number}`,
+        const routeNumber = manual ? run.lineId! : this.city.getFreight().findIndex(route => route.from === run.from && route.to === run.to) + 1;
+        const stops = [run.from, ...run.stops.map(stop => stop.to)];
+        const info: VehicleInfo = { key: shipment.key, kind: 'freight', name: `物流車 ${Number(shipment.key.split(':').at(-1)) + 1}`,
           routeKey: manual ? `manual:${run.lineId}` : `auto:${run.from}:${run.to}`, lineId: run.lineId,
           routeName: manual ? `物流 ${run.lineId} 號` : `自動配送 ${routeNumber}`, colour,
           x: at.x, y: at.y, angle: at.angle, length: size.length, width: size.width,
           visible: visible(at.x, at.y) && people.alpha > 0, cell: { x: Math.floor(at.x / TILE_SIZE), y: Math.floor(at.y / TILE_SIZE) },
-          destination: nextDeliveryStop(run.path, stops, at.along, at.returning, cell => this.city.roadBeside(cell), MAP_SIZE, lookup.indices),
+          destination: nextDeliveryStop(run.path, stops, at.along, at.returning, cell => this.city.roadBeside(cell), MAP_SIZE, run.stops.map(stop => stop.index)),
           returning: at.returning, activity: at.activity, progress: at.progress, held: at.held,
-          plannedGoods: run.goods, plannedTrips: run.trucks };
+          plannedGoods: run.goods, plannedTrips: run.trucks, cargo: shipment.cargo.reduce((sum, item) => sum + item.amount, 0), capacity: 24 };
         vehicleFrames.push(info);
+        if (shipment.activity !== 'working') {
+          const car = { x: pose.x, y: pose.y, hx: pose.hx, hy: pose.hy, index: -10000 - vehicleFrames.length };
+          cars.push(car); queue.add(car);
+        }
         if (!info.visible) continue;
         // Draw in the direction of travel, so returning trucks no longer reverse backwards.
         people.save().translateTransform(at.x, at.y).rotateTransform(at.angle)
@@ -1054,6 +1025,7 @@ export class CityRenderer {
       }
     };
     app.ticker.add(ticker => {
+      this.advance?.();
       const speed = this.speed();
       // Facility outings and life events also animate in towns without commuters.
       if (!speed) return;
@@ -1154,7 +1126,7 @@ export class CityRenderer {
       if (playing) app.start();
       else { app.stop(); app.render(); }
     };
-    this.resetView = () => { roadVehicles.clear(); roadVehiclePaths.clear(); freightJobs.clear(); freightRounds.clear(); frameCity(); draw(); };
+    this.resetView = () => { roadVehicles.clear(); roadVehiclePaths.clear(); frameCity(); draw(); };
     this.lookAt = cell => {
       camera.x = app.screen.width / 2 - (cell.x + 0.5) * TILE_SIZE * camera.scale;
       camera.y = app.screen.height / 2 - (cell.y + 0.5) * TILE_SIZE * camera.scale;

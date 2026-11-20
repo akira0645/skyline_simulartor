@@ -86,4 +86,4 @@ export function summarizeFreight(sources: readonly FreightSite[], shops: readonl
     routes, destinations };
 }
 
-export type FreightReport = ReturnType<typeof summarizeFreight> & { mode: FreightMode; lines: readonly FreightLine[]; vehicles: number };
+export type FreightReport = ReturnType<typeof summarizeFreight> & { mode: FreightMode; lines: readonly FreightLine[]; vehicles: number; operations: ReturnType<import('./FreightRuntime').FreightRuntime['report']> };

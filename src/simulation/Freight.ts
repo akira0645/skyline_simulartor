@@ -72,7 +72,11 @@ export function summarizeFreight(sources: readonly FreightSite[], shops: readonl
   }
   const supply = sources.reduce((sum, source) => sum + source.amount, 0);
   const demand = shops.reduce((sum, shop) => sum + shop.amount, 0);
-  const planned = routes.reduce((sum, route) => sum + route.goods, 0);
+  const shopIds = new Set(shops.map(shop => shop.id));
+  const planned = [...assigned].reduce((sum, [id, amount]) => sum + (shopIds.has(id) ? amount : 0), 0);
+  const sourceIds = new Set(sources.map(source => source.id));
+  const dispatched = routes.reduce((sum, route) => sum + (sourceIds.has(route.from) ? route.goods : 0), 0);
+  const handled = routes.reduce((sum, route) => sum + route.goods, 0);
   const destinations = shops.map<{ id: number; demand: number; allocated: number; missing: number; problem?: FreightProblem }>(shop => {
     const allocated = assigned.get(shop.id) ?? 0;
     const missing = Math.max(0, shop.amount - allocated);
@@ -80,8 +84,8 @@ export function summarizeFreight(sources: readonly FreightSite[], shops: readonl
       !connected(shop.id) ? 'disconnected' : 'shortage';
     return { id: shop.id, demand: shop.amount, allocated, missing, problem };
   });
-  return { factories: sources.length, shops: shops.length, supply, demand, planned,
-    unused: Math.max(0, supply - planned), missing: Math.max(0, demand - planned),
+  return { factories: sources.length, shops: shops.length, supply, demand, planned, handled,
+    unused: Math.max(0, supply - dispatched), missing: Math.max(0, demand - planned),
     trips: routes.reduce((sum, route) => sum + route.trucks, 0), fleet: freightFleetSize(routes),
     routes, destinations };
 }

@@ -56,6 +56,7 @@ export const facilityUse: Partial<Record<Tile, string>> = {
   cakeshop: '中午到晚上 8 點買蛋糕。家裡有人生日那天會優先來。',
   square: '散步的公共空間。組成廟口夜市後，傍晚 5 點到晚上 11 點可以逛攤、吃晚餐。',
   coldstore: '收存農田食材，再配送到市場。',
+  warehouse: '儲存一般商品，容量 240 份。手動規劃工廠到倉庫、倉庫到商店兩條路線；倉庫不生產，也不消耗貨物；出貨在途會保留退貨空間。拆除會失去倉內存貨。',
   recycling: '向同一路網上的循環工坊提供回收材料。',
   workshop: '把回收材料交給附近有員工的工廠，再製成商品。',
   gas: '車輛可以在這裡加油。',
@@ -104,7 +105,7 @@ export const tileNames: Record<Tile, string> = {
   fire: '消防局', police: '警察局', school: '小學', clinic: '診所',
   river: '河流', bridge: '橋', bus: '公車站', metro: '捷運站',
   market: '市場', highschool: '高中', hospital: '醫院', university: '大學', museum: '博物館', stadium: '體育場',
-  annex: '大建築', viaduct: '高架道路', gas: '加油站', cityhall: '市政廳', bank: '銀行', culture: '文化中心', coldstore: '冷鏈倉庫', square: '廣場', daycare: '托兒所', recycling: '回收站', workshop: '維修工坊', farm: '農田', library: '圖書館', pool: '游泳池', ktv: 'KTV', amusement: '遊樂園', temple: '廟', mall: '大型商場', casino: '賭場', cinema: '電影院', parking: '停車場',
+  annex: '大建築', viaduct: '高架道路', gas: '加油站', cityhall: '市政廳', bank: '銀行', culture: '文化中心', coldstore: '冷鏈倉庫', warehouse: '物流倉庫', square: '廣場', daycare: '托兒所', recycling: '回收站', workshop: '維修工坊', farm: '農田', library: '圖書館', pool: '游泳池', ktv: 'KTV', amusement: '遊樂園', temple: '廟', mall: '大型商場', casino: '賭場', cinema: '電影院', parking: '停車場',
 };
 
 /** What each kind of home is called, and who tends to live in it. */
@@ -408,7 +409,7 @@ export const serviceNames: Record<Service, string> = { fire: '消防', police: '
   bakery: '烘焙坊', florist: '花店', cakeshop: '蛋糕店',
   market: '市場', highschool: '高中', hospital: '醫院', university: '大學', museum: '博物館', stadium: '體育場',
   temple: '廟', mall: '商場', casino: '賭場', cinema: '電影院', parking: '停車場',
-  library: '圖書館', pool: '游泳池', ktv: 'KTV', amusement: '遊樂園', gas: '加油站', cityhall: '市政廳', bank: '銀行', culture: '文化中心', coldstore: '冷鏈倉庫', square: '廣場', daycare: '托兒所', recycling: '回收站', workshop: '維修工坊' };
+  library: '圖書館', pool: '游泳池', ktv: 'KTV', amusement: '遊樂園', gas: '加油站', cityhall: '市政廳', bank: '銀行', culture: '文化中心', coldstore: '冷鏈倉庫', warehouse: '物流倉庫', square: '廣場', daycare: '托兒所', recycling: '回收站', workshop: '維修工坊' };
 
 /** How full a road is, in the words of the traffic view's four colours. */
 export const trafficName = (load: number) =>

@@ -20,6 +20,7 @@ export interface VehicleInfo {
   activity: VehicleActivity;
   progress: number;
   held: number;
+  warehouseOrigin?: boolean;
   cargo?: number;
   capacity?: number;
   plannedGoods?: number;

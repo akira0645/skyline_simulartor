@@ -15,7 +15,7 @@ export const speeds = [0, 0.25, 0.5, 1, 2, 4] as const;
 export const toolGroups: [string, [Tool, string][]][] = [
   ['道路', [['road', '道路'], ['avenue', '大道'], ['viaduct', '高架']]],
   ['分區', [['residential', '住宅'], ['commercial', '商業'], ['industrial', '工業']]],
-  ['交通', [['bus', '公車站'], ['metro', '捷運站'], ['gas', '加油站'], ['parking', '停車場']]],
+  ['交通', [['bus', '公車站'], ['metro', '捷運站'], ['gas', '加油站'], ['parking', '停車場'], ['warehouse', '物流倉庫']]],
   ['水電', [['power', '電廠'], ['water', '水塔']]],
   ['公共服務', [['fire', '消防局'], ['police', '警察局'], ['clinic', '診所'], ['hospital', '醫院']]],
   ['照護', [['community', '社區中心'], ['familyclinic', '家庭診所'], ['eldercare', '日間照護'], ['memorial', '紀念花園']]],
@@ -30,7 +30,7 @@ export const toolGroups: [string, [Tool, string][]][] = [
 
 /** Where each tool's picture sits in city.png, as [column, row]; the rest are drawn in CSS. */
 export const iconAt: Partial<Record<Tool, [number, number]>> = {
-  familyclinic: [12, 14], bakery: [13, 14], florist: [14, 14], cakeshop: [15, 14],
+  warehouse: [0, 13], familyclinic: [12, 14], bakery: [13, 14], florist: [14, 14], cakeshop: [15, 14],
   road: [10, 0], avenue: [10, 0], residential: [0, 2], commercial: [0, 3], industrial: [0, 4],
   power: [0, 5], water: [1, 5], fire: [2, 5], police: [3, 5], school: [4, 5], clinic: [5, 5], bus: [6, 5], metro: [7, 5],
   market: [8, 5], highschool: [9, 5], temple: [10, 5], cinema: [11, 5], parking: [12, 5],
@@ -63,10 +63,10 @@ export const toolCost = (tool: Tool) =>
 
 /** One short line on how to use each tool, shown when it is picked. */
 export function toolTip(tool: Tool): string {
-  if (tool === 'freight-line') return '先點工業區工廠，再依序點商業區店鋪；再次點選移除，換一座工廠可更換起點。';
+  if (tool === 'freight-line') return '先點工廠或物流倉庫，再依序點配送站。工廠可送倉庫或商店；倉庫可送商店。再次點選移除。';
   if (tool === 'land') return '買地：點選與已有土地共邊相鄰的 32×32 區塊；價格會隨擴張提高。';
   if (isService(tool)) {
-    const extra = tool === 'fire' ? '沒救到的火會嚇跑附近的人。' :
+    const extra = tool === 'warehouse' ? '容量 240 份。請手動建立工廠→倉庫、倉庫→商店路線。' : tool === 'fire' ? '沒救到的火會嚇跑附近的人。' :
       tool === 'police' ? '滿 100 人後，沒警察的地方地價低。' :
       tool === 'market' ? `讓 ${services.market.shoppers} 人買得到東西。` :
       tool === 'highschool' ? '滿 700 人後大家會要。' :

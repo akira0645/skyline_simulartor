@@ -58,7 +58,7 @@ const FACILITY_ROOF: Record<Facility | Service | 'bus' | 'metro', number> = {
   bus: 0xf2c94c, metro: 0xe5484d, market: 0xd9423a, highschool: 0x7f8fb8, hospital: 0xe04a3c,
   university: 0xc9735a, museum: 0xe6dfcf, stadium: 0x6fb565, temple: 0xe0782f,
   mall: 0xd9423a, casino: 0x8a5fd0, cinema: 0xc8322e, parking: 0x3f6fb0,
-  library: 0xb98a4a, pool: 0x5bb6ce, ktv: 0xe8799a, amusement: 0xf2c94c, gas: 0xe5484d, cityhall: 0xb97a61, bank: 0x577d96, culture: 0x996694, coldstore: 0x568598, square: 0xad8f78, daycare: 0xb88449, recycling: 0x497c63, workshop: 0x80614f, community: 0xc78d54, familyclinic: 0x679f9a, eldercare: 0x8d9f68, memorial: 0x8a958e, bakery: 0xc08a4e, florist: 0x5fa873, cakeshop: 0xe88aa6,
+  library: 0xb98a4a, pool: 0x5bb6ce, ktv: 0xe8799a, amusement: 0xf2c94c, gas: 0xe5484d, cityhall: 0xb97a61, bank: 0x577d96, culture: 0x996694, coldstore: 0x568598, warehouse: 0x778da0, square: 0xad8f78, daycare: 0xb88449, recycling: 0x497c63, workshop: 0x80614f, community: 0xc78d54, familyclinic: 0x679f9a, eldercare: 0x8d9f68, memorial: 0x8a958e, bakery: 0xc08a4e, florist: 0x5fa873, cakeshop: 0xe88aa6,
 };
 const WATER = [0x3f8fc4, 0x6fb4dc, 0x2f78ab];
 const SHORE = 0xd9cfa8;
@@ -363,6 +363,11 @@ export class TileRenderer {
           const anchor = map.anchorOf({ x, y });
           const art = anchor && BIG_ART[map.get(anchor) as Service];
           if (anchor && art !== undefined) bigs.set(anchor.y * MAP_SIZE + anchor.x, art);
+        } else if (tile === 'warehouse') {
+          tileAt(GRASS[0], x, y);
+          cityAt(0, HOME_ROW + 5, x, y);
+          g.rect(x * TILE_SIZE + 3, y * TILE_SIZE + 24, 26, 4).fill(0x668eac);
+          g.rect(x * TILE_SIZE + 6, y * TILE_SIZE + 25, 4, 2).rect(x * TILE_SIZE + 22, y * TILE_SIZE + 25, 4, 2).fill(0xe8c589);
         } else if (tile in CIVIC_DETAIL_ART) {
           tileAt(GRASS[0], x, y);
           cityAt(CIVIC_DETAIL_ART[tile]!, 14, x, y);

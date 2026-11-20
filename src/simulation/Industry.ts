@@ -3,7 +3,7 @@ import type { Cell } from './TileMap';
 export const industryNames = {
   food: '食品加工廠',
   metal: '金屬加工廠',
-  warehouse: '物流倉庫',
+  warehouse: '包裝加工廠',
 } as const;
 
 export function industryAt({ x, y }: Cell): keyof typeof industryNames {

@@ -14,7 +14,7 @@ export function VehiclePanel({ vehicle, onClose, onRoute, onLocate }: {
       <dl>
         {vehicle.routeName && <><dt>路線</dt><dd>{vehicle.routeName}</dd></>}
         <dt>狀態</dt><dd className="tags"><Tag label={vehicle.kind === 'freight' && vehicle.activity === 'working' ? '待命／等待裝貨' : activities[vehicle.activity]} tone={vehicle.activity === 'red' || vehicle.activity === 'queued' ? 'bad' : undefined} />
-          <Tag label={vehicle.returning ? vehicle.kind === 'freight' ? '返廠' : '返程' : vehicle.kind === 'freight' ? '配送去程' : '去程'} /></dd>
+          <Tag label={vehicle.returning ? vehicle.kind === 'freight' ? vehicle.warehouseOrigin ? '返倉' : '返廠' : '返程' : vehicle.kind === 'freight' ? '配送去程' : '去程'} /></dd>
         <dt>位置</dt><dd>({vehicle.cell.x}, {vehicle.cell.y}) · 向{direction(vehicle.angle)}</dd>
         <dt>前往</dt><dd>({vehicle.destination.x}, {vehicle.destination.y})</dd>
         <dt>本程進度</dt><dd>{Math.round(Math.max(0, Math.min(1, vehicle.progress)) * 100)}%</dd>
@@ -25,7 +25,7 @@ export function VehiclePanel({ vehicle, onClose, onRoute, onLocate }: {
         <button type="button" onClick={() => onLocate(vehicle.cell)}>定位車輛</button>
         {vehicle.routeName && <button type="button" onClick={() => onRoute(vehicle)}>查看所屬路線</button>}
       </div>
-      {vehicle.kind === 'freight' && <p className="hint">實際載貨出發時扣除工廠庫存，到達配送站才補入商店；每月計畫另列。</p>}
+      {vehicle.kind === 'freight' && <p className="hint">實際載貨出發時扣除工廠或倉庫庫存，到站才補入收貨據點；每月計畫另列。</p>}
     </>}
   </section>;
 }

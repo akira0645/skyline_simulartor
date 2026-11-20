@@ -803,12 +803,12 @@ export function App() {
       setTool(activeTool.current);
       if (id !== undefined) setSelectedFreight(`manual:${id}`);
       setPanelTab('freight');
-      setMessage(id === undefined ? '' : '先點工業區工廠，再依序點商業區店鋪；再次點選移除，選另一座工廠可更換起點。');
+      setMessage(id === undefined ? '' : '先點工廠或物流倉庫，再依序點配送站；工廠可送倉庫及商店，倉庫可送商店。');
       rendererRef.current?.refresh?.();
     };
     return {
-      mode: mode => { const result = engine.city.setFreightMode(mode); edit(); setSelectedFreight(undefined); update(result.error, mode === 'manual' ? '手動配送：新增物流路線後選擇工廠與配送商店。' : '已切回自動配送，手動路線設定仍會保留。'); },
-      create: () => { const result = engine.city.addFreightLine(); if (result.id !== undefined) edit(result.id); update(result.error, '已新增物流路線。先在地圖點工業區工廠，再點商業區店鋪。'); },
+      mode: mode => { const result = engine.city.setFreightMode(mode); edit(); setSelectedFreight(undefined); update(result.error, mode === 'manual' ? '手動配送：先選出貨工廠或倉庫，再選配送站。' : '已切回自動配送，手動路線設定仍會保留。'); },
+      create: () => { const result = engine.city.addFreightLine(); if (result.id !== undefined) edit(result.id); update(result.error, '已新增物流路線。先點出貨工廠或倉庫，再點配送站。'); },
       remove: id => { if (editingFreightRef.current === id) edit(); engine.city.removeFreightLine(id); setSelectedFreight(undefined); update(undefined, '物流路線已刪除。'); },
       vehicles: (id, count) => { const result = engine.city.setFreightVehicles(id, count); update(result.error, count ? '物流配車已更新。' : '這條物流路線已停駛。'); },
       edit,
@@ -947,7 +947,7 @@ export function App() {
               <dt>整座範圍</dt><dd>{siteSummary.tiles} 格</dd>
               {siteSummary.capacity > 0 && <><dt>整座住戶</dt><dd>{siteSummary.occupants}／{siteSummary.capacity} 人（下面是這一戶）</dd></>}
             </>}
-            {monthlyVisits !== undefined && <>
+            {monthlyVisits !== undefined && info.tile !== 'warehouse' && <>
               <dt>本月來訪</dt>
               <dd>{monthlyVisits.toLocaleString('zh-TW')} 人次</dd>
             </>}
@@ -1038,6 +1038,10 @@ export function App() {
               <dd className="tags"><Tag label={info.bigPark ? '大公園' : '公園'} value={`${info.parkTiles} 格`}
                 tone={info.bigPark ? 'good' : undefined} tip={`連滿 ${landValue.bigPark.tiles} 格是大公園`} /></dd>
             </>}
+            {info.warehouseStock !== undefined && <>
+              <dt>倉儲</dt><dd className="tags"><Tag label="實際庫存" value={`${engine.city.shipments.stock(selected.y * MAP_SIZE + selected.x).toFixed(2)}／${info.warehouseCapacity} 份`} /></dd>
+              <dt>配送</dt><dd><button type="button" onClick={() => setPanelTab('freight')}>管理物流路線</button></dd>
+            </>}
             {info.grows !== undefined && <>
               <dt>收成</dt>
               <dd className="tags"><Tag label="每月" value={`${info.grows} 份`} tone={info.grows ? undefined : 'bad'} />
@@ -1069,7 +1073,7 @@ export function App() {
               <dd className="tags">{info.lines.length ? info.lines.map(id => <Tag key={id} label={lineName(lines.find(line => line.id === id)!)} />) :
                 <Tag label="還沒加進路線" tone="dim" />}</dd>
             </>}
-            {info.reaching !== undefined && <>
+            {info.reaching !== undefined && info.tile !== 'warehouse' && <>
               <dt>範圍</dt>
               <dd className="tags"><Tag label="半徑" value={`${info.radius} 格`} /><Tag label="照顧" value={`${info.reaching} 棟`} /></dd>
             </>}

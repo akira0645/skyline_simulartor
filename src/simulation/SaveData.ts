@@ -1,4 +1,4 @@
-import { parseFreightRuntime, type FreightRuntimeSave } from './FreightRuntime';
+import { WAREHOUSE_CAPACITY, parseFreightRuntime, type FreightRuntimeSave } from './FreightRuntime';
 import { parseFreightLines, type FreightMode, type SavedFreightLine } from './FreightLines';
 import { parseLand } from './Land';
 import { parseDiary, type ActivityEntry } from './ActivityDiary';
@@ -22,6 +22,7 @@ import { challenges, type Challenge } from './Seasons';
 import { brands, dilemmas, type Boost, type Brand, type Dilemma } from './Dilemmas';
 
 /**
+ * 10 adds logistics warehouse tiles and transshipment inventory.
  * 9 adds actual local freight stocks, vehicle manifests and monthly operating reports.
  * 8 adds player-managed logistics lines and fleet settings.
  * 7 adds purchased land parcels; earlier saves keep the full map.
@@ -30,14 +31,14 @@ import { brands, dilemmas, type Boost, type Brand, type Dilemma } from './Dilemm
  * 4 added funds, the milestone rank and avenue tiles; 3 added power and water facility tiles;
  * 2 added per-building capacity and occupants.
  */
-export const SCHEMA_VERSION = 9;
+export const SCHEMA_VERSION = 10;
 /**
  * How a city looks: which city's colours its homes and shops wear, and the trees, cars and
  * bridges that go with them. Nothing in the simulation goes by it.
  */
 export const THEMES = ['classic', 'sf', 'california', 'newyork'] as const;
 export type Theme = (typeof THEMES)[number];
-const READABLE = [1, 2, 3, 4, 5, 6, 7, 8, SCHEMA_VERSION];
+const READABLE = [1, 2, 3, 4, 5, 6, 7, 8, 9, SCHEMA_VERSION];
 
 export interface SavedBuilding {
   id: number;
@@ -330,8 +331,17 @@ export function parseSave(data: unknown): SaveData {
     }
     return { a: edge.a, b: edge.b, familiarity: edge.familiarity, lastDay: edge.lastDay };
   });
+  const freightRuntime = parseFreightRuntime((data as Record<string, unknown>).freightRuntime);
+  if (freightRuntime) {
+    const reserved = new Map(freightRuntime.stocks);
+    for (const vehicle of freightRuntime.vehicles) for (const cargo of vehicle.cargo) {
+      if (TILES[layout[cargo.to]] === 'warehouse') reserved.set(cargo.to, (reserved.get(cargo.to) ?? 0) + cargo.amount);
+      if (TILES[layout[vehicle.route.from]] === 'warehouse') reserved.set(vehicle.route.from, (reserved.get(vehicle.route.from) ?? 0) + cargo.amount);
+    }
+    for (const [id, amount] of reserved) if (TILES[layout[id]] === 'warehouse' && amount > WAREHOUSE_CAPACITY + 1e-6) throw new Error('存檔倉庫容量損壞。');
+  }
   return { schemaVersion: SCHEMA_VERSION, seed: seed as number, tick, tiles: layout, zones, buildings: records,
-    freightRuntime: parseFreightRuntime((data as Record<string, unknown>).freightRuntime),
+    freightRuntime,
     ...parseFreightLines((data as Record<string, unknown>).freightMode, (data as Record<string, unknown>).freightLines),
     ownedLand: parseLand((data as Record<string, unknown>).ownedLand),
     funds: funds as number, rank, taxRate, metros: [...metros].sort((a, b) => a - b),

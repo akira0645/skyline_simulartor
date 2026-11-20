@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { FreightRuntime, parseFreightRuntime, type ShippingRoute } from './FreightRuntime';
 import { SimulationEngine } from './SimulationEngine';
+import { SCHEMA_VERSION } from './SaveData';
 import { SimulationClock } from './SimulationClock';
 
 const route = (to = 11, length = 4): ShippingRoute => ({ key: 'manual:1', lineId: 1, vehicles: 1,
@@ -124,7 +125,7 @@ it('loads v8 cities with empty stock and rejects a damaged new manifest atomical
   const engine = new SimulationEngine({ version: 1, seed: 7, tick: 0 });
   const old = engine.save();delete old.freightRuntime;old.schemaVersion = 8;
   engine.load(old);
-  expect(engine.save().schemaVersion).toBe(9);
+  expect(engine.save().schemaVersion).toBe(SCHEMA_VERSION);
   expect(engine.city.shipments.report().inTransit).toBe(0);
   const before = engine.save();
   expect(() => engine.load({ ...before, freightRuntime: { ...before.freightRuntime, stocks: [[1, -1]] } })).toThrow('存檔物流資料損壞');

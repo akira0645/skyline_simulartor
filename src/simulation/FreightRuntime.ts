@@ -2,6 +2,8 @@ import { freight, freightFleetSize, type FreightRoute, type FreightSite } from '
 import { MAP_SIZE } from './TileMap';
 import { advancePathVehicle, roadPathKey, roadVehiclePose, type RoadVehicle } from './RoadVehicle';
 
+export const WAREHOUSE_CAPACITY = 240;
+export interface FreightWarehouse { id: number; capacity: number }
 const MONTH = 240000, DAY = 8000, PACE = 400;
 export const freightRuntimeKey = (route: FreightRoute) => route.lineId === undefined ? `auto:${route.from}:${route.to}` : `manual:${route.lineId}`;
 export interface ShippingRoute extends FreightRoute { key: string; stops: { to: number; index: number }[] }
@@ -38,15 +40,17 @@ export class FreightRuntime {
   private directNext = new Map<string, number>();
   private sources: readonly FreightSite[] = [];
   private shops: readonly FreightSite[] = [];
+  private warehouses: readonly FreightWarehouse[] = [];
   private shopAmounts = new Map<number, number>();
   private reserved = new Map<number, number>();
+  private outgoingReserved = new Map<number, number>();
 
-  sync(routes: ShippingRoute[], sources: readonly FreightSite[], shops: readonly FreightSite[]): void {
+  sync(routes: ShippingRoute[], sources: readonly FreightSite[], shops: readonly FreightSite[], warehouses: readonly FreightWarehouse[] = []): void {
     this.routes = routes.filter(route => route.path.length > 1 || route.lineId !== undefined); this.directRoutes = routes.filter(route => route.path.length === 1 && route.lineId === undefined);
     for (const key of this.directNext.keys()) if (!this.directRoutes.some(route => route.key === key)) this.directNext.delete(key);
-    this.sources = sources; this.shops = shops;
-    this.shopAmounts = new Map(shops.map(shop => [shop.id, shop.amount]));
-    const valid = new Set([...sources, ...shops].map(site => site.id));
+    this.sources = sources; this.shops = shops; this.warehouses = warehouses;
+    this.shopAmounts = new Map([...shops.map(shop => [shop.id, shop.amount] as const), ...warehouses.map(site => [site.id, site.capacity * 10] as const)]);
+    const valid = new Set([...sources, ...shops, ...warehouses].map(site => site.id));
     for (const id of this.stocks.keys()) if (!valid.has(id)) this.stocks.delete(id);
     const expected = new Map<string, ShippingRoute | undefined>();
     if (routes.some(route => route.lineId !== undefined)) {
@@ -60,7 +64,7 @@ export class FreightRuntime {
       if (keep) vehicle.route = route!;
       else {
         const cargo = cargoOf(vehicle);
-        if (sources.some(source => source.id === vehicle.route.from)) this.stocks.set(vehicle.route.from, this.stock(vehicle.route.from) + cargo);
+        if (sources.some(source => source.id === vehicle.route.from) || warehouses.some(site => site.id === vehicle.route.from)) this.stocks.set(vehicle.route.from, this.stock(vehicle.route.from) + cargo);
         if (cargo > 0) this.metric(vehicle.route.key).cancelled += cargo;
       }
       return !!keep;
@@ -74,8 +78,11 @@ export class FreightRuntime {
   }
 
   private rebuildReservations(): void {
-    this.reserved.clear();
-    for (const vehicle of this.vehicles) for (const cargo of vehicle.cargo) this.reserved.set(cargo.to, (this.reserved.get(cargo.to) ?? 0) + cargo.amount);
+    this.reserved.clear(); this.outgoingReserved.clear();
+    for (const vehicle of this.vehicles) for (const cargo of vehicle.cargo) {
+      this.reserved.set(cargo.to, (this.reserved.get(cargo.to) ?? 0) + cargo.amount);
+      this.outgoingReserved.set(vehicle.route.from, (this.outgoingReserved.get(vehicle.route.from) ?? 0) + cargo.amount);
+    }
   }
 
   get elapsedMs(): number { return this.time + this.pending; }
@@ -133,6 +140,7 @@ export class FreightRuntime {
       if (loaded < 0.05) return;
       this.stocks.set(route.from, this.stock(route.from) - loaded);
       vehicle.cargo = cargo;
+      this.outgoingReserved.set(route.from, (this.outgoingReserved.get(route.from) ?? 0) + loaded);
       for (const item of cargo) this.reserved.set(item.to, (this.reserved.get(item.to) ?? 0) + item.amount);
       vehicle.nextStop = 0; vehicle.activity = 'moving';
       vehicle.nextDeparture = this.time + DAY;
@@ -163,7 +171,7 @@ export class FreightRuntime {
       while (vehicle.nextStop < vehicle.route.stops.length && vehicle.route.stops[vehicle.nextStop].index <= vehicle.along + 1e-6) {
         const stop = vehicle.route.stops[vehicle.nextStop++];
         const cargo = vehicle.cargo.find(item => item.to === stop.to);
-        if (cargo) { this.stocks.set(stop.to, this.stock(stop.to) + cargo.amount); metric.delivered += cargo.amount; this.reserved.set(cargo.to, Math.max(0, (this.reserved.get(cargo.to) ?? 0) - cargo.amount)); cargo.amount = 0; }
+        if (cargo) { this.stocks.set(stop.to, this.stock(stop.to) + cargo.amount); metric.delivered += cargo.amount; this.outgoingReserved.set(vehicle.route.from, Math.max(0, (this.outgoingReserved.get(vehicle.route.from) ?? 0) - cargo.amount)); this.reserved.set(cargo.to, Math.max(0, (this.reserved.get(cargo.to) ?? 0) - cargo.amount)); cargo.amount = 0; }
       }
     }
     if (vehicle.route.path.length === 1) done = 'home';
@@ -171,15 +179,17 @@ export class FreightRuntime {
       // A route edited or a receiver removed never creates a delivery: undelivered cargo goes home.
       const leftover = cargoOf(vehicle);
       if (leftover) this.stocks.set(vehicle.route.from, this.stock(vehicle.route.from) + leftover);
+      this.outgoingReserved.set(vehicle.route.from, Math.max(0, (this.outgoingReserved.get(vehicle.route.from) ?? 0) - leftover));
       for (const item of vehicle.cargo) this.reserved.set(item.to, Math.max(0, (this.reserved.get(item.to) ?? 0) - item.amount));
       vehicle.cargo = []; vehicle.activity = 'working'; metric.completed++;
     }
   }
   private wanted(id: number): number {
-    return Math.max(0, (this.shopAmounts.get(id) ?? 0) / 10 - this.stock(id) - (this.reserved.get(id) ?? 0));
+    return Math.max(0, (this.shopAmounts.get(id) ?? 0) / 10 - this.stock(id) - (this.reserved.get(id) ?? 0) - (this.warehouses.some(site => site.id === id) ? this.outgoingReserved.get(id) ?? 0 : 0));
   }
   report() {
-    return { factories: this.sources.map(site => ({ ...site, stock: this.stock(site.id) })),
+    return { warehouses: this.warehouses.map(site => ({ ...site, stock: this.stock(site.id), incoming: this.reserved.get(site.id) ?? 0 })),
+      factories: this.sources.map(site => ({ ...site, stock: this.stock(site.id) })),
       shops: this.shops.map(site => ({ ...site, stock: this.stock(site.id), target: site.amount / 10,
         incoming: this.vehicles.reduce((sum, vehicle) => sum + vehicle.cargo.filter(cargo => cargo.to === site.id).reduce((n, cargo) => n + cargo.amount, 0), 0) })),
       current: [...this.current.values()].map(value => ({ ...value })), previous: this.previous.map(value => ({ ...value })),

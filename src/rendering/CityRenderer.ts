@@ -712,7 +712,7 @@ export class CityRenderer {
           visible: visible(at.x, at.y) && people.alpha > 0, cell: { x: Math.floor(at.x / TILE_SIZE), y: Math.floor(at.y / TILE_SIZE) },
           destination: nextDeliveryStop(run.path, stops, at.along, at.returning, cell => this.city.roadBeside(cell), MAP_SIZE, run.stops.map(stop => stop.index)),
           returning: at.returning, activity: at.activity, progress: at.progress, held: at.held,
-          plannedGoods: run.goods, plannedTrips: run.trucks, cargo: shipment.cargo.reduce((sum, item) => sum + item.amount, 0), capacity: 24 };
+          warehouseOrigin: this.city.map.at(run.from) === 'warehouse', plannedGoods: run.goods, plannedTrips: run.trucks, cargo: shipment.cargo.reduce((sum, item) => sum + item.amount, 0), capacity: 24 };
         vehicleFrames.push(info);
         if (shipment.activity !== 'working') {
           const car = { x: pose.x, y: pose.y, hx: pose.hx, hy: pose.hy, index: -10000 - vehicleFrames.length };

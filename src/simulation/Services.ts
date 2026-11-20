@@ -7,11 +7,11 @@ import type { Service } from './TileMap';
 export const services = {
   radius: { fire: 12, police: 12, school: 10, clinic: 10, market: 8, highschool: 14, hospital: 18,
     university: 22, museum: 16, stadium: 20, temple: 8, mall: 14, casino: 10, cinema: 8, parking: 3,
-    library: 8, pool: 8, ktv: 6, amusement: 16, gas: 10, cityhall: 0, bank: 10, culture: 6, coldstore: 0, square: 0, daycare: 4, recycling: 0, workshop: 0, community: 8, familyclinic: 8, eldercare: 10, memorial: 6, bakery: 5, florist: 5, cakeshop: 5 } satisfies Record<Service, number>,
+    library: 8, pool: 8, ktv: 6, amusement: 16, gas: 10, cityhall: 0, bank: 10, culture: 6, coldstore: 0, square: 0, daycare: 4, recycling: 0, workshop: 0, community: 8, familyclinic: 8, eldercare: 10, memorial: 6, bakery: 5, florist: 5, cakeshop: 5, warehouse: 0 } satisfies Record<Service, number>,
   /** What each service a tile is covered by adds to its land value. */
   value: { fire: 5, police: 6, school: 8, clinic: 6, market: 4, highschool: 5, hospital: 5,
     university: 6, museum: 6, stadium: 5, temple: 3, mall: 4, casino: -4, cinema: 3, parking: 0,
-    library: 4, pool: 3, ktv: -1, amusement: 4, gas: 0, cityhall: 0, bank: 0, culture: 2, coldstore: 0, square: 0, daycare: 0, recycling: 0, workshop: 0, community: 4, familyclinic: 5, eldercare: 4, memorial: 2, bakery: 2, florist: 3, cakeshop: 2 } satisfies Record<Service, number>,
+    library: 4, pool: 3, ktv: -1, amusement: 4, gas: 0, cityhall: 0, bank: 0, culture: 2, coldstore: 0, square: 0, daycare: 0, recycling: 0, workshop: 0, community: 4, familyclinic: 5, eldercare: 4, memorial: 2, bakery: 2, florist: 3, cakeshop: 2, warehouse: 0 } satisfies Record<Service, number>,
   /**
    * The city rank (how many population milestones it has passed) from which each may be
    * built. Bigger cities get bigger buildings.
@@ -81,7 +81,7 @@ export const SCHOOLS: readonly Service[] = ['school', 'highschool', 'university'
 
 export const SERVICES: readonly Service[] = ['fire', 'police', 'school', 'clinic',
   'market', 'highschool', 'hospital', 'university', 'museum', 'stadium', 'temple',
-  'mall', 'casino', 'cinema', 'parking', 'library', 'pool', 'ktv', 'amusement', 'gas', 'cityhall', 'bank', 'culture', 'coldstore', 'square', 'daycare', 'recycling', 'workshop', 'community', 'familyclinic', 'eldercare', 'memorial', 'bakery', 'florist', 'cakeshop'];
+  'mall', 'casino', 'cinema', 'parking', 'library', 'pool', 'ktv', 'amusement', 'gas', 'cityhall', 'bank', 'culture', 'coldstore', 'square', 'daycare', 'recycling', 'workshop', 'community', 'familyclinic', 'eldercare', 'memorial', 'bakery', 'florist', 'cakeshop', 'warehouse'];
 
 /** What else a building does for the tiles in its reach: a hospital is also a clinic. */
 export const alsoServes: Partial<Record<Service, Service>> = { hospital: 'clinic', familyclinic: 'clinic' };

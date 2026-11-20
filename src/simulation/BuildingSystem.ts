@@ -1,5 +1,5 @@
 import { roadVehiclePose } from './RoadVehicle';
-import { FreightRuntime, freightRuntimeKey } from './FreightRuntime';
+import { FreightRuntime, freightRuntimeKey, WAREHOUSE_CAPACITY, type FreightWarehouse } from './FreightRuntime';
 import { freightLines as freightRules, planFreightLines, type FreightLine, type FreightMode, type SavedFreightLine } from './FreightLines';
 import { LifeSystem, EMPTY_LIFE, type LifeResident } from './LifeSystem';
 import { planFacilityVisits, type CivicVisitContext } from './CivicVisits';
@@ -306,6 +306,7 @@ export class BuildingSystem {
   private freightShops: FreightSite[] = [];
   private readonly freightFlows = new Float32Array(MAP_SIZE ** 2);
   private freightRevision = -1;
+  private warehouses: FreightWarehouse[] = [];
   private readonly freightPaths = new Map<string, Cell[] | undefined>();
   /** Residents with a job and their average commute, by home. */
   private readonly employed = new Map<number, number>();
@@ -737,11 +738,18 @@ export class BuildingSystem {
         if (line.stops.length >= freightRules.maxStops) return { error: `每條最多 ${freightRules.maxStops} 個站點。` };
         line.stops.unshift(stop);
       }
+    } else if (tile === 'warehouse') {
+      if (!line.stops.length) line.stops.push(stop);
+      else if (this.map.at(line.stops[0]) === 'warehouse') line.stops[0] = stop;
+      else {
+        if (line.stops.length >= freightRules.maxStops) return { error: `每條最多 ${freightRules.maxStops} 個站點。` };
+        line.stops.push(stop);
+      }
     } else if (tile === 'commercial') {
-      if (!line.stops.length || this.map.at(line.stops[0]) !== 'industrial') return { error: '請先點工業區工廠作為出貨起點，再點商業區店鋪。' };
+      if (!line.stops.length || !['industrial', 'warehouse'].includes(this.map.at(line.stops[0]))) return { error: '請先點工廠或物流倉庫作為出貨起點，再點商業區店鋪。' };
       if (line.stops.length >= freightRules.maxStops) return { error: `每條最多 ${freightRules.maxStops} 個站點。` };
       line.stops.push(stop);
-    } else return { error: '物流站點請選工業區工廠或商業區店鋪。' };
+    } else return { error: '物流站點請選工廠、物流倉庫或商業區店鋪。' };
     this.refresh();
     return { added: true };
   }
@@ -2130,7 +2138,7 @@ export class BuildingSystem {
       }
       const running = this.doorOf(cell) !== undefined;
       const sight = services.visitors[tile];
-      return { tile, reaching: running ? reaching : 0, radius, running,
+      return { warehouseStock: tile === 'warehouse' ? this.shipments.stock(id) : undefined, warehouseCapacity: tile === 'warehouse' ? WAREHOUSE_CAPACITY : undefined, tile, reaching: running ? reaching : 0, radius, running,
         /** What a sight brings in a month, and how many a market lets do their shopping. */
         earns: sight && running ? this.sightIncome(id, tile) : undefined,
         parked: sight ? this.parkingBy(id, tile) : undefined,
@@ -2728,7 +2736,7 @@ export class BuildingSystem {
         cursor = Math.max(cursor, index);
         return { to, index: Math.max(0, index) };
       }) };
-    }), this.freightSources, this.freightShops);
+    }), this.freightSources, this.freightShops, this.warehouses);
   }
 
   advanceFreight(elapsedMs: number): void {
@@ -2748,6 +2756,8 @@ export class BuildingSystem {
     if (this.freightRevision !== this.map.layoutRevision) {
       this.freightRevision = this.map.layoutRevision;
       this.freightPaths.clear();
+      this.warehouses = [];
+      for (let id = 0; id < MAP_SIZE ** 2; id++) if (this.map.at(id) === 'warehouse') this.warehouses.push({ id, capacity: WAREHOUSE_CAPACITY });
     }
     const sources: { id: number; amount: number }[] = [];
     const shops: { id: number; amount: number }[] = [];
@@ -2769,8 +2779,9 @@ export class BuildingSystem {
     };
     if (this.freightMode === 'manual') {
       const planned = planFreightLines(this.freightLines, sources, shops, id => this.map.at(id) === 'industrial' ? 'factory' :
-        this.map.at(id) === 'commercial' ? 'shop' : undefined, path,
-        route => route.reduce((sum, cell) => sum + tileMinutes(this.flows[indexOf(cell)], this.roadAt(indexOf(cell))), 0));
+        this.map.at(id) === 'commercial' ? 'shop' : this.map.at(id) === 'warehouse' ? 'warehouse' : undefined, path,
+        route => route.reduce((sum, cell) => sum + tileMinutes(this.flows[indexOf(cell)], this.roadAt(indexOf(cell))), 0),
+        this.warehouses.map(site => ({ ...site, stock: this.shipments.stock(site.id) })));
       this.freightPlans = planned.lines;
       this.freight = planned.routes;
     } else {

@@ -1,0 +1,35 @@
+{
+  "artSource": "code",
+  "frameSize": 96,
+  "directions": 16,
+  "density": 4,
+  "pivot": [
+    48,
+    56
+  ],
+  "colours": [
+    "5bb6ce",
+    "d87856",
+    "e6c15a",
+    "8fbf6a",
+    "d6d9de",
+    "2b2f3a",
+    "8a1f2b",
+    "f4f6f8",
+    "f2c21f"
+  ],
+  "sizes": [
+    [
+      10,
+      6
+    ],
+    [
+      12,
+      6
+    ],
+    [
+      13,
+      7
+    ]
+  ]
+}

@@ -1,0 +1,899 @@
+{
+  "verdict": "PASS",
+  "score": 87,
+  "ship_ready": true,
+  "automated_score": 80.6047,
+  "human_adjusted_score": 87,
+  "blocking_issues": [],
+  "soft_issues": [
+    "Native hatchback side-view hue rotation is 5.13 degrees, below the checker target of 30; intentional close-hue teal/blue materials remain readable.",
+    "Tree retains some rounded lobe repetition, though merged seams improve the large canopy mass.",
+    "Angled sprite-stack vehicles retain small stair steps at windshield/roof edges; they read coherently at scene scale."
+  ],
+  "false_positives": [
+    "All 16 pillow-shading detections were inspected: six back-facing person frames, hatchback views 0/2/3, truck side view, five buildings, and tree. None shows a verified concentric dark-border-to-bright-center shading ramp.",
+    "Six person doublies warnings identify an intentional 2px dark leg/boot cluster, not accidental doubled contours."
+  ],
+  "reasoning": "Reviewed all 43 native images visually in a nearest-neighbor enlarged inspection sheet, inspected the updated building contact sheet and native tree, and checked composition in the actual shared Pixi scene screenshot. Re-ran quality_check.py independently on every native input; all 43 summaries match the supplied report. Every flagged result is retained and adjudicated individually below. Updated reflections and canopy seams improve the hand-drawn feel, native sprites remain crisp, and the scene shows correctly transparent silhouettes without opaque sprite rectangles.",
+  "specific_fixes": [],
+  "optional_polish": [
+    "If refining the canopy further, consolidate a few similarly sized leaf lobes into an asymmetric larger mass while preserving the darker right side.",
+    "Only consider a warmer paint highlight/cooler paint shadow if stronger side-view metal contrast is desired; do not alter the palette merely to clear the hue warning."
+  ],
+  "review_scope": {
+    "native_frames": 43,
+    "flagged_results": 20,
+    "independently_rechecked": 43,
+    "summaries_match_supplied_report": true,
+    "maximum_native_colors": 25,
+    "maximum_orphan_percent": 1.421,
+    "maximum_doublies_per_frame": 1,
+    "limitation": "Still-frame review covers every native frame and the provided real-scene screenshot; does not certify temporal playback timing from a still image.",
+    "artifacts": [
+      "work/car-preview/handmade-street-6x.png",
+      "docs/design-assets/street/buildings-contact.png",
+      "docs/design-assets/street/tree-source.png",
+      "docs/design-assets/handmade/quality-report.json",
+      "work/reviewer-native-all.png",
+      "work/reviewer-native-recheck.json"
+    ]
+  },
+  "warning_adjudications": [
+    {
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\people\\1-0.png",
+      "automated_score": 92,
+      "issues_retained": [],
+      "warnings_retained": [
+        "1 doublies — review"
+      ],
+      "adjudication": [
+        "False positive: x15,y40-43 identifies the intentional two-pixel-wide dark trouser/boot silhouette. It is a filled limb cluster continuous with the boot, not an accidental pair of contour lines. Seen in front/back neutral and passing frames."
+      ],
+      "blocking": false
+    },
+    {
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\people\\1-3.png",
+      "automated_score": 92,
+      "issues_retained": [],
+      "warnings_retained": [
+        "1 doublies — review"
+      ],
+      "adjudication": [
+        "False positive: x15,y40-43 identifies the intentional two-pixel-wide dark trouser/boot silhouette. It is a filled limb cluster continuous with the boot, not an accidental pair of contour lines. Seen in front/back neutral and passing frames."
+      ],
+      "blocking": false
+    },
+    {
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\people\\1-5.png",
+      "automated_score": 92,
+      "issues_retained": [],
+      "warnings_retained": [
+        "1 doublies — review"
+      ],
+      "adjudication": [
+        "False positive: x15,y40-43 identifies the intentional two-pixel-wide dark trouser/boot silhouette. It is a filled limb cluster continuous with the boot, not an accidental pair of contour lines. Seen in front/back neutral and passing frames."
+      ],
+      "blocking": false
+    },
+    {
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\people\\3-0.png",
+      "automated_score": 50,
+      "issues_retained": [
+        "Pillow shading detected — refactor with explicit light direction"
+      ],
+      "warnings_retained": [
+        "1 doublies — review"
+      ],
+      "adjudication": [
+        "False positive: the back of the head is a flat dark hair mass, replacing the bright front-facing skin. This reduces whole-image quadrant contrast; the shirt still has a lighter left panel and darker right sleeve, without a concentric center highlight.",
+        "False positive: x15,y40-43 identifies the intentional two-pixel-wide dark trouser/boot silhouette. It is a filled limb cluster continuous with the boot, not an accidental pair of contour lines. Seen in front/back neutral and passing frames."
+      ],
+      "blocking": false
+    },
+    {
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\people\\3-1.png",
+      "automated_score": 50,
+      "issues_retained": [
+        "Pillow shading detected — refactor with explicit light direction"
+      ],
+      "warnings_retained": [],
+      "adjudication": [
+        "False positive: the back of the head is a flat dark hair mass, replacing the bright front-facing skin. This reduces whole-image quadrant contrast; the shirt still has a lighter left panel and darker right sleeve, without a concentric center highlight."
+      ],
+      "blocking": false
+    },
+    {
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\people\\3-2.png",
+      "automated_score": 50,
+      "issues_retained": [
+        "Pillow shading detected — refactor with explicit light direction"
+      ],
+      "warnings_retained": [],
+      "adjudication": [
+        "False positive: the back of the head is a flat dark hair mass, replacing the bright front-facing skin. This reduces whole-image quadrant contrast; the shirt still has a lighter left panel and darker right sleeve, without a concentric center highlight."
+      ],
+      "blocking": false
+    },
+    {
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\people\\3-3.png",
+      "automated_score": 50,
+      "issues_retained": [
+        "Pillow shading detected — refactor with explicit light direction"
+      ],
+      "warnings_retained": [
+        "1 doublies — review"
+      ],
+      "adjudication": [
+        "False positive: the back of the head is a flat dark hair mass, replacing the bright front-facing skin. This reduces whole-image quadrant contrast; the shirt still has a lighter left panel and darker right sleeve, without a concentric center highlight.",
+        "False positive: x15,y40-43 identifies the intentional two-pixel-wide dark trouser/boot silhouette. It is a filled limb cluster continuous with the boot, not an accidental pair of contour lines. Seen in front/back neutral and passing frames."
+      ],
+      "blocking": false
+    },
+    {
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\people\\3-5.png",
+      "automated_score": 50,
+      "issues_retained": [
+        "Pillow shading detected — refactor with explicit light direction"
+      ],
+      "warnings_retained": [
+        "1 doublies — review"
+      ],
+      "adjudication": [
+        "False positive: the back of the head is a flat dark hair mass, replacing the bright front-facing skin. This reduces whole-image quadrant contrast; the shirt still has a lighter left panel and darker right sleeve, without a concentric center highlight.",
+        "False positive: x15,y40-43 identifies the intentional two-pixel-wide dark trouser/boot silhouette. It is a filled limb cluster continuous with the boot, not an accidental pair of contour lines. Seen in front/back neutral and passing frames."
+      ],
+      "blocking": false
+    },
+    {
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\people\\3-6.png",
+      "automated_score": 50,
+      "issues_retained": [
+        "Pillow shading detected — refactor with explicit light direction"
+      ],
+      "warnings_retained": [],
+      "adjudication": [
+        "False positive: the back of the head is a flat dark hair mass, replacing the bright front-facing skin. This reduces whole-image quadrant contrast; the shirt still has a lighter left panel and darker right sleeve, without a concentric center highlight."
+      ],
+      "blocking": false
+    },
+    {
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\hatchback-view-0.png",
+      "automated_score": 50,
+      "issues_retained": [
+        "Pillow shading detected — refactor with explicit light direction"
+      ],
+      "warnings_retained": [],
+      "adjudication": [
+        "False positive: flat teal body planes and flat blue glass have sharp boundaries. Glass glint is at upper left, lower bumper/wheels are dark structural parts. Bright interior versus dark contour is not a radial shading ramp."
+      ],
+      "blocking": false
+    },
+    {
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\hatchback-view-1.png",
+      "automated_score": 90,
+      "issues_retained": [],
+      "warnings_retained": [
+        "Hue rotation 5 degrees — should be >= 30"
+      ],
+      "adjudication": [
+        "Retained soft warning: native side view hue rotation is 5.13 degrees. Teal paint and blue glass intentionally share a close hue family; luminance separates roof, window, lower body and tires. No palette expansion or recoloring is required for readability."
+      ],
+      "blocking": false
+    },
+    {
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\hatchback-view-2.png",
+      "automated_score": 50,
+      "issues_retained": [
+        "Pillow shading detected — refactor with explicit light direction"
+      ],
+      "warnings_retained": [],
+      "adjudication": [
+        "False positive: flat teal body planes and flat blue glass have sharp boundaries. Glass glint is at upper left, lower bumper/wheels are dark structural parts. Bright interior versus dark contour is not a radial shading ramp."
+      ],
+      "blocking": false
+    },
+    {
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\hatchback-view-3.png",
+      "automated_score": 50,
+      "issues_retained": [
+        "Pillow shading detected — refactor with explicit light direction"
+      ],
+      "warnings_retained": [],
+      "adjudication": [
+        "False positive: flat teal body planes and flat blue glass have sharp boundaries. Glass glint is at upper left, lower bumper/wheels are dark structural parts. Bright interior versus dark contour is not a radial shading ramp."
+      ],
+      "blocking": false
+    },
+    {
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\truck-view-1.png",
+      "automated_score": 50,
+      "issues_retained": [
+        "Pillow shading detected — refactor with explicit light direction"
+      ],
+      "warnings_retained": [],
+      "adjudication": [
+        "False positive: flat light cargo-box material dominates both image quadrants while blue cab and dark tires/outlines lower boundary luminance. Box has a brighter upper rim and lower shadow edge, with no glowing center."
+      ],
+      "blocking": false
+    },
+    {
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\street\\house-source.png",
+      "automated_score": 50,
+      "issues_retained": [
+        "Pillow shading detected — refactor with explicit light direction"
+      ],
+      "warnings_retained": [],
+      "adjudication": [
+        "False positive: dark architectural contour/roof versus light facade raises interior luminance. Flat wall materials, upper trim highlights, eave/sill shadows, and darker right trim remain visible; no concentric shading ramp."
+      ],
+      "blocking": false
+    },
+    {
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\street\\apartment-source.png",
+      "automated_score": 50,
+      "issues_retained": [
+        "Pillow shading detected — refactor with explicit light direction"
+      ],
+      "warnings_retained": [],
+      "adjudication": [
+        "False positive: dark architectural contour/roof versus light facade raises interior luminance. Flat wall materials, upper trim highlights, eave/sill shadows, and darker right trim remain visible; no concentric shading ramp."
+      ],
+      "blocking": false
+    },
+    {
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\street\\office-source.png",
+      "automated_score": 50,
+      "issues_retained": [
+        "Pillow shading detected — refactor with explicit light direction"
+      ],
+      "warnings_retained": [],
+      "adjudication": [
+        "False positive: dark architectural contour/roof versus light facade raises interior luminance. Flat wall materials, upper trim highlights, eave/sill shadows, and darker right trim remain visible; no concentric shading ramp."
+      ],
+      "blocking": false
+    },
+    {
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\street\\factory-source.png",
+      "automated_score": 50,
+      "issues_retained": [
+        "Pillow shading detected — refactor with explicit light direction"
+      ],
+      "warnings_retained": [],
+      "adjudication": [
+        "False positive: dark architectural contour/roof versus light facade raises interior luminance. Flat wall materials, upper trim highlights, eave/sill shadows, and darker right trim remain visible; no concentric shading ramp."
+      ],
+      "blocking": false
+    },
+    {
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\street\\school-source.png",
+      "automated_score": 50,
+      "issues_retained": [
+        "Pillow shading detected — refactor with explicit light direction"
+      ],
+      "warnings_retained": [],
+      "adjudication": [
+        "False positive: dark architectural contour/roof versus light facade raises interior luminance. Flat wall materials, upper trim highlights, eave/sill shadows, and darker right trim remain visible; no concentric shading ramp."
+      ],
+      "blocking": false
+    },
+    {
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\street\\tree-source.png",
+      "automated_score": 50,
+      "issues_retained": [
+        "Pillow shading detected — refactor with explicit light direction"
+      ],
+      "warnings_retained": [],
+      "adjudication": [
+        "False positive: canopy retains brighter upper-left foliage, darker right/lower silhouette, and lighter left trunk edge. Merging leaf seams lowered the measured asymmetry to 17.72, but did not introduce a concentric lighting ramp."
+      ],
+      "blocking": false
+    }
+  ],
+  "automated_native_results": [
+    {
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\people\\0-0.png",
+      "summary": {
+        "score": 100,
+        "verdict": "ship",
+        "issues": [],
+        "warnings": []
+      },
+      "colors": 12,
+      "orphans": 4,
+      "orphan_ratio": 0.007633587786259542,
+      "doublies": 0
+    },
+    {
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\people\\0-1.png",
+      "summary": {
+        "score": 100,
+        "verdict": "ship",
+        "issues": [],
+        "warnings": []
+      },
+      "colors": 12,
+      "orphans": 3,
+      "orphan_ratio": 0.005405405405405406,
+      "doublies": 0
+    },
+    {
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\people\\0-2.png",
+      "summary": {
+        "score": 100,
+        "verdict": "ship",
+        "issues": [],
+        "warnings": []
+      },
+      "colors": 12,
+      "orphans": 3,
+      "orphan_ratio": 0.005703422053231939,
+      "doublies": 0
+    },
+    {
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\people\\0-3.png",
+      "summary": {
+        "score": 100,
+        "verdict": "ship",
+        "issues": [],
+        "warnings": []
+      },
+      "colors": 12,
+      "orphans": 4,
+      "orphan_ratio": 0.007662835249042145,
+      "doublies": 0
+    },
+    {
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\people\\0-4.png",
+      "summary": {
+        "score": 100,
+        "verdict": "ship",
+        "issues": [],
+        "warnings": []
+      },
+      "colors": 12,
+      "orphans": 3,
+      "orphan_ratio": 0.0053285968028419185,
+      "doublies": 0
+    },
+    {
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\people\\0-5.png",
+      "summary": {
+        "score": 100,
+        "verdict": "ship",
+        "issues": [],
+        "warnings": []
+      },
+      "colors": 12,
+      "orphans": 5,
+      "orphan_ratio": 0.009708737864077669,
+      "doublies": 0
+    },
+    {
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\people\\0-6.png",
+      "summary": {
+        "score": 100,
+        "verdict": "ship",
+        "issues": [],
+        "warnings": []
+      },
+      "colors": 12,
+      "orphans": 3,
+      "orphan_ratio": 0.0056179775280898875,
+      "doublies": 0
+    },
+    {
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\people\\1-0.png",
+      "summary": {
+        "score": 92,
+        "verdict": "ship",
+        "issues": [],
+        "warnings": [
+          "1 doublies — review"
+        ]
+      },
+      "colors": 13,
+      "orphans": 3,
+      "orphan_ratio": 0.005405405405405406,
+      "doublies": 1
+    },
+    {
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\people\\1-1.png",
+      "summary": {
+        "score": 100,
+        "verdict": "ship",
+        "issues": [],
+        "warnings": []
+      },
+      "colors": 13,
+      "orphans": 2,
+      "orphan_ratio": 0.0037105751391465678,
+      "doublies": 0
+    },
+    {
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\people\\1-2.png",
+      "summary": {
+        "score": 100,
+        "verdict": "ship",
+        "issues": [],
+        "warnings": []
+      },
+      "colors": 13,
+      "orphans": 2,
+      "orphan_ratio": 0.0037243947858473,
+      "doublies": 0
+    },
+    {
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\people\\1-3.png",
+      "summary": {
+        "score": 92,
+        "verdict": "ship",
+        "issues": [],
+        "warnings": [
+          "1 doublies — review"
+        ]
+      },
+      "colors": 13,
+      "orphans": 3,
+      "orphan_ratio": 0.005405405405405406,
+      "doublies": 1
+    },
+    {
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\people\\1-4.png",
+      "summary": {
+        "score": 100,
+        "verdict": "ship",
+        "issues": [],
+        "warnings": []
+      },
+      "colors": 13,
+      "orphans": 2,
+      "orphan_ratio": 0.0035335689045936395,
+      "doublies": 0
+    },
+    {
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\people\\1-5.png",
+      "summary": {
+        "score": 92,
+        "verdict": "ship",
+        "issues": [],
+        "warnings": [
+          "1 doublies — review"
+        ]
+      },
+      "colors": 13,
+      "orphans": 3,
+      "orphan_ratio": 0.005504587155963303,
+      "doublies": 1
+    },
+    {
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\people\\1-6.png",
+      "summary": {
+        "score": 100,
+        "verdict": "ship",
+        "issues": [],
+        "warnings": []
+      },
+      "colors": 13,
+      "orphans": 2,
+      "orphan_ratio": 0.003656307129798903,
+      "doublies": 0
+    },
+    {
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\people\\2-0.png",
+      "summary": {
+        "score": 100,
+        "verdict": "ship",
+        "issues": [],
+        "warnings": []
+      },
+      "colors": 12,
+      "orphans": 4,
+      "orphan_ratio": 0.007633587786259542,
+      "doublies": 0
+    },
+    {
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\people\\2-1.png",
+      "summary": {
+        "score": 100,
+        "verdict": "ship",
+        "issues": [],
+        "warnings": []
+      },
+      "colors": 12,
+      "orphans": 3,
+      "orphan_ratio": 0.005405405405405406,
+      "doublies": 0
+    },
+    {
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\people\\2-2.png",
+      "summary": {
+        "score": 100,
+        "verdict": "ship",
+        "issues": [],
+        "warnings": []
+      },
+      "colors": 12,
+      "orphans": 3,
+      "orphan_ratio": 0.005703422053231939,
+      "doublies": 0
+    },
+    {
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\people\\2-3.png",
+      "summary": {
+        "score": 100,
+        "verdict": "ship",
+        "issues": [],
+        "warnings": []
+      },
+      "colors": 12,
+      "orphans": 4,
+      "orphan_ratio": 0.007662835249042145,
+      "doublies": 0
+    },
+    {
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\people\\2-4.png",
+      "summary": {
+        "score": 100,
+        "verdict": "ship",
+        "issues": [],
+        "warnings": []
+      },
+      "colors": 12,
+      "orphans": 3,
+      "orphan_ratio": 0.0053285968028419185,
+      "doublies": 0
+    },
+    {
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\people\\2-5.png",
+      "summary": {
+        "score": 100,
+        "verdict": "ship",
+        "issues": [],
+        "warnings": []
+      },
+      "colors": 12,
+      "orphans": 5,
+      "orphan_ratio": 0.009708737864077669,
+      "doublies": 0
+    },
+    {
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\people\\2-6.png",
+      "summary": {
+        "score": 100,
+        "verdict": "ship",
+        "issues": [],
+        "warnings": []
+      },
+      "colors": 12,
+      "orphans": 3,
+      "orphan_ratio": 0.0056179775280898875,
+      "doublies": 0
+    },
+    {
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\people\\3-0.png",
+      "summary": {
+        "score": 50,
+        "verdict": "redesign",
+        "issues": [
+          "Pillow shading detected — refactor with explicit light direction"
+        ],
+        "warnings": [
+          "1 doublies — review"
+        ]
+      },
+      "colors": 12,
+      "orphans": 3,
+      "orphan_ratio": 0.005405405405405406,
+      "doublies": 1
+    },
+    {
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\people\\3-1.png",
+      "summary": {
+        "score": 50,
+        "verdict": "redesign",
+        "issues": [
+          "Pillow shading detected — refactor with explicit light direction"
+        ],
+        "warnings": []
+      },
+      "colors": 12,
+      "orphans": 2,
+      "orphan_ratio": 0.0037105751391465678,
+      "doublies": 0
+    },
+    {
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\people\\3-2.png",
+      "summary": {
+        "score": 50,
+        "verdict": "redesign",
+        "issues": [
+          "Pillow shading detected — refactor with explicit light direction"
+        ],
+        "warnings": []
+      },
+      "colors": 12,
+      "orphans": 2,
+      "orphan_ratio": 0.0037243947858473,
+      "doublies": 0
+    },
+    {
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\people\\3-3.png",
+      "summary": {
+        "score": 50,
+        "verdict": "redesign",
+        "issues": [
+          "Pillow shading detected — refactor with explicit light direction"
+        ],
+        "warnings": [
+          "1 doublies — review"
+        ]
+      },
+      "colors": 12,
+      "orphans": 3,
+      "orphan_ratio": 0.005405405405405406,
+      "doublies": 1
+    },
+    {
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\people\\3-4.png",
+      "summary": {
+        "score": 100,
+        "verdict": "ship",
+        "issues": [],
+        "warnings": []
+      },
+      "colors": 12,
+      "orphans": 2,
+      "orphan_ratio": 0.0035335689045936395,
+      "doublies": 0
+    },
+    {
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\people\\3-5.png",
+      "summary": {
+        "score": 50,
+        "verdict": "redesign",
+        "issues": [
+          "Pillow shading detected — refactor with explicit light direction"
+        ],
+        "warnings": [
+          "1 doublies — review"
+        ]
+      },
+      "colors": 12,
+      "orphans": 3,
+      "orphan_ratio": 0.005504587155963303,
+      "doublies": 1
+    },
+    {
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\people\\3-6.png",
+      "summary": {
+        "score": 50,
+        "verdict": "redesign",
+        "issues": [
+          "Pillow shading detected — refactor with explicit light direction"
+        ],
+        "warnings": []
+      },
+      "colors": 12,
+      "orphans": 2,
+      "orphan_ratio": 0.003656307129798903,
+      "doublies": 0
+    },
+    {
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\hatchback-view-0.png",
+      "summary": {
+        "score": 50,
+        "verdict": "redesign",
+        "issues": [
+          "Pillow shading detected — refactor with explicit light direction"
+        ],
+        "warnings": []
+      },
+      "colors": 10,
+      "orphans": 0,
+      "orphan_ratio": 0.0,
+      "doublies": 0
+    },
+    {
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\hatchback-view-1.png",
+      "summary": {
+        "score": 90,
+        "verdict": "ship",
+        "issues": [],
+        "warnings": [
+          "Hue rotation 5 degrees — should be >= 30"
+        ]
+      },
+      "colors": 9,
+      "orphans": 0,
+      "orphan_ratio": 0.0,
+      "doublies": 0
+    },
+    {
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\hatchback-view-2.png",
+      "summary": {
+        "score": 50,
+        "verdict": "redesign",
+        "issues": [
+          "Pillow shading detected — refactor with explicit light direction"
+        ],
+        "warnings": []
+      },
+      "colors": 7,
+      "orphans": 3,
+      "orphan_ratio": 0.008823529411764706,
+      "doublies": 0
+    },
+    {
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\hatchback-view-3.png",
+      "summary": {
+        "score": 50,
+        "verdict": "redesign",
+        "issues": [
+          "Pillow shading detected — refactor with explicit light direction"
+        ],
+        "warnings": []
+      },
+      "colors": 7,
+      "orphans": 3,
+      "orphan_ratio": 0.008823529411764706,
+      "doublies": 0
+    },
+    {
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\truck-view-0.png",
+      "summary": {
+        "score": 100,
+        "verdict": "ship",
+        "issues": [],
+        "warnings": []
+      },
+      "colors": 11,
+      "orphans": 1,
+      "orphan_ratio": 0.0006849315068493151,
+      "doublies": 0
+    },
+    {
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\truck-view-1.png",
+      "summary": {
+        "score": 50,
+        "verdict": "redesign",
+        "issues": [
+          "Pillow shading detected — refactor with explicit light direction"
+        ],
+        "warnings": []
+      },
+      "colors": 9,
+      "orphans": 0,
+      "orphan_ratio": 0.0,
+      "doublies": 0
+    },
+    {
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\truck-view-2.png",
+      "summary": {
+        "score": 100,
+        "verdict": "ship",
+        "issues": [],
+        "warnings": []
+      },
+      "colors": 10,
+      "orphans": 1,
+      "orphan_ratio": 0.001736111111111111,
+      "doublies": 0
+    },
+    {
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\truck-view-3.png",
+      "summary": {
+        "score": 100,
+        "verdict": "ship",
+        "issues": [],
+        "warnings": []
+      },
+      "colors": 6,
+      "orphans": 1,
+      "orphan_ratio": 0.0018867924528301887,
+      "doublies": 0
+    },
+    {
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\street\\house-source.png",
+      "summary": {
+        "score": 50,
+        "verdict": "redesign",
+        "issues": [
+          "Pillow shading detected — refactor with explicit light direction"
+        ],
+        "warnings": []
+      },
+      "colors": 25,
+      "orphans": 19,
+      "orphan_ratio": 0.006711409395973154,
+      "doublies": 0
+    },
+    {
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\street\\apartment-source.png",
+      "summary": {
+        "score": 50,
+        "verdict": "redesign",
+        "issues": [
+          "Pillow shading detected — refactor with explicit light direction"
+        ],
+        "warnings": []
+      },
+      "colors": 24,
+      "orphans": 33,
+      "orphan_ratio": 0.011178861788617886,
+      "doublies": 0
+    },
+    {
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\street\\shop-source.png",
+      "summary": {
+        "score": 100,
+        "verdict": "ship",
+        "issues": [],
+        "warnings": []
+      },
+      "colors": 25,
+      "orphans": 10,
+      "orphan_ratio": 0.0034118048447628795,
+      "doublies": 0
+    },
+    {
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\street\\office-source.png",
+      "summary": {
+        "score": 50,
+        "verdict": "redesign",
+        "issues": [
+          "Pillow shading detected — refactor with explicit light direction"
+        ],
+        "warnings": []
+      },
+      "colors": 15,
+      "orphans": 42,
+      "orphan_ratio": 0.014208389715832206,
+      "doublies": 0
+    },
+    {
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\street\\factory-source.png",
+      "summary": {
+        "score": 50,
+        "verdict": "redesign",
+        "issues": [
+          "Pillow shading detected — refactor with explicit light direction"
+        ],
+        "warnings": []
+      },
+      "colors": 21,
+      "orphans": 12,
+      "orphan_ratio": 0.00446594715295869,
+      "doublies": 0
+    },
+    {
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\street\\school-source.png",
+      "summary": {
+        "score": 50,
+        "verdict": "redesign",
+        "issues": [
+          "Pillow shading detected — refactor with explicit light direction"
+        ],
+        "warnings": []
+      },
+      "colors": 24,
+      "orphans": 16,
+      "orphan_ratio": 0.005728607232366631,
+      "doublies": 0
+    },
+    {
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\street\\tree-source.png",
+      "summary": {
+        "score": 50,
+        "verdict": "redesign",
+        "issues": [
+          "Pillow shading detected — refactor with explicit light direction"
+        ],
+        "warnings": []
+      },
+      "colors": 8,
+      "orphans": 14,
+      "orphan_ratio": 0.003838771593090211,
+      "doublies": 0
+    }
+  ]
+}

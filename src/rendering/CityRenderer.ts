@@ -10,6 +10,15 @@ import sfUrl from '../assets/city-sf.png';
 import californiaUrl from '../assets/city-california.png';
 import newyorkUrl from '../assets/city-newyork.png';
 import tilesUrl from '../assets/tiles.png';
+import carsUrl from '../assets/vehicles/cars.png';
+import cityDetailUrl from '../assets/buildings/city-detail.png';
+import sfDetailUrl from '../assets/buildings/city-sf-detail.png';
+import californiaDetailUrl from '../assets/buildings/city-california-detail.png';
+import newyorkDetailUrl from '../assets/buildings/city-newyork-detail.png';
+import { CarSprites } from './CarSprites';
+import { carHeading } from './carAppearance';
+import { StreetArt } from './StreetArt';
+import { WalkerMotion } from './WalkerMotion';
 import { footprint, isBig, isFacility, isRoad, isService, MAP_SIZE, TILE_SIZE, type Cell } from '../simulation/TileMap';
 import { services } from '../simulation/Services';
 import { transit } from '../simulation/Transit';
@@ -93,24 +102,32 @@ export class CityRenderer {
     private readonly hour: () => number, private readonly overlay: () => Overlay, private readonly advance?: () => void) {}
   private app?: Application;
   private observer?: ResizeObserver;
+  private carSprites?: CarSprites;
+  private streetArt?: StreetArt;
 
   async mount(host: HTMLElement, signal: AbortSignal, getTool: () => Tool,
     report: (message: string) => void, inspect: (cell: Cell) => void): Promise<void> {
     const app = new Application();
     await app.init({ width: host.clientWidth, height: host.clientHeight,
       background: '#1d1f24', antialias: false, autoStart: false });
-    const sheets = await Promise.all([tilesUrl, cityUrl, sfUrl, californiaUrl, newyorkUrl].map(url => Assets.load<Texture>(url)))
+    const [sheets, streetArt] = await Promise.all([
+      Promise.all([tilesUrl, cityUrl, sfUrl, californiaUrl, newyorkUrl, carsUrl,
+        cityDetailUrl, sfDetailUrl, californiaDetailUrl, newyorkDetailUrl].map(url => Assets.load<Texture>(url))),
+      StreetArt.load()])
       .catch((error: unknown) => {
         app.destroy(true);
         throw error;
       });
     for (const sheet of sheets) sheet.source.scaleMode = 'nearest';
     if (signal.aborted) {
+      streetArt.destroy();
       app.destroy(true);
       return;
     }
 
     this.app = app;
+    this.streetArt = streetArt;
+    const carSprites = this.carSprites = new CarSprites(sheets[5].source);
     const map = this.city.map;
     const camera = new Camera();
     // The panels float over the map: leave room to drag any corner out from under them, and
@@ -128,7 +145,9 @@ export class CityRenderer {
       camera.pan(0, 0, app.screen.width, app.screen.height);
     };
     frameCity();
-    const tiles = new TileRenderer(sheets[0].source, { classic: sheets[1].source, sf: sheets[2].source, california: sheets[3].source, newyork: sheets[4].source });
+    const tiles = new TileRenderer(sheets[0].source,
+      { classic: sheets[1].source, sf: sheets[2].source, california: sheets[3].source, newyork: sheets[4].source },
+      { classic: sheets[6].source, sf: sheets[7].source, california: sheets[8].source, newyork: sheets[9].source }, streetArt);
     const canvas = app.canvas;
     app.stage.addChild(tiles.view);
     const landGrid = new Graphics();
@@ -238,11 +257,16 @@ export class CityRenderer {
       const sy = y * camera.scale + camera.y;
       return sx >= -margin && sy >= -margin && sx <= app.screen.width + margin && sy <= app.screen.height + margin;
     };
-    const drawCar = (cx: number, cy: number, vertical: boolean, index: number, tier: number) => {
+    const drawCar = (cx: number, cy: number, vertical: boolean, index: number, tier: number,
+      heading = vertical ? Math.PI / 2 : 0) => {
       if (!visible(cx, cy)) return;
       if (streetOpacity() === 0) return;
       if (camera.scale < 0.85) {
         people.rect(Math.round(cx) - 2, Math.round(cy) - 2, vertical ? 3 : 6, vertical ? 6 : 3).fill(0xc0c5c9);
+        return;
+      }
+      if (tier >= 2 && camera.scale >= DETAIL_ZOOM) {
+        carSprites.draw(people, cx, cy, heading, tier, index, this.city.theme);
         return;
       }
       const [long, wide] = SIZES[tier];
@@ -298,7 +322,9 @@ export class CityRenderer {
     const walkForward = (roads: readonly Cell[], origin: Cell, along: number, advance: number, returning: boolean) =>
       advancePedestrian(roads, origin, along, advance, returning, (entry, vertical) =>
         !junctions.has(entry.y * MAP_SIZE + entry.x) || greenUpright(entry.x, entry.y) === vertical);
-    const drawWalker = (cx: number, cy: number, index: number) => {
+    const walkerMotion = new WalkerMotion();
+    const drawWalker = (cx: number, cy: number, index: number, heading = Math.PI / 2, actorKey = `person:${index}`) => {
+      const motion = walkerMotion.update(actorKey, cx, cy, animationTime, heading);
       if (!visible(cx, cy)) return;
       if (streetOpacity() === 0) return;
       if (camera.scale < 0.85) {
@@ -308,12 +334,23 @@ export class CityRenderer {
       // A person is small beside a house: three pixels across and nine tall.
       const x = Math.round(cx) - 1;
       const y = Math.round(cy) - 4;
+      if (camera.scale >= DETAIL_ZOOM) {
+        streetArt.drawPerson(people, cx, cy, motion.heading, index, motion.distance, motion.walking);
+        if (wet) {
+          const colour = [0xe5484d, 0x3f6fb0, 0xf2c94c, 0x5f9a6a, 0xf4f6f8][index % 5];
+          people.rect(cx - 4.5, cy - 8, 9, 3).fill(0x25232b)
+            .rect(cx - 4, cy - 8, 8, 2).fill(colour)
+            .rect(cx - 2, cy - 8, 0.5, 2).rect(cx + 2, cy - 8, 0.5, 2).fill(0xf4f6f8)
+            .rect(cx, cy - 6, 0.5, 3).fill(0xa1a8ac);
+        }
+        return;
+      }
       if (wet) {
         // An umbrella, each in its owner's colour.
         people.rect(x - 3, y - 5, 9, 3).rect(x + 1, y - 2, 1, 3).fill(0x25232b);
         people.rect(x - 2, y - 4, 7, 1).fill([0xe5484d, 0x3f6fb0, 0xf2c94c, 0x5f9a6a, 0xf4f6f8][index % 5]);
       }
-      const stride = Math.floor(animationTime / 180 + index) % 2;
+      const stride = motion.walking ? Math.floor(motion.distance / 3 + index) % 2 : 0;
       people.rect(x - 1, y - 1, 5, 10).fill(0x25232b);
       people.rect(x, y, 3, 3).fill(0xffd1a0);
       people.rect(x, y + 3, 3, 3).fill([0x7edbed, 0xf6ba67, 0xe8799a, 0x8fbf6a, 0xd6d9de][index % 5]);
@@ -462,7 +499,11 @@ export class CityRenderer {
           // Under a big building the car is at its door; otherwise on the very edge of the road, clear of the lane.
           const reach = trip!.garage?.[at] ? 0.56 : 0.41;
           const spot = centre({ x: road.x + (building.x - road.x) * reach, y: road.y + (building.y - road.y) * reach });
-          return { ...spot, vertical: next.x === road.x, key: `${road.x},${road.y},${building.x - road.x},${building.y - road.y}` };
+          // Park in the travel direction of the adjacent lane; retain head/tail distinction.
+          const heading = at === 'home' ? carHeading(next.x - road.x, next.y - road.y) :
+            carHeading(road.x - next.x, road.y - next.y);
+          return { ...spot, vertical: next.x === road.x, heading,
+            key: `${road.x},${road.y},${building.x - road.x},${building.y - road.y}` };
         };
         const park = (at: 'home' | 'work') => {
           // A car in a car park is drawn there, with the others; one under a building is not to be seen.
@@ -472,7 +513,7 @@ export class CityRenderer {
           const spot = kerb(at);
           if (kerbs.has(spot.key)) return;
           kerbs.add(spot.key);
-          drawCar(spot.x, spot.y, spot.vertical, i, tier);
+          drawCar(spot.x, spot.y, spot.vertical, i, tier, spot.heading);
         };
 
         if (trip.along === undefined) {
@@ -507,7 +548,9 @@ export class CityRenderer {
 
         if (!driving) {
           const spot = onRoad(along);
-          drawWalker(spot.x, spot.y, i);
+          const before = onRoad(Math.max(0, along - 0.05));
+          const after = onRoad(Math.min(steps, along + 0.05));
+          drawWalker(spot.x, spot.y, i, carHeading(after.x - before.x, after.y - before.y), key);
           seenAt(spot);
         } else if (along < 1) {
           // Out of the door and over to the car; from a garage they are not seen until the car comes out.
@@ -515,7 +558,7 @@ export class CityRenderer {
           const car = kerb(from);
           park(from);
           const spot = { x: door.x + (car.x - door.x) * along, y: door.y + (car.y - door.y) * along };
-          if (!trip.garage?.[from]) drawWalker(spot.x, spot.y, i);
+          if (!trip.garage?.[from]) drawWalker(spot.x, spot.y, i, carHeading(car.x - door.x, car.y - door.y), key);
           seenAt(trip.garage?.[from] ? car : spot);
           if (trip.garage?.[from]) speed *= 3;
         } else if (along > steps - 1) {
@@ -525,7 +568,7 @@ export class CityRenderer {
           const part = along - (steps - 1);
           park(to);
           const spot = { x: car.x + (door.x - car.x) * part, y: car.y + (door.y - car.y) * part };
-          if (!trip.garage?.[to]) drawWalker(spot.x, spot.y, i);
+          if (!trip.garage?.[to]) drawWalker(spot.x, spot.y, i, carHeading(door.x - car.x, door.y - car.y), key);
           seenAt(trip.garage?.[to] ? car : spot);
           if (trip.garage?.[to]) speed *= 3;
         } else {
@@ -571,7 +614,7 @@ export class CityRenderer {
           trip.held = blocked || red ? (trip.held ?? 0) + elapsed : 0;
           speed = filling || (trip.held > 0 && trip.held < (red ? 2 * LIGHT + 600 : 3500)) ? 0 : 1 / VEHICLE_PACE[tier];
           if (this.city.crashDelay({ x: Math.floor(tileX), y: Math.floor(tileY) })) speed *= 0.35;
-          drawCar(spot.x, spot.y, vertical, i, tier);
+          drawCar(spot.x, spot.y, vertical, i, tier, carHeading(dx, dy, vertical ? Math.PI / 2 : 0));
           seenAt(spot);
           if (inLane) moving.push({ x: tileX, y: tileY, hx, hy, index: i });
           if (elapsed > 0) {
@@ -595,7 +638,8 @@ export class CityRenderer {
         const left = lot % MAP_SIZE * TILE_SIZE;
         const top = Math.floor(lot / MAP_SIZE) * TILE_SIZE;
         for (let bay = 0; bay < Math.min(count, 6); bay++) {
-          drawCar(left + 6 + (bay % 3) * 10, top + (bay < 3 ? 8 : 24), true, lot + bay, 2 + bay % 2);
+          drawCar(left + 6 + (bay % 3) * 10, top + (bay < 3 ? 8 : 24), true, lot + bay, 2 + bay % 2,
+            bay < 3 ? -Math.PI / 2 : Math.PI / 2);
         }
       }
 
@@ -640,7 +684,12 @@ export class CityRenderer {
             people.rect(Math.round(spot.x + back.x) - 2, Math.round(spot.y + back.y) - 2, 5, 5).fill(0x25232b)
               .rect(Math.round(spot.x + back.x) - 1, Math.round(spot.y + back.y) - 1, 3, 3).fill(0x3fbf7f);
           }
-        } else drawWalker(spot.x, spot.y, trip.home + trip.slot);
+        } else {
+          const next = commuterPosition({ homeId: origin.y * MAP_SIZE + origin.x, workId: dest.y * MAP_SIZE + dest.x,
+            path: trip.path.slice(1, -1) }, 0, 'walk', Math.min(1, trip.progress + 0.02), false) ?? point;
+          drawWalker(spot.x, spot.y, trip.home + trip.slot, carHeading(next.x - point.x, next.y - point.y, Math.PI / 2),
+            `visit:${trip.home}:${trip.slot}`);
+        }
         spots.push({ ...spot, homeId: trip.home, slot: trip.slot });
         if (this.followVisitor?.home === trip.home && this.followVisitor.slot === trip.slot) pin = spot;
       }
@@ -720,13 +769,19 @@ export class CityRenderer {
         }
         if (!info.visible) continue;
         // Draw in the direction of travel, so returning trucks no longer reverse backwards.
-        people.save().translateTransform(at.x, at.y).rotateTransform(at.angle)
+        if (camera.scale >= DETAIL_ZOOM) streetArt.drawTruck(people, at.x, at.y, at.angle, colour);
+        else {
+          people.save().translateTransform(at.x, at.y).rotateTransform(at.angle)
           .rect(-size.length / 2 - 1, -size.width / 2 - 1, size.length + 2, size.width + 2).fill(0x25232b)
           .rect(-size.length / 2, -size.width / 2, size.length, size.width).fill(0xd8d3c7)
           .rect(size.length / 2 - 5, -size.width / 2, 5, size.width).fill(colour)
           .rect(size.length / 2 - 2, -size.width / 2 + 1, 1, size.width - 2).fill(0xdfeef2);
-        if (this.selectedVehicle === info.key) people.rect(-size.length / 2 - 2, -size.width / 2 - 2, size.length + 4, size.width + 4).stroke({ color: 0xffffff, width: 1 });
-        people.restore();
+          people.restore();
+        }
+        if (this.selectedVehicle === info.key) {
+          people.save().translateTransform(at.x, at.y).rotateTransform(at.angle)
+            .rect(-size.length / 2 - 2, -size.width / 2 - 2, size.length + 4, size.width + 4).stroke({ color: 0xffffff, width: 1 }).restore();
+        }
         if (camera.scale >= 0.85 && (this.selectedVehicle === info.key || freightRouteShown && (this.allFreightRoutes || chosenFreight === info.routeKey))) {
           numberBadge(people, at.x - 6, at.y - 24, routeNumber, colour);
         }
@@ -1278,6 +1333,10 @@ export class CityRenderer {
     this.onVehicle = undefined;
     this.observer?.disconnect();
     this.app?.destroy(true, { children: true });
+    this.carSprites?.destroy();
+    this.carSprites = undefined;
+    this.streetArt?.destroy();
+    this.streetArt = undefined;
     this.app = undefined;
   }
 }

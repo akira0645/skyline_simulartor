@@ -4,3 +4,5 @@ dist/
 Screenshot*.png
 public/demo/
 work/
+tools/__pycache__/
+docs/design-assets/generated-archive/

@@ -7,6 +7,11 @@ import type { Overlay } from '../app/tools';
 import { shiftIndex } from '../simulation/WorkShift';
 import { industryAt } from '../simulation/Industry';
 import { Camera } from './Camera';
+import buildingAtlas from '../assets/buildings/atlas.json';
+import { DETAIL_ZOOM, terrainResolution } from './detailLevel';
+import { streetBuilding } from './streetAppearance';
+import type { StreetArt } from './StreetArt';
+export { DETAIL_ZOOM } from './detailLevel';
 
 import type { BuildingSystem } from '../simulation/BuildingSystem';
 import type { MapRoute } from './routeViews';
@@ -86,7 +91,6 @@ const BIG_ART: Partial<Record<Service, number>> = { hospital: 1, university: 2, 
 // any of the level's pictures in the residential row.
 const HOME_ROW = 8;
 /** From this zoom on, small details are drawn that would only be noise from further away. */
-export const DETAIL_ZOOM = 1.75;
 const KIND_ART: Record<HomeKind, number> =
   { downtown: 0, villa: 1, worker: 2, garden: 3, riverside: 4, station: 5, campus: 6, suburb: 7 };
 
@@ -106,8 +110,10 @@ export class TileRenderer {
 
   /** Our own sheet in the colours of the city being drawn; `sheets` holds one for each look. */
   private city: TextureSource;
+  private cityUnit = CITY_TILE;
 
-  constructor(private readonly kenney: TextureSource, private readonly sheets: Record<Theme, TextureSource>) {
+  constructor(private readonly kenney: TextureSource, private readonly sheets: Record<Theme, TextureSource>,
+    private readonly detailedSheets: Record<Theme, TextureSource>, private readonly streetArt: StreetArt) {
     this.city = sheets.classic;
     this.terrain.addChild(this.tiles);
     this.view.addChild(this.terrain, this.overlay);
@@ -121,7 +127,8 @@ export class TileRenderer {
     let texture = frames.get(key);
     if (!texture) {
       texture = new Texture({ source: this.city, frame: new Rectangle(
-        (column % 8) * 2 * CITY_TILE, (column < 8 ? BIG_ROW : 15) * CITY_TILE, 2 * CITY_TILE, 2 * CITY_TILE) });
+        (column % 8) * 2 * this.cityUnit, (column < 8 ? BIG_ROW : 15) * this.cityUnit,
+        2 * this.cityUnit, 2 * this.cityUnit) });
       frames.set(key, texture);
     }
     return texture;
@@ -134,7 +141,7 @@ export class TileRenderer {
     const key = row * 1024 + column;
     let texture = frames.get(key);
     if (!texture) {
-      const unit = sheet === this.city ? CITY_TILE : SOURCE_TILE;
+      const unit = sheet === this.city ? this.cityUnit : SOURCE_TILE;
       texture = new Texture({ source: sheet, frame: new Rectangle(column * unit, row * unit, unit, unit) });
       frames.set(key, texture);
     }
@@ -148,7 +155,7 @@ export class TileRenderer {
     aim?: { cells: readonly Cell[]; ok: boolean }, focus?: (cell: Cell) => boolean) {
     // Terrain changes on a redraw, not every animation frame. Flatten its many atlas
     // switches into one cached texture; keep selections and overlays independent.
-    const resolution = camera.scale >= 1 ? 1 : camera.scale >= 0.5 ? 0.5 : 0.25;
+    const resolution = terrainResolution(camera.scale);
     if (resolution !== this.cacheResolution) {
       this.terrain.cacheAsTexture({ resolution, antialias: false, scaleMode: 'nearest' });
       this.cacheResolution = resolution;
@@ -156,7 +163,9 @@ export class TileRenderer {
     this.terrain.updateCacheTexture();
     const map = city.map;
     const { theme } = city;
-    this.city = this.sheets[theme];
+    const detailed = camera.scale >= DETAIL_ZOOM;
+    this.city = (detailed ? this.detailedSheets : this.sheets)[theme];
+    this.cityUnit = detailed ? buildingAtlas.tileSize : CITY_TILE;
     const start = camera.cellAt(0, 0);
     const end = camera.cellAt(width, height);
     const g = this.tiles.clear();
@@ -168,7 +177,11 @@ export class TileRenderer {
       g.texture(this.frame(sheet, column, row), 0xffffff,
         x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
     const tileAt = ([column, row]: number[], x: number, y: number) => put(this.kenney, column, row, x, y);
-    const cityAt = (column: number, row: number, x: number, y: number) => put(this.city, column, row, x, y);
+    const cityAt = (column: number, row: number, x: number, y: number) => {
+      const prototype = detailed && streetBuilding(column, row);
+      if (prototype) this.streetArt.drawBuilding(g, prototype, x * TILE_SIZE, y * TILE_SIZE, theme);
+      else put(this.city, column, row, x, y);
+    };
 
     // Housing complexes in view, by their top left tile. They are drawn after the lots they cover.
     const complexes = new Set<number>();
@@ -211,9 +224,12 @@ export class TileRenderer {
               .rect(left + 9, top + 1, 5, 2).rect(left + 16, top + 1, 5, 2).rect(left + 13, top - 1, 4, 3).fill(0x3f8f4a);
             g.rect(left + 8, top + 4, 5, 1).rect(left + 17, top + 4, 6, 1).rect(left + 13, top, 3, 1).fill(0x6fc46b);
           } else if (roll < 4 && map.get({ x, y: y - 1 }) === 'grass') {
-            const column = TREES[(seed >>> 16) % TREES.length];
-            tileAt([column, 10], x, y - 1);
-            tileAt([column, 11], x, y);
+            if (detailed) this.streetArt.drawTree(g, x * TILE_SIZE, (y - 1) * TILE_SIZE);
+            else {
+              const column = TREES[(seed >>> 16) % TREES.length];
+              tileAt([column, 10], x, y - 1);
+              tileAt([column, 11], x, y);
+            }
           } else if (roll < 8) {
             tileAt(BUSHES[(seed >>> 16) % BUSHES.length], x, y);
           }

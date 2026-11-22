@@ -22,7 +22,7 @@ export class Camera {
   }
 
   zoom(x: number, y: number, delta: number, width: number, height: number) {
-    const next = Math.max(0.25, Math.min(3, this.scale * Math.exp(-delta * 0.002)));
+    const next = Math.max(0.25, Math.min(6, this.scale * Math.exp(-delta * 0.002)));
     const ratio = next / this.scale;
     this.scale = next;
     this.pan((x - this.x) * (1 - ratio), (y - this.y) * (1 - ratio), width, height);

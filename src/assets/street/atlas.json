@@ -1,0 +1,48 @@
+{
+  "artSource": "code",
+  "density": 4,
+  "buildingFrame": 128,
+  "buildings": [
+    "house",
+    "apartment",
+    "shop",
+    "office",
+    "factory",
+    "school"
+  ],
+  "treeFrame": [
+    128,
+    256
+  ],
+  "personPoses": 7,
+  "personFrame": [
+    32,
+    48
+  ],
+  "personPivot": [
+    16,
+    24
+  ],
+  "personColours": [
+    "7edbed",
+    "f6ba67",
+    "e8799a",
+    "8fbf6a",
+    "d6d9de"
+  ],
+  "truckFrame": 96,
+  "truckPivot": [
+    48,
+    56
+  ],
+  "truckColours": [
+    "e5484d",
+    "3b82f6",
+    "f2c94c",
+    "a56eff",
+    "ff8a3d",
+    "2ec4b6",
+    "ec4899",
+    "84cc16"
+  ]
+}

@@ -1,0 +1,3399 @@
+{
+  "art_source": "code",
+  "image_model_used": false,
+  "frames_checked": 43,
+  "hard_failures": [],
+  "automated_results": [
+    {
+      "summary": {
+        "score": 100,
+        "verdict": "ship",
+        "issues": [],
+        "warnings": []
+      },
+      "findings": {
+        "image_dimensions": [
+          32,
+          48
+        ],
+        "palette": {
+          "unique_color_count": 12,
+          "total_visible_pixels": 388,
+          "total_image_pixels": 1536,
+          "palette_cap": 40,
+          "over_cap": false
+        },
+        "orphans": {
+          "orphan_count": 2,
+          "orphan_ratio": 0.005154639175257732,
+          "samples": [
+            {
+              "x": 17,
+              "y": 18,
+              "color": "#efdfbb"
+            },
+            {
+              "x": 11,
+              "y": 25,
+              "color": "#28505d"
+            }
+          ]
+        },
+        "doublies": {
+          "doublies_count": 0,
+          "samples": []
+        },
+        "pillow_shading": {
+          "detected": false,
+          "boundary_mean_lum": 73.17654330708665,
+          "interior_mean_lum": 109.62085900383141,
+          "tl_mean_lum": 82.90804390243903,
+          "br_mean_lum": 115.85471290322579,
+          "asymmetry": 32.946669000786756
+        },
+        "hue_rotation": {
+          "applicable": true,
+          "shadow_mean_hue": 138.12788259958072,
+          "highlight_mean_hue": 33.36961425671103,
+          "hue_rotation_deg": 104.75826834286968,
+          "rotation_passes_30": true,
+          "warm_highlight": true,
+          "cool_shadow": false
+        },
+        "anti_aa_slop": {
+          "boundary_pixel_count": 127,
+          "unique_boundary_colors": 8,
+          "distinct_ratio": 0.06299212598425197,
+          "warning": false
+        },
+        "silhouette": {
+          "visible_pixels": 388,
+          "bbox": [
+            16,
+            41
+          ],
+          "fill_ratio": 0.5914634146341463,
+          "horizontal_symmetry": 0.711340206185567
+        }
+      },
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\people\\0-0.png"
+    },
+    {
+      "summary": {
+        "score": 50,
+        "verdict": "redesign",
+        "issues": [
+          "Pillow shading detected \u2014 refactor with explicit light direction"
+        ],
+        "warnings": []
+      },
+      "findings": {
+        "image_dimensions": [
+          32,
+          48
+        ],
+        "palette": {
+          "unique_color_count": 11,
+          "total_visible_pixels": 431,
+          "total_image_pixels": 1536,
+          "palette_cap": 40,
+          "over_cap": false
+        },
+        "orphans": {
+          "orphan_count": 5,
+          "orphan_ratio": 0.01160092807424594,
+          "samples": [
+            {
+              "x": 17,
+              "y": 18,
+              "color": "#efdfbb"
+            },
+            {
+              "x": 11,
+              "y": 36,
+              "color": "#29323d"
+            },
+            {
+              "x": 21,
+              "y": 36,
+              "color": "#29323d"
+            },
+            {
+              "x": 10,
+              "y": 38,
+              "color": "#29323d"
+            },
+            {
+              "x": 22,
+              "y": 38,
+              "color": "#29323d"
+            }
+          ]
+        },
+        "doublies": {
+          "doublies_count": 0,
+          "samples": []
+        },
+        "pillow_shading": {
+          "detected": true,
+          "boundary_mean_lum": 64.61072894736843,
+          "interior_mean_lum": 107.12816272401433,
+          "tl_mean_lum": 90.33426530612246,
+          "br_mean_lum": 97.85231935483868,
+          "asymmetry": 7.518054048716223
+        },
+        "hue_rotation": {
+          "applicable": true,
+          "shadow_mean_hue": 109.83333333333334,
+          "highlight_mean_hue": 37.47377622377623,
+          "hue_rotation_deg": 72.35955710955712,
+          "rotation_passes_30": true,
+          "warm_highlight": true,
+          "cool_shadow": false
+        },
+        "anti_aa_slop": {
+          "boundary_pixel_count": 152,
+          "unique_boundary_colors": 7,
+          "distinct_ratio": 0.046052631578947366,
+          "warning": false
+        },
+        "silhouette": {
+          "visible_pixels": 431,
+          "bbox": [
+            17,
+            41
+          ],
+          "fill_ratio": 0.6183644189383071,
+          "horizontal_symmetry": 0.7331786542923434
+        }
+      },
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\people\\0-1.png"
+    },
+    {
+      "summary": {
+        "score": 50,
+        "verdict": "redesign",
+        "issues": [
+          "Pillow shading detected \u2014 refactor with explicit light direction"
+        ],
+        "warnings": []
+      },
+      "findings": {
+        "image_dimensions": [
+          32,
+          48
+        ],
+        "palette": {
+          "unique_color_count": 11,
+          "total_visible_pixels": 414,
+          "total_image_pixels": 1536,
+          "palette_cap": 40,
+          "over_cap": false
+        },
+        "orphans": {
+          "orphan_count": 3,
+          "orphan_ratio": 0.007246376811594203,
+          "samples": [
+            {
+              "x": 17,
+              "y": 19,
+              "color": "#efdfbb"
+            },
+            {
+              "x": 13,
+              "y": 36,
+              "color": "#29323d"
+            },
+            {
+              "x": 12,
+              "y": 38,
+              "color": "#29323d"
+            }
+          ]
+        },
+        "doublies": {
+          "doublies_count": 0,
+          "samples": []
+        },
+        "pillow_shading": {
+          "detected": true,
+          "boundary_mean_lum": 64.58528153846154,
+          "interior_mean_lum": 105.69360070422535,
+          "tl_mean_lum": 90.33426530612246,
+          "br_mean_lum": 99.23358550724637,
+          "asymmetry": 8.899320201123913
+        },
+        "hue_rotation": {
+          "applicable": true,
+          "shadow_mean_hue": 109.83333333333334,
+          "highlight_mean_hue": 37.47377622377623,
+          "hue_rotation_deg": 72.35955710955712,
+          "rotation_passes_30": true,
+          "warm_highlight": true,
+          "cool_shadow": false
+        },
+        "anti_aa_slop": {
+          "boundary_pixel_count": 130,
+          "unique_boundary_colors": 7,
+          "distinct_ratio": 0.05384615384615385,
+          "warning": false
+        },
+        "silhouette": {
+          "visible_pixels": 414,
+          "bbox": [
+            16,
+            40
+          ],
+          "fill_ratio": 0.646875,
+          "horizontal_symmetry": 0.7391304347826086
+        }
+      },
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\people\\0-2.png"
+    },
+    {
+      "summary": {
+        "score": 100,
+        "verdict": "ship",
+        "issues": [],
+        "warnings": []
+      },
+      "findings": {
+        "image_dimensions": [
+          32,
+          48
+        ],
+        "palette": {
+          "unique_color_count": 12,
+          "total_visible_pixels": 407,
+          "total_image_pixels": 1536,
+          "palette_cap": 40,
+          "over_cap": false
+        },
+        "orphans": {
+          "orphan_count": 3,
+          "orphan_ratio": 0.007371007371007371,
+          "samples": [
+            {
+              "x": 17,
+              "y": 17,
+              "color": "#efdfbb"
+            },
+            {
+              "x": 11,
+              "y": 24,
+              "color": "#28505d"
+            },
+            {
+              "x": 16,
+              "y": 34,
+              "color": "#29323d"
+            }
+          ]
+        },
+        "doublies": {
+          "doublies_count": 0,
+          "samples": []
+        },
+        "pillow_shading": {
+          "detected": false,
+          "boundary_mean_lum": 71.93427401574807,
+          "interior_mean_lum": 107.32677857142858,
+          "tl_mean_lum": 90.33426530612246,
+          "br_mean_lum": 112.38781971830986,
+          "asymmetry": 22.053554412187395
+        },
+        "hue_rotation": {
+          "applicable": true,
+          "shadow_mean_hue": 138.12788259958072,
+          "highlight_mean_hue": 33.36961425671103,
+          "hue_rotation_deg": 104.75826834286968,
+          "rotation_passes_30": true,
+          "warm_highlight": true,
+          "cool_shadow": false
+        },
+        "anti_aa_slop": {
+          "boundary_pixel_count": 127,
+          "unique_boundary_colors": 8,
+          "distinct_ratio": 0.06299212598425197,
+          "warning": false
+        },
+        "silhouette": {
+          "visible_pixels": 407,
+          "bbox": [
+            16,
+            42
+          ],
+          "fill_ratio": 0.6056547619047619,
+          "horizontal_symmetry": 0.7174447174447175
+        }
+      },
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\people\\0-3.png"
+    },
+    {
+      "summary": {
+        "score": 100,
+        "verdict": "ship",
+        "issues": [],
+        "warnings": []
+      },
+      "findings": {
+        "image_dimensions": [
+          32,
+          48
+        ],
+        "palette": {
+          "unique_color_count": 12,
+          "total_visible_pixels": 484,
+          "total_image_pixels": 1536,
+          "palette_cap": 40,
+          "over_cap": false
+        },
+        "orphans": {
+          "orphan_count": 2,
+          "orphan_ratio": 0.004132231404958678,
+          "samples": [
+            {
+              "x": 17,
+              "y": 18,
+              "color": "#efdfbb"
+            },
+            {
+              "x": 19,
+              "y": 22,
+              "color": "#efdfbb"
+            }
+          ]
+        },
+        "doublies": {
+          "doublies_count": 0,
+          "samples": []
+        },
+        "pillow_shading": {
+          "detected": false,
+          "boundary_mean_lum": 71.74858757763975,
+          "interior_mean_lum": 103.33333436532509,
+          "tl_mean_lum": 89.505196,
+          "br_mean_lum": 111.24495058823535,
+          "asymmetry": 21.739754588235357
+        },
+        "hue_rotation": {
+          "applicable": true,
+          "shadow_mean_hue": 138.12788259958072,
+          "highlight_mean_hue": 33.36961425671103,
+          "hue_rotation_deg": 104.75826834286968,
+          "rotation_passes_30": true,
+          "warm_highlight": true,
+          "cool_shadow": false
+        },
+        "anti_aa_slop": {
+          "boundary_pixel_count": 161,
+          "unique_boundary_colors": 8,
+          "distinct_ratio": 0.049689440993788817,
+          "warning": false
+        },
+        "silhouette": {
+          "visible_pixels": 484,
+          "bbox": [
+            18,
+            41
+          ],
+          "fill_ratio": 0.6558265582655827,
+          "horizontal_symmetry": 0.7355371900826446
+        }
+      },
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\people\\0-4.png"
+    },
+    {
+      "summary": {
+        "score": 100,
+        "verdict": "ship",
+        "issues": [],
+        "warnings": []
+      },
+      "findings": {
+        "image_dimensions": [
+          32,
+          48
+        ],
+        "palette": {
+          "unique_color_count": 12,
+          "total_visible_pixels": 432,
+          "total_image_pixels": 1536,
+          "palette_cap": 40,
+          "over_cap": false
+        },
+        "orphans": {
+          "orphan_count": 3,
+          "orphan_ratio": 0.006944444444444444,
+          "samples": [
+            {
+              "x": 17,
+              "y": 19,
+              "color": "#efdfbb"
+            },
+            {
+              "x": 19,
+              "y": 23,
+              "color": "#efdfbb"
+            },
+            {
+              "x": 12,
+              "y": 36,
+              "color": "#29323d"
+            }
+          ]
+        },
+        "doublies": {
+          "doublies_count": 0,
+          "samples": []
+        },
+        "pillow_shading": {
+          "detected": false,
+          "boundary_mean_lum": 74.64218030303032,
+          "interior_mean_lum": 104.07526200000001
+        },
+        "hue_rotation": {
+          "applicable": true,
+          "shadow_mean_hue": 138.12788259958072,
+          "highlight_mean_hue": 33.36961425671103,
+          "hue_rotation_deg": 104.75826834286968,
+          "rotation_passes_30": true,
+          "warm_highlight": true,
+          "cool_shadow": false
+        },
+        "anti_aa_slop": {
+          "boundary_pixel_count": 132,
+          "unique_boundary_colors": 8,
+          "distinct_ratio": 0.06060606060606061,
+          "warning": false
+        },
+        "silhouette": {
+          "visible_pixels": 432,
+          "bbox": [
+            17,
+            40
+          ],
+          "fill_ratio": 0.6352941176470588,
+          "horizontal_symmetry": 0.75
+        }
+      },
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\people\\0-5.png"
+    },
+    {
+      "summary": {
+        "score": 100,
+        "verdict": "ship",
+        "issues": [],
+        "warnings": []
+      },
+      "findings": {
+        "image_dimensions": [
+          32,
+          48
+        ],
+        "palette": {
+          "unique_color_count": 12,
+          "total_visible_pixels": 408,
+          "total_image_pixels": 1536,
+          "palette_cap": 40,
+          "over_cap": false
+        },
+        "orphans": {
+          "orphan_count": 3,
+          "orphan_ratio": 0.007352941176470588,
+          "samples": [
+            {
+              "x": 17,
+              "y": 17,
+              "color": "#efdfbb"
+            },
+            {
+              "x": 11,
+              "y": 24,
+              "color": "#28505d"
+            },
+            {
+              "x": 16,
+              "y": 35,
+              "color": "#29323d"
+            }
+          ]
+        },
+        "doublies": {
+          "doublies_count": 0,
+          "samples": []
+        },
+        "pillow_shading": {
+          "detected": false,
+          "boundary_mean_lum": 73.13951627906977,
+          "interior_mean_lum": 108.08238136200717,
+          "tl_mean_lum": 90.33426530612246,
+          "br_mean_lum": 115.08955428571429,
+          "asymmetry": 24.755288979591825
+        },
+        "hue_rotation": {
+          "applicable": true,
+          "shadow_mean_hue": 138.12788259958072,
+          "highlight_mean_hue": 33.36961425671103,
+          "hue_rotation_deg": 104.75826834286968,
+          "rotation_passes_30": true,
+          "warm_highlight": true,
+          "cool_shadow": false
+        },
+        "anti_aa_slop": {
+          "boundary_pixel_count": 129,
+          "unique_boundary_colors": 8,
+          "distinct_ratio": 0.06201550387596899,
+          "warning": false
+        },
+        "silhouette": {
+          "visible_pixels": 408,
+          "bbox": [
+            16,
+            42
+          ],
+          "fill_ratio": 0.6071428571428571,
+          "horizontal_symmetry": 0.7107843137254902
+        }
+      },
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\people\\0-6.png"
+    },
+    {
+      "summary": {
+        "score": 100,
+        "verdict": "ship",
+        "issues": [],
+        "warnings": []
+      },
+      "findings": {
+        "image_dimensions": [
+          32,
+          48
+        ],
+        "palette": {
+          "unique_color_count": 13,
+          "total_visible_pixels": 530,
+          "total_image_pixels": 1536,
+          "palette_cap": 40,
+          "over_cap": false
+        },
+        "orphans": {
+          "orphan_count": 2,
+          "orphan_ratio": 0.0037735849056603774,
+          "samples": [
+            {
+              "x": 10,
+              "y": 19,
+              "color": "#69b6b4"
+            },
+            {
+              "x": 11,
+              "y": 19,
+              "color": "#efdfbb"
+            }
+          ]
+        },
+        "doublies": {
+          "doublies_count": 0,
+          "samples": []
+        },
+        "pillow_shading": {
+          "detected": false,
+          "boundary_mean_lum": 62.98118450704225,
+          "interior_mean_lum": 108.87632319587628,
+          "tl_mean_lum": 129.69700204081633,
+          "br_mean_lum": 90.02337247706426,
+          "asymmetry": 39.67362956375207
+        },
+        "hue_rotation": {
+          "applicable": true,
+          "shadow_mean_hue": 138.12788259958072,
+          "highlight_mean_hue": 79.98251748251748,
+          "hue_rotation_deg": 58.145365117063236,
+          "rotation_passes_30": true,
+          "warm_highlight": true,
+          "cool_shadow": false
+        },
+        "anti_aa_slop": {
+          "boundary_pixel_count": 142,
+          "unique_boundary_colors": 6,
+          "distinct_ratio": 0.04225352112676056,
+          "warning": false
+        },
+        "silhouette": {
+          "visible_pixels": 530,
+          "bbox": [
+            18,
+            41
+          ],
+          "fill_ratio": 0.7181571815718157,
+          "horizontal_symmetry": 0.9056603773584906
+        }
+      },
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\people\\1-0.png"
+    },
+    {
+      "summary": {
+        "score": 100,
+        "verdict": "ship",
+        "issues": [],
+        "warnings": []
+      },
+      "findings": {
+        "image_dimensions": [
+          32,
+          48
+        ],
+        "palette": {
+          "unique_color_count": 13,
+          "total_visible_pixels": 545,
+          "total_image_pixels": 1536,
+          "palette_cap": 40,
+          "over_cap": false
+        },
+        "orphans": {
+          "orphan_count": 2,
+          "orphan_ratio": 0.003669724770642202,
+          "samples": [
+            {
+              "x": 10,
+              "y": 19,
+              "color": "#69b6b4"
+            },
+            {
+              "x": 11,
+              "y": 19,
+              "color": "#efdfbb"
+            }
+          ]
+        },
+        "doublies": {
+          "doublies_count": 0,
+          "samples": []
+        },
+        "pillow_shading": {
+          "detected": false,
+          "boundary_mean_lum": 64.82060810810812,
+          "interior_mean_lum": 107.80971083123427,
+          "tl_mean_lum": 129.69700204081633,
+          "br_mean_lum": 86.85907387387392,
+          "asymmetry": 42.837928166942405
+        },
+        "hue_rotation": {
+          "applicable": true,
+          "shadow_mean_hue": 138.12788259958072,
+          "highlight_mean_hue": 79.98251748251748,
+          "hue_rotation_deg": 58.145365117063236,
+          "rotation_passes_30": true,
+          "warm_highlight": true,
+          "cool_shadow": false
+        },
+        "anti_aa_slop": {
+          "boundary_pixel_count": 148,
+          "unique_boundary_colors": 6,
+          "distinct_ratio": 0.04054054054054054,
+          "warning": false
+        },
+        "silhouette": {
+          "visible_pixels": 545,
+          "bbox": [
+            20,
+            41
+          ],
+          "fill_ratio": 0.6646341463414634,
+          "horizontal_symmetry": 0.9174311926605505
+        }
+      },
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\people\\1-1.png"
+    },
+    {
+      "summary": {
+        "score": 100,
+        "verdict": "ship",
+        "issues": [],
+        "warnings": []
+      },
+      "findings": {
+        "image_dimensions": [
+          32,
+          48
+        ],
+        "palette": {
+          "unique_color_count": 13,
+          "total_visible_pixels": 521,
+          "total_image_pixels": 1536,
+          "palette_cap": 40,
+          "over_cap": false
+        },
+        "orphans": {
+          "orphan_count": 2,
+          "orphan_ratio": 0.003838771593090211,
+          "samples": [
+            {
+              "x": 10,
+              "y": 20,
+              "color": "#69b6b4"
+            },
+            {
+              "x": 11,
+              "y": 20,
+              "color": "#efdfbb"
+            }
+          ]
+        },
+        "doublies": {
+          "doublies_count": 0,
+          "samples": []
+        },
+        "pillow_shading": {
+          "detected": false,
+          "boundary_mean_lum": 65.22098428571428,
+          "interior_mean_lum": 109.2069910761155,
+          "tl_mean_lum": 129.69700204081633,
+          "br_mean_lum": 85.64182037037041,
+          "asymmetry": 44.05518167044592
+        },
+        "hue_rotation": {
+          "applicable": true,
+          "shadow_mean_hue": 138.12788259958072,
+          "highlight_mean_hue": 79.98251748251748,
+          "hue_rotation_deg": 58.145365117063236,
+          "rotation_passes_30": true,
+          "warm_highlight": true,
+          "cool_shadow": false
+        },
+        "anti_aa_slop": {
+          "boundary_pixel_count": 140,
+          "unique_boundary_colors": 6,
+          "distinct_ratio": 0.04285714285714286,
+          "warning": false
+        },
+        "silhouette": {
+          "visible_pixels": 521,
+          "bbox": [
+            19,
+            40
+          ],
+          "fill_ratio": 0.6855263157894737,
+          "horizontal_symmetry": 0.8867562380038387
+        }
+      },
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\people\\1-2.png"
+    },
+    {
+      "summary": {
+        "score": 100,
+        "verdict": "ship",
+        "issues": [],
+        "warnings": []
+      },
+      "findings": {
+        "image_dimensions": [
+          32,
+          48
+        ],
+        "palette": {
+          "unique_color_count": 13,
+          "total_visible_pixels": 530,
+          "total_image_pixels": 1536,
+          "palette_cap": 40,
+          "over_cap": false
+        },
+        "orphans": {
+          "orphan_count": 2,
+          "orphan_ratio": 0.0037735849056603774,
+          "samples": [
+            {
+              "x": 10,
+              "y": 18,
+              "color": "#69b6b4"
+            },
+            {
+              "x": 11,
+              "y": 18,
+              "color": "#efdfbb"
+            }
+          ]
+        },
+        "doublies": {
+          "doublies_count": 0,
+          "samples": []
+        },
+        "pillow_shading": {
+          "detected": false,
+          "boundary_mean_lum": 62.98118450704225,
+          "interior_mean_lum": 108.34727938144329,
+          "tl_mean_lum": 129.69700204081633,
+          "br_mean_lum": 88.87270754716982,
+          "asymmetry": 40.824294493646505
+        },
+        "hue_rotation": {
+          "applicable": true,
+          "shadow_mean_hue": 138.12788259958072,
+          "highlight_mean_hue": 79.98251748251748,
+          "hue_rotation_deg": 58.145365117063236,
+          "rotation_passes_30": true,
+          "warm_highlight": true,
+          "cool_shadow": false
+        },
+        "anti_aa_slop": {
+          "boundary_pixel_count": 142,
+          "unique_boundary_colors": 6,
+          "distinct_ratio": 0.04225352112676056,
+          "warning": false
+        },
+        "silhouette": {
+          "visible_pixels": 530,
+          "bbox": [
+            18,
+            42
+          ],
+          "fill_ratio": 0.701058201058201,
+          "horizontal_symmetry": 0.8867924528301887
+        }
+      },
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\people\\1-3.png"
+    },
+    {
+      "summary": {
+        "score": 100,
+        "verdict": "ship",
+        "issues": [],
+        "warnings": []
+      },
+      "findings": {
+        "image_dimensions": [
+          32,
+          48
+        ],
+        "palette": {
+          "unique_color_count": 13,
+          "total_visible_pixels": 506,
+          "total_image_pixels": 1536,
+          "palette_cap": 40,
+          "over_cap": false
+        },
+        "orphans": {
+          "orphan_count": 2,
+          "orphan_ratio": 0.003952569169960474,
+          "samples": [
+            {
+              "x": 10,
+              "y": 19,
+              "color": "#69b6b4"
+            },
+            {
+              "x": 11,
+              "y": 19,
+              "color": "#efdfbb"
+            }
+          ]
+        },
+        "doublies": {
+          "doublies_count": 0,
+          "samples": []
+        },
+        "pillow_shading": {
+          "detected": false,
+          "boundary_mean_lum": 64.0988263888889,
+          "interior_mean_lum": 109.91546464088397,
+          "tl_mean_lum": 129.69700204081633,
+          "br_mean_lum": 90.09920652173915,
+          "asymmetry": 39.59779551907718
+        },
+        "hue_rotation": {
+          "applicable": true,
+          "shadow_mean_hue": 138.12788259958072,
+          "highlight_mean_hue": 79.98251748251748,
+          "hue_rotation_deg": 58.145365117063236,
+          "rotation_passes_30": true,
+          "warm_highlight": true,
+          "cool_shadow": false
+        },
+        "anti_aa_slop": {
+          "boundary_pixel_count": 144,
+          "unique_boundary_colors": 6,
+          "distinct_ratio": 0.041666666666666664,
+          "warning": false
+        },
+        "silhouette": {
+          "visible_pixels": 506,
+          "bbox": [
+            18,
+            41
+          ],
+          "fill_ratio": 0.6856368563685636,
+          "horizontal_symmetry": 0.8932806324110671
+        }
+      },
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\people\\1-4.png"
+    },
+    {
+      "summary": {
+        "score": 100,
+        "verdict": "ship",
+        "issues": [],
+        "warnings": []
+      },
+      "findings": {
+        "image_dimensions": [
+          32,
+          48
+        ],
+        "palette": {
+          "unique_color_count": 13,
+          "total_visible_pixels": 491,
+          "total_image_pixels": 1536,
+          "palette_cap": 40,
+          "over_cap": false
+        },
+        "orphans": {
+          "orphan_count": 2,
+          "orphan_ratio": 0.004073319755600814,
+          "samples": [
+            {
+              "x": 10,
+              "y": 20,
+              "color": "#69b6b4"
+            },
+            {
+              "x": 11,
+              "y": 20,
+              "color": "#efdfbb"
+            }
+          ]
+        },
+        "doublies": {
+          "doublies_count": 0,
+          "samples": []
+        },
+        "pillow_shading": {
+          "detected": false,
+          "boundary_mean_lum": 65.05872537313434,
+          "interior_mean_lum": 110.27575126050421,
+          "tl_mean_lum": 129.69700204081633,
+          "br_mean_lum": 88.12359148936171,
+          "asymmetry": 41.573410551454614
+        },
+        "hue_rotation": {
+          "applicable": true,
+          "shadow_mean_hue": 138.12788259958072,
+          "highlight_mean_hue": 79.98251748251748,
+          "hue_rotation_deg": 58.145365117063236,
+          "rotation_passes_30": true,
+          "warm_highlight": true,
+          "cool_shadow": false
+        },
+        "anti_aa_slop": {
+          "boundary_pixel_count": 134,
+          "unique_boundary_colors": 6,
+          "distinct_ratio": 0.04477611940298507,
+          "warning": false
+        },
+        "silhouette": {
+          "visible_pixels": 491,
+          "bbox": [
+            18,
+            39
+          ],
+          "fill_ratio": 0.6994301994301995,
+          "horizontal_symmetry": 0.879837067209776
+        }
+      },
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\people\\1-5.png"
+    },
+    {
+      "summary": {
+        "score": 100,
+        "verdict": "ship",
+        "issues": [],
+        "warnings": []
+      },
+      "findings": {
+        "image_dimensions": [
+          32,
+          48
+        ],
+        "palette": {
+          "unique_color_count": 13,
+          "total_visible_pixels": 535,
+          "total_image_pixels": 1536,
+          "palette_cap": 40,
+          "over_cap": false
+        },
+        "orphans": {
+          "orphan_count": 2,
+          "orphan_ratio": 0.003738317757009346,
+          "samples": [
+            {
+              "x": 10,
+              "y": 18,
+              "color": "#69b6b4"
+            },
+            {
+              "x": 11,
+              "y": 18,
+              "color": "#efdfbb"
+            }
+          ]
+        },
+        "doublies": {
+          "doublies_count": 0,
+          "samples": []
+        },
+        "pillow_shading": {
+          "detected": false,
+          "boundary_mean_lum": 62.785345833333345,
+          "interior_mean_lum": 108.518631713555,
+          "tl_mean_lum": 127.34727169811322,
+          "br_mean_lum": 89.35154313725496,
+          "asymmetry": 37.995728560858254
+        },
+        "hue_rotation": {
+          "applicable": true,
+          "shadow_mean_hue": 138.12788259958072,
+          "highlight_mean_hue": 79.98251748251748,
+          "hue_rotation_deg": 58.145365117063236,
+          "rotation_passes_30": true,
+          "warm_highlight": true,
+          "cool_shadow": false
+        },
+        "anti_aa_slop": {
+          "boundary_pixel_count": 144,
+          "unique_boundary_colors": 6,
+          "distinct_ratio": 0.041666666666666664,
+          "warning": false
+        },
+        "silhouette": {
+          "visible_pixels": 535,
+          "bbox": [
+            18,
+            42
+          ],
+          "fill_ratio": 0.7076719576719577,
+          "horizontal_symmetry": 0.897196261682243
+        }
+      },
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\people\\1-6.png"
+    },
+    {
+      "summary": {
+        "score": 100,
+        "verdict": "ship",
+        "issues": [],
+        "warnings": []
+      },
+      "findings": {
+        "image_dimensions": [
+          32,
+          48
+        ],
+        "palette": {
+          "unique_color_count": 12,
+          "total_visible_pixels": 388,
+          "total_image_pixels": 1536,
+          "palette_cap": 40,
+          "over_cap": false
+        },
+        "orphans": {
+          "orphan_count": 1,
+          "orphan_ratio": 0.002577319587628866,
+          "samples": [
+            {
+              "x": 20,
+              "y": 25,
+              "color": "#28505d"
+            }
+          ]
+        },
+        "doublies": {
+          "doublies_count": 0,
+          "samples": []
+        },
+        "pillow_shading": {
+          "detected": false,
+          "boundary_mean_lum": 71.56025196850398,
+          "interior_mean_lum": 109.91739999999999,
+          "tl_mean_lum": 138.48914545454548,
+          "br_mean_lum": 90.17402469135803,
+          "asymmetry": 48.31512076318745
+        },
+        "hue_rotation": {
+          "applicable": true,
+          "shadow_mean_hue": 138.12788259958072,
+          "highlight_mean_hue": 33.36961425671103,
+          "hue_rotation_deg": 104.75826834286968,
+          "rotation_passes_30": true,
+          "warm_highlight": true,
+          "cool_shadow": false
+        },
+        "anti_aa_slop": {
+          "boundary_pixel_count": 127,
+          "unique_boundary_colors": 8,
+          "distinct_ratio": 0.06299212598425197,
+          "warning": false
+        },
+        "silhouette": {
+          "visible_pixels": 388,
+          "bbox": [
+            16,
+            41
+          ],
+          "fill_ratio": 0.5914634146341463,
+          "horizontal_symmetry": 0.711340206185567
+        }
+      },
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\people\\2-0.png"
+    },
+    {
+      "summary": {
+        "score": 100,
+        "verdict": "ship",
+        "issues": [],
+        "warnings": []
+      },
+      "findings": {
+        "image_dimensions": [
+          32,
+          48
+        ],
+        "palette": {
+          "unique_color_count": 11,
+          "total_visible_pixels": 431,
+          "total_image_pixels": 1536,
+          "palette_cap": 40,
+          "over_cap": false
+        },
+        "orphans": {
+          "orphan_count": 4,
+          "orphan_ratio": 0.009280742459396751,
+          "samples": [
+            {
+              "x": 10,
+              "y": 36,
+              "color": "#29323d"
+            },
+            {
+              "x": 20,
+              "y": 36,
+              "color": "#29323d"
+            },
+            {
+              "x": 9,
+              "y": 38,
+              "color": "#29323d"
+            },
+            {
+              "x": 21,
+              "y": 38,
+              "color": "#29323d"
+            }
+          ]
+        },
+        "doublies": {
+          "doublies_count": 0,
+          "samples": []
+        },
+        "pillow_shading": {
+          "detected": false,
+          "boundary_mean_lum": 63.26027500000001,
+          "interior_mean_lum": 107.24378422939068,
+          "tl_mean_lum": 136.78161176470593,
+          "br_mean_lum": 97.84275180722892,
+          "asymmetry": 38.93885995747701
+        },
+        "hue_rotation": {
+          "applicable": true,
+          "shadow_mean_hue": 109.83333333333334,
+          "highlight_mean_hue": 37.47377622377623,
+          "hue_rotation_deg": 72.35955710955712,
+          "rotation_passes_30": true,
+          "warm_highlight": true,
+          "cool_shadow": false
+        },
+        "anti_aa_slop": {
+          "boundary_pixel_count": 152,
+          "unique_boundary_colors": 7,
+          "distinct_ratio": 0.046052631578947366,
+          "warning": false
+        },
+        "silhouette": {
+          "visible_pixels": 431,
+          "bbox": [
+            17,
+            41
+          ],
+          "fill_ratio": 0.6183644189383071,
+          "horizontal_symmetry": 0.7331786542923434
+        }
+      },
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\people\\2-1.png"
+    },
+    {
+      "summary": {
+        "score": 100,
+        "verdict": "ship",
+        "issues": [],
+        "warnings": []
+      },
+      "findings": {
+        "image_dimensions": [
+          32,
+          48
+        ],
+        "palette": {
+          "unique_color_count": 10,
+          "total_visible_pixels": 414,
+          "total_image_pixels": 1536,
+          "palette_cap": 40,
+          "over_cap": false
+        },
+        "orphans": {
+          "orphan_count": 2,
+          "orphan_ratio": 0.004830917874396135,
+          "samples": [
+            {
+              "x": 18,
+              "y": 36,
+              "color": "#29323d"
+            },
+            {
+              "x": 19,
+              "y": 38,
+              "color": "#29323d"
+            }
+          ]
+        },
+        "doublies": {
+          "doublies_count": 0,
+          "samples": []
+        },
+        "pillow_shading": {
+          "detected": false,
+          "boundary_mean_lum": 63.00628923076924,
+          "interior_mean_lum": 105.17142887323944,
+          "tl_mean_lum": 136.78161176470593,
+          "br_mean_lum": 92.20864197530865,
+          "asymmetry": 44.57296978939728
+        },
+        "hue_rotation": {
+          "applicable": true,
+          "shadow_mean_hue": 109.83333333333334,
+          "highlight_mean_hue": 37.47377622377623,
+          "hue_rotation_deg": 72.35955710955712,
+          "rotation_passes_30": true,
+          "warm_highlight": true,
+          "cool_shadow": false
+        },
+        "anti_aa_slop": {
+          "boundary_pixel_count": 130,
+          "unique_boundary_colors": 7,
+          "distinct_ratio": 0.05384615384615385,
+          "warning": false
+        },
+        "silhouette": {
+          "visible_pixels": 414,
+          "bbox": [
+            16,
+            40
+          ],
+          "fill_ratio": 0.646875,
+          "horizontal_symmetry": 0.7391304347826086
+        }
+      },
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\people\\2-2.png"
+    },
+    {
+      "summary": {
+        "score": 100,
+        "verdict": "ship",
+        "issues": [],
+        "warnings": []
+      },
+      "findings": {
+        "image_dimensions": [
+          32,
+          48
+        ],
+        "palette": {
+          "unique_color_count": 12,
+          "total_visible_pixels": 407,
+          "total_image_pixels": 1536,
+          "palette_cap": 40,
+          "over_cap": false
+        },
+        "orphans": {
+          "orphan_count": 2,
+          "orphan_ratio": 0.004914004914004914,
+          "samples": [
+            {
+              "x": 20,
+              "y": 24,
+              "color": "#28505d"
+            },
+            {
+              "x": 15,
+              "y": 34,
+              "color": "#29323d"
+            }
+          ]
+        },
+        "doublies": {
+          "doublies_count": 0,
+          "samples": []
+        },
+        "pillow_shading": {
+          "detected": false,
+          "boundary_mean_lum": 70.31798267716539,
+          "interior_mean_lum": 107.60319714285717,
+          "tl_mean_lum": 136.78161176470593,
+          "br_mean_lum": 84.94663466666667,
+          "asymmetry": 51.83497709803926
+        },
+        "hue_rotation": {
+          "applicable": true,
+          "shadow_mean_hue": 138.12788259958072,
+          "highlight_mean_hue": 33.36961425671103,
+          "hue_rotation_deg": 104.75826834286968,
+          "rotation_passes_30": true,
+          "warm_highlight": true,
+          "cool_shadow": false
+        },
+        "anti_aa_slop": {
+          "boundary_pixel_count": 127,
+          "unique_boundary_colors": 8,
+          "distinct_ratio": 0.06299212598425197,
+          "warning": false
+        },
+        "silhouette": {
+          "visible_pixels": 407,
+          "bbox": [
+            16,
+            42
+          ],
+          "fill_ratio": 0.6056547619047619,
+          "horizontal_symmetry": 0.7174447174447175
+        }
+      },
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\people\\2-3.png"
+    },
+    {
+      "summary": {
+        "score": 100,
+        "verdict": "ship",
+        "issues": [],
+        "warnings": []
+      },
+      "findings": {
+        "image_dimensions": [
+          32,
+          48
+        ],
+        "palette": {
+          "unique_color_count": 12,
+          "total_visible_pixels": 484,
+          "total_image_pixels": 1536,
+          "palette_cap": 40,
+          "over_cap": false
+        },
+        "orphans": {
+          "orphan_count": 1,
+          "orphan_ratio": 0.002066115702479339,
+          "samples": [
+            {
+              "x": 12,
+              "y": 22,
+              "color": "#efdfbb"
+            }
+          ]
+        },
+        "doublies": {
+          "doublies_count": 0,
+          "samples": []
+        },
+        "pillow_shading": {
+          "detected": false,
+          "boundary_mean_lum": 70.47362484472049,
+          "interior_mean_lum": 104.13194860681114,
+          "tl_mean_lum": 138.57259545454545,
+          "br_mean_lum": 76.030488,
+          "asymmetry": 62.542107454545445
+        },
+        "hue_rotation": {
+          "applicable": true,
+          "shadow_mean_hue": 138.12788259958072,
+          "highlight_mean_hue": 33.36961425671103,
+          "hue_rotation_deg": 104.75826834286968,
+          "rotation_passes_30": true,
+          "warm_highlight": true,
+          "cool_shadow": false
+        },
+        "anti_aa_slop": {
+          "boundary_pixel_count": 161,
+          "unique_boundary_colors": 8,
+          "distinct_ratio": 0.049689440993788817,
+          "warning": false
+        },
+        "silhouette": {
+          "visible_pixels": 484,
+          "bbox": [
+            18,
+            41
+          ],
+          "fill_ratio": 0.6558265582655827,
+          "horizontal_symmetry": 0.7355371900826446
+        }
+      },
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\people\\2-4.png"
+    },
+    {
+      "summary": {
+        "score": 100,
+        "verdict": "ship",
+        "issues": [],
+        "warnings": []
+      },
+      "findings": {
+        "image_dimensions": [
+          32,
+          48
+        ],
+        "palette": {
+          "unique_color_count": 12,
+          "total_visible_pixels": 432,
+          "total_image_pixels": 1536,
+          "palette_cap": 40,
+          "over_cap": false
+        },
+        "orphans": {
+          "orphan_count": 2,
+          "orphan_ratio": 0.004629629629629629,
+          "samples": [
+            {
+              "x": 12,
+              "y": 23,
+              "color": "#efdfbb"
+            },
+            {
+              "x": 19,
+              "y": 36,
+              "color": "#29323d"
+            }
+          ]
+        },
+        "doublies": {
+          "doublies_count": 0,
+          "samples": []
+        },
+        "pillow_shading": {
+          "detected": false,
+          "boundary_mean_lum": 73.08711212121213,
+          "interior_mean_lum": 104.93510333333333,
+          "tl_mean_lum": 137.99873882352944,
+          "br_mean_lum": 76.61618241758242,
+          "asymmetry": 61.382556405947014
+        },
+        "hue_rotation": {
+          "applicable": true,
+          "shadow_mean_hue": 138.12788259958072,
+          "highlight_mean_hue": 33.36961425671103,
+          "hue_rotation_deg": 104.75826834286968,
+          "rotation_passes_30": true,
+          "warm_highlight": true,
+          "cool_shadow": false
+        },
+        "anti_aa_slop": {
+          "boundary_pixel_count": 132,
+          "unique_boundary_colors": 8,
+          "distinct_ratio": 0.06060606060606061,
+          "warning": false
+        },
+        "silhouette": {
+          "visible_pixels": 432,
+          "bbox": [
+            17,
+            40
+          ],
+          "fill_ratio": 0.6352941176470588,
+          "horizontal_symmetry": 0.75
+        }
+      },
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\people\\2-5.png"
+    },
+    {
+      "summary": {
+        "score": 100,
+        "verdict": "ship",
+        "issues": [],
+        "warnings": []
+      },
+      "findings": {
+        "image_dimensions": [
+          32,
+          48
+        ],
+        "palette": {
+          "unique_color_count": 12,
+          "total_visible_pixels": 408,
+          "total_image_pixels": 1536,
+          "palette_cap": 40,
+          "over_cap": false
+        },
+        "orphans": {
+          "orphan_count": 2,
+          "orphan_ratio": 0.004901960784313725,
+          "samples": [
+            {
+              "x": 20,
+              "y": 24,
+              "color": "#28505d"
+            },
+            {
+              "x": 15,
+              "y": 35,
+              "color": "#29323d"
+            }
+          ]
+        },
+        "doublies": {
+          "doublies_count": 0,
+          "samples": []
+        },
+        "pillow_shading": {
+          "detected": false,
+          "boundary_mean_lum": 71.54828372093023,
+          "interior_mean_lum": 108.35979068100359,
+          "tl_mean_lum": 136.78161176470593,
+          "br_mean_lum": 85.30333866666666,
+          "asymmetry": 51.47827309803927
+        },
+        "hue_rotation": {
+          "applicable": true,
+          "shadow_mean_hue": 138.12788259958072,
+          "highlight_mean_hue": 33.36961425671103,
+          "hue_rotation_deg": 104.75826834286968,
+          "rotation_passes_30": true,
+          "warm_highlight": true,
+          "cool_shadow": false
+        },
+        "anti_aa_slop": {
+          "boundary_pixel_count": 129,
+          "unique_boundary_colors": 8,
+          "distinct_ratio": 0.06201550387596899,
+          "warning": false
+        },
+        "silhouette": {
+          "visible_pixels": 408,
+          "bbox": [
+            16,
+            42
+          ],
+          "fill_ratio": 0.6071428571428571,
+          "horizontal_symmetry": 0.7107843137254902
+        }
+      },
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\people\\2-6.png"
+    },
+    {
+      "summary": {
+        "score": 100,
+        "verdict": "ship",
+        "issues": [],
+        "warnings": []
+      },
+      "findings": {
+        "image_dimensions": [
+          32,
+          48
+        ],
+        "palette": {
+          "unique_color_count": 9,
+          "total_visible_pixels": 541,
+          "total_image_pixels": 1536,
+          "palette_cap": 40,
+          "over_cap": false
+        },
+        "orphans": {
+          "orphan_count": 0,
+          "orphan_ratio": 0.0,
+          "samples": []
+        },
+        "doublies": {
+          "doublies_count": 0,
+          "samples": []
+        },
+        "pillow_shading": {
+          "detected": false,
+          "boundary_mean_lum": 64.11158450704227,
+          "interior_mean_lum": 91.50829774436092
+        },
+        "hue_rotation": {
+          "applicable": true,
+          "shadow_mean_hue": 109.83333333333334,
+          "highlight_mean_hue": 30.445813700616164,
+          "hue_rotation_deg": 79.38751963271719,
+          "rotation_passes_30": true,
+          "warm_highlight": true,
+          "cool_shadow": false
+        },
+        "anti_aa_slop": {
+          "boundary_pixel_count": 142,
+          "unique_boundary_colors": 6,
+          "distinct_ratio": 0.04225352112676056,
+          "warning": false
+        },
+        "silhouette": {
+          "visible_pixels": 541,
+          "bbox": [
+            18,
+            41
+          ],
+          "fill_ratio": 0.7330623306233063,
+          "horizontal_symmetry": 0.9279112754158965
+        }
+      },
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\people\\3-0.png"
+    },
+    {
+      "summary": {
+        "score": 100,
+        "verdict": "ship",
+        "issues": [],
+        "warnings": []
+      },
+      "findings": {
+        "image_dimensions": [
+          32,
+          48
+        ],
+        "palette": {
+          "unique_color_count": 9,
+          "total_visible_pixels": 556,
+          "total_image_pixels": 1536,
+          "palette_cap": 40,
+          "over_cap": false
+        },
+        "orphans": {
+          "orphan_count": 0,
+          "orphan_ratio": 0.0,
+          "samples": []
+        },
+        "doublies": {
+          "doublies_count": 0,
+          "samples": []
+        },
+        "pillow_shading": {
+          "detected": false,
+          "boundary_mean_lum": 68.3332310810811,
+          "interior_mean_lum": 90.62066911764705
+        },
+        "hue_rotation": {
+          "applicable": true,
+          "shadow_mean_hue": 109.83333333333334,
+          "highlight_mean_hue": 30.445813700616164,
+          "hue_rotation_deg": 79.38751963271719,
+          "rotation_passes_30": true,
+          "warm_highlight": true,
+          "cool_shadow": false
+        },
+        "anti_aa_slop": {
+          "boundary_pixel_count": 148,
+          "unique_boundary_colors": 6,
+          "distinct_ratio": 0.04054054054054054,
+          "warning": false
+        },
+        "silhouette": {
+          "visible_pixels": 556,
+          "bbox": [
+            20,
+            41
+          ],
+          "fill_ratio": 0.6780487804878049,
+          "horizontal_symmetry": 0.9280575539568345
+        }
+      },
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\people\\3-1.png"
+    },
+    {
+      "summary": {
+        "score": 100,
+        "verdict": "ship",
+        "issues": [],
+        "warnings": []
+      },
+      "findings": {
+        "image_dimensions": [
+          32,
+          48
+        ],
+        "palette": {
+          "unique_color_count": 9,
+          "total_visible_pixels": 532,
+          "total_image_pixels": 1536,
+          "palette_cap": 40,
+          "over_cap": false
+        },
+        "orphans": {
+          "orphan_count": 0,
+          "orphan_ratio": 0.0,
+          "samples": []
+        },
+        "doublies": {
+          "doublies_count": 0,
+          "samples": []
+        },
+        "pillow_shading": {
+          "detected": false,
+          "boundary_mean_lum": 66.36753285714286,
+          "interior_mean_lum": 91.27714642857144
+        },
+        "hue_rotation": {
+          "applicable": true,
+          "shadow_mean_hue": 109.83333333333334,
+          "highlight_mean_hue": 30.445813700616164,
+          "hue_rotation_deg": 79.38751963271719,
+          "rotation_passes_30": true,
+          "warm_highlight": true,
+          "cool_shadow": false
+        },
+        "anti_aa_slop": {
+          "boundary_pixel_count": 140,
+          "unique_boundary_colors": 6,
+          "distinct_ratio": 0.04285714285714286,
+          "warning": false
+        },
+        "silhouette": {
+          "visible_pixels": 532,
+          "bbox": [
+            19,
+            40
+          ],
+          "fill_ratio": 0.7,
+          "horizontal_symmetry": 0.8984962406015038
+        }
+      },
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\people\\3-2.png"
+    },
+    {
+      "summary": {
+        "score": 100,
+        "verdict": "ship",
+        "issues": [],
+        "warnings": []
+      },
+      "findings": {
+        "image_dimensions": [
+          32,
+          48
+        ],
+        "palette": {
+          "unique_color_count": 9,
+          "total_visible_pixels": 541,
+          "total_image_pixels": 1536,
+          "palette_cap": 40,
+          "over_cap": false
+        },
+        "orphans": {
+          "orphan_count": 0,
+          "orphan_ratio": 0.0,
+          "samples": []
+        },
+        "doublies": {
+          "doublies_count": 0,
+          "samples": []
+        },
+        "pillow_shading": {
+          "detected": false,
+          "boundary_mean_lum": 64.11158450704227,
+          "interior_mean_lum": 90.99383909774437
+        },
+        "hue_rotation": {
+          "applicable": true,
+          "shadow_mean_hue": 109.83333333333334,
+          "highlight_mean_hue": 30.445813700616164,
+          "hue_rotation_deg": 79.38751963271719,
+          "rotation_passes_30": true,
+          "warm_highlight": true,
+          "cool_shadow": false
+        },
+        "anti_aa_slop": {
+          "boundary_pixel_count": 142,
+          "unique_boundary_colors": 6,
+          "distinct_ratio": 0.04225352112676056,
+          "warning": false
+        },
+        "silhouette": {
+          "visible_pixels": 541,
+          "bbox": [
+            18,
+            42
+          ],
+          "fill_ratio": 0.7156084656084656,
+          "horizontal_symmetry": 0.9094269870609981
+        }
+      },
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\people\\3-3.png"
+    },
+    {
+      "summary": {
+        "score": 100,
+        "verdict": "ship",
+        "issues": [],
+        "warnings": []
+      },
+      "findings": {
+        "image_dimensions": [
+          32,
+          48
+        ],
+        "palette": {
+          "unique_color_count": 9,
+          "total_visible_pixels": 514,
+          "total_image_pixels": 1536,
+          "palette_cap": 40,
+          "over_cap": false
+        },
+        "orphans": {
+          "orphan_count": 0,
+          "orphan_ratio": 0.0,
+          "samples": []
+        },
+        "doublies": {
+          "doublies_count": 0,
+          "samples": []
+        },
+        "pillow_shading": {
+          "detected": false,
+          "boundary_mean_lum": 65.44356478873239,
+          "interior_mean_lum": 91.03597634408604
+        },
+        "hue_rotation": {
+          "applicable": true,
+          "shadow_mean_hue": 109.83333333333334,
+          "highlight_mean_hue": 30.445813700616164,
+          "hue_rotation_deg": 79.38751963271719,
+          "rotation_passes_30": true,
+          "warm_highlight": true,
+          "cool_shadow": false
+        },
+        "anti_aa_slop": {
+          "boundary_pixel_count": 142,
+          "unique_boundary_colors": 6,
+          "distinct_ratio": 0.04225352112676056,
+          "warning": false
+        },
+        "silhouette": {
+          "visible_pixels": 514,
+          "bbox": [
+            18,
+            41
+          ],
+          "fill_ratio": 0.6964769647696477,
+          "horizontal_symmetry": 0.9105058365758755
+        }
+      },
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\people\\3-4.png"
+    },
+    {
+      "summary": {
+        "score": 100,
+        "verdict": "ship",
+        "issues": [],
+        "warnings": []
+      },
+      "findings": {
+        "image_dimensions": [
+          32,
+          48
+        ],
+        "palette": {
+          "unique_color_count": 9,
+          "total_visible_pixels": 502,
+          "total_image_pixels": 1536,
+          "palette_cap": 40,
+          "over_cap": false
+        },
+        "orphans": {
+          "orphan_count": 0,
+          "orphan_ratio": 0.0,
+          "samples": []
+        },
+        "doublies": {
+          "doublies_count": 0,
+          "samples": []
+        },
+        "pillow_shading": {
+          "detected": false,
+          "boundary_mean_lum": 67.05069701492538,
+          "interior_mean_lum": 91.24387282608696
+        },
+        "hue_rotation": {
+          "applicable": true,
+          "shadow_mean_hue": 109.83333333333334,
+          "highlight_mean_hue": 30.445813700616164,
+          "hue_rotation_deg": 79.38751963271719,
+          "rotation_passes_30": true,
+          "warm_highlight": true,
+          "cool_shadow": false
+        },
+        "anti_aa_slop": {
+          "boundary_pixel_count": 134,
+          "unique_boundary_colors": 6,
+          "distinct_ratio": 0.04477611940298507,
+          "warning": false
+        },
+        "silhouette": {
+          "visible_pixels": 502,
+          "bbox": [
+            18,
+            39
+          ],
+          "fill_ratio": 0.7150997150997151,
+          "horizontal_symmetry": 0.9043824701195219
+        }
+      },
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\people\\3-5.png"
+    },
+    {
+      "summary": {
+        "score": 100,
+        "verdict": "ship",
+        "issues": [],
+        "warnings": []
+      },
+      "findings": {
+        "image_dimensions": [
+          32,
+          48
+        ],
+        "palette": {
+          "unique_color_count": 9,
+          "total_visible_pixels": 546,
+          "total_image_pixels": 1536,
+          "palette_cap": 40,
+          "over_cap": false
+        },
+        "orphans": {
+          "orphan_count": 0,
+          "orphan_ratio": 0.0,
+          "samples": []
+        },
+        "doublies": {
+          "doublies_count": 0,
+          "samples": []
+        },
+        "pillow_shading": {
+          "detected": false,
+          "boundary_mean_lum": 63.90004583333334,
+          "interior_mean_lum": 91.29000597014925
+        },
+        "hue_rotation": {
+          "applicable": true,
+          "shadow_mean_hue": 109.83333333333334,
+          "highlight_mean_hue": 30.445813700616164,
+          "hue_rotation_deg": 79.38751963271719,
+          "rotation_passes_30": true,
+          "warm_highlight": true,
+          "cool_shadow": false
+        },
+        "anti_aa_slop": {
+          "boundary_pixel_count": 144,
+          "unique_boundary_colors": 6,
+          "distinct_ratio": 0.041666666666666664,
+          "warning": false
+        },
+        "silhouette": {
+          "visible_pixels": 546,
+          "bbox": [
+            18,
+            42
+          ],
+          "fill_ratio": 0.7222222222222222,
+          "horizontal_symmetry": 0.9194139194139194
+        }
+      },
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\people\\3-6.png"
+    },
+    {
+      "summary": {
+        "score": 50,
+        "verdict": "redesign",
+        "issues": [
+          "Pillow shading detected \u2014 refactor with explicit light direction"
+        ],
+        "warnings": []
+      },
+      "findings": {
+        "image_dimensions": [
+          24,
+          44
+        ],
+        "palette": {
+          "unique_color_count": 10,
+          "total_visible_pixels": 860,
+          "total_image_pixels": 1056,
+          "palette_cap": 40,
+          "over_cap": false
+        },
+        "orphans": {
+          "orphan_count": 5,
+          "orphan_ratio": 0.005813953488372093,
+          "samples": [
+            {
+              "x": 4,
+              "y": 3,
+              "color": "#bc7058"
+            },
+            {
+              "x": 4,
+              "y": 21,
+              "color": "#28505d"
+            },
+            {
+              "x": 19,
+              "y": 21,
+              "color": "#28505d"
+            },
+            {
+              "x": 4,
+              "y": 40,
+              "color": "#efdfbb"
+            },
+            {
+              "x": 19,
+              "y": 40,
+              "color": "#efdfbb"
+            }
+          ]
+        },
+        "doublies": {
+          "doublies_count": 0,
+          "samples": []
+        },
+        "pillow_shading": {
+          "detected": true,
+          "boundary_mean_lum": 95.40279558823529,
+          "interior_mean_lum": 135.88288674033151,
+          "tl_mean_lum": 128.74024309392263,
+          "br_mean_lum": 143.35721325966853,
+          "asymmetry": 14.616970165745897
+        },
+        "hue_rotation": {
+          "applicable": true,
+          "shadow_mean_hue": 203.85849056603774,
+          "highlight_mean_hue": 103.26923076923077,
+          "hue_rotation_deg": 100.58925979680697,
+          "rotation_passes_30": true,
+          "warm_highlight": false,
+          "cool_shadow": true
+        },
+        "anti_aa_slop": {
+          "boundary_pixel_count": 136,
+          "unique_boundary_colors": 5,
+          "distinct_ratio": 0.03676470588235294,
+          "warning": false
+        },
+        "silhouette": {
+          "visible_pixels": 860,
+          "bbox": [
+            24,
+            42
+          ],
+          "fill_ratio": 0.8531746031746031,
+          "horizontal_symmetry": 1.0
+        }
+      },
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\hatchback-view-0.png"
+    },
+    {
+      "summary": {
+        "score": 100,
+        "verdict": "ship",
+        "issues": [],
+        "warnings": []
+      },
+      "findings": {
+        "image_dimensions": [
+          44,
+          24
+        ],
+        "palette": {
+          "unique_color_count": 11,
+          "total_visible_pixels": 562,
+          "total_image_pixels": 1056,
+          "palette_cap": 40,
+          "over_cap": false
+        },
+        "orphans": {
+          "orphan_count": 3,
+          "orphan_ratio": 0.005338078291814947,
+          "samples": [
+            {
+              "x": 21,
+              "y": 13,
+              "color": "#28505d"
+            },
+            {
+              "x": 10,
+              "y": 21,
+              "color": "#455665"
+            },
+            {
+              "x": 33,
+              "y": 21,
+              "color": "#455665"
+            }
+          ]
+        },
+        "doublies": {
+          "doublies_count": 0,
+          "samples": []
+        },
+        "pillow_shading": {
+          "detected": false,
+          "boundary_mean_lum": 107.57688709677419,
+          "interior_mean_lum": 107.87393424657536
+        },
+        "hue_rotation": {
+          "applicable": true,
+          "shadow_mean_hue": 203.85849056603774,
+          "highlight_mean_hue": 103.26923076923077,
+          "hue_rotation_deg": 100.58925979680697,
+          "rotation_passes_30": true,
+          "warm_highlight": false,
+          "cool_shadow": true
+        },
+        "anti_aa_slop": {
+          "boundary_pixel_count": 124,
+          "unique_boundary_colors": 7,
+          "distinct_ratio": 0.056451612903225805,
+          "warning": false
+        },
+        "silhouette": {
+          "visible_pixels": 562,
+          "bbox": [
+            42,
+            20
+          ],
+          "fill_ratio": 0.669047619047619,
+          "horizontal_symmetry": 0.9715302491103203
+        }
+      },
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\hatchback-view-1.png"
+    },
+    {
+      "summary": {
+        "score": 100,
+        "verdict": "ship",
+        "issues": [],
+        "warnings": []
+      },
+      "findings": {
+        "image_dimensions": [
+          24,
+          24
+        ],
+        "palette": {
+          "unique_color_count": 8,
+          "total_visible_pixels": 338,
+          "total_image_pixels": 576,
+          "palette_cap": 40,
+          "over_cap": false
+        },
+        "orphans": {
+          "orphan_count": 0,
+          "orphan_ratio": 0.0,
+          "samples": []
+        },
+        "doublies": {
+          "doublies_count": 0,
+          "samples": []
+        },
+        "pillow_shading": {
+          "detected": false,
+          "boundary_mean_lum": 96.17631249999998,
+          "interior_mean_lum": 113.44191983471076
+        },
+        "hue_rotation": {
+          "applicable": true,
+          "shadow_mean_hue": 203.85849056603774,
+          "highlight_mean_hue": 157.4025974025974,
+          "hue_rotation_deg": 46.45589316344035,
+          "rotation_passes_30": true,
+          "warm_highlight": false,
+          "cool_shadow": true
+        },
+        "anti_aa_slop": {
+          "boundary_pixel_count": 96,
+          "unique_boundary_colors": 6,
+          "distinct_ratio": 0.0625,
+          "warning": false
+        },
+        "silhouette": {
+          "visible_pixels": 338,
+          "bbox": [
+            24,
+            20
+          ],
+          "fill_ratio": 0.7041666666666667,
+          "horizontal_symmetry": 1.0
+        }
+      },
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\hatchback-view-2.png"
+    },
+    {
+      "summary": {
+        "score": 100,
+        "verdict": "ship",
+        "issues": [],
+        "warnings": []
+      },
+      "findings": {
+        "image_dimensions": [
+          24,
+          24
+        ],
+        "palette": {
+          "unique_color_count": 7,
+          "total_visible_pixels": 338,
+          "total_image_pixels": 576,
+          "palette_cap": 40,
+          "over_cap": false
+        },
+        "orphans": {
+          "orphan_count": 0,
+          "orphan_ratio": 0.0,
+          "samples": []
+        },
+        "doublies": {
+          "doublies_count": 0,
+          "samples": []
+        },
+        "pillow_shading": {
+          "detected": false,
+          "boundary_mean_lum": 95.27990416666665,
+          "interior_mean_lum": 94.60222479338844
+        },
+        "hue_rotation": {
+          "applicable": true,
+          "shadow_mean_hue": 213.00000000000003,
+          "highlight_mean_hue": 178.44155844155844,
+          "hue_rotation_deg": 34.55844155844159,
+          "rotation_passes_30": true,
+          "warm_highlight": false,
+          "cool_shadow": true
+        },
+        "anti_aa_slop": {
+          "boundary_pixel_count": 96,
+          "unique_boundary_colors": 6,
+          "distinct_ratio": 0.0625,
+          "warning": false
+        },
+        "silhouette": {
+          "visible_pixels": 338,
+          "bbox": [
+            24,
+            20
+          ],
+          "fill_ratio": 0.7041666666666667,
+          "horizontal_symmetry": 1.0
+        }
+      },
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\hatchback-view-3.png"
+    },
+    {
+      "summary": {
+        "score": 100,
+        "verdict": "ship",
+        "issues": [],
+        "warnings": []
+      },
+      "findings": {
+        "image_dimensions": [
+          28,
+          64
+        ],
+        "palette": {
+          "unique_color_count": 8,
+          "total_visible_pixels": 1450,
+          "total_image_pixels": 1792,
+          "palette_cap": 40,
+          "over_cap": false
+        },
+        "orphans": {
+          "orphan_count": 0,
+          "orphan_ratio": 0.0,
+          "samples": []
+        },
+        "doublies": {
+          "doublies_count": 0,
+          "samples": []
+        },
+        "pillow_shading": {
+          "detected": false,
+          "boundary_mean_lum": 136.58815268817207,
+          "interior_mean_lum": 188.21586329113924,
+          "tl_mean_lum": 211.36274276527328,
+          "br_mean_lum": 165.79007040498442,
+          "asymmetry": 45.57267236028886
+        },
+        "hue_rotation": {
+          "applicable": true,
+          "shadow_mean_hue": 210.5625,
+          "highlight_mean_hue": 39.26923076923077,
+          "hue_rotation_deg": 171.29326923076923,
+          "rotation_passes_30": true,
+          "warm_highlight": true,
+          "cool_shadow": true
+        },
+        "anti_aa_slop": {
+          "boundary_pixel_count": 186,
+          "unique_boundary_colors": 4,
+          "distinct_ratio": 0.021505376344086023,
+          "warning": false
+        },
+        "silhouette": {
+          "visible_pixels": 1450,
+          "bbox": [
+            28,
+            61
+          ],
+          "fill_ratio": 0.8489461358313818,
+          "horizontal_symmetry": 1.0
+        }
+      },
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\truck-view-0.png"
+    },
+    {
+      "summary": {
+        "score": 100,
+        "verdict": "ship",
+        "issues": [],
+        "warnings": []
+      },
+      "findings": {
+        "image_dimensions": [
+          64,
+          28
+        ],
+        "palette": {
+          "unique_color_count": 10,
+          "total_visible_pixels": 1293,
+          "total_image_pixels": 1792,
+          "palette_cap": 40,
+          "over_cap": false
+        },
+        "orphans": {
+          "orphan_count": 5,
+          "orphan_ratio": 0.0038669760247486465,
+          "samples": [
+            {
+              "x": 22,
+              "y": 0,
+              "color": "#c6ad91"
+            },
+            {
+              "x": 29,
+              "y": 0,
+              "color": "#c6ad91"
+            },
+            {
+              "x": 38,
+              "y": 0,
+              "color": "#c6ad91"
+            },
+            {
+              "x": 47,
+              "y": 0,
+              "color": "#c6ad91"
+            },
+            {
+              "x": 56,
+              "y": 0,
+              "color": "#c6ad91"
+            }
+          ]
+        },
+        "doublies": {
+          "doublies_count": 0,
+          "samples": []
+        },
+        "pillow_shading": {
+          "detected": false,
+          "boundary_mean_lum": 132.51594200743497,
+          "interior_mean_lum": 152.113159765625
+        },
+        "hue_rotation": {
+          "applicable": true,
+          "shadow_mean_hue": 203.85849056603774,
+          "highlight_mean_hue": 39.26923076923077,
+          "hue_rotation_deg": 164.58925979680697,
+          "rotation_passes_30": true,
+          "warm_highlight": true,
+          "cool_shadow": true
+        },
+        "anti_aa_slop": {
+          "boundary_pixel_count": 269,
+          "unique_boundary_colors": 8,
+          "distinct_ratio": 0.02973977695167286,
+          "warning": false
+        },
+        "silhouette": {
+          "visible_pixels": 1293,
+          "bbox": [
+            61,
+            27
+          ],
+          "fill_ratio": 0.785063752276867,
+          "horizontal_symmetry": 0.877030162412993
+        }
+      },
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\truck-view-1.png"
+    },
+    {
+      "summary": {
+        "score": 100,
+        "verdict": "ship",
+        "issues": [],
+        "warnings": []
+      },
+      "findings": {
+        "image_dimensions": [
+          28,
+          28
+        ],
+        "palette": {
+          "unique_color_count": 9,
+          "total_visible_pixels": 588,
+          "total_image_pixels": 784,
+          "palette_cap": 40,
+          "over_cap": false
+        },
+        "orphans": {
+          "orphan_count": 0,
+          "orphan_ratio": 0.0,
+          "samples": []
+        },
+        "doublies": {
+          "doublies_count": 0,
+          "samples": []
+        },
+        "pillow_shading": {
+          "detected": false,
+          "boundary_mean_lum": 113.2247186440678,
+          "interior_mean_lum": 134.03306978723407
+        },
+        "hue_rotation": {
+          "applicable": true,
+          "shadow_mean_hue": 214.96153846153845,
+          "highlight_mean_hue": 39.26923076923077,
+          "hue_rotation_deg": 175.69230769230768,
+          "rotation_passes_30": true,
+          "warm_highlight": true,
+          "cool_shadow": true
+        },
+        "anti_aa_slop": {
+          "boundary_pixel_count": 118,
+          "unique_boundary_colors": 8,
+          "distinct_ratio": 0.06779661016949153,
+          "warning": false
+        },
+        "silhouette": {
+          "visible_pixels": 588,
+          "bbox": [
+            28,
+            27
+          ],
+          "fill_ratio": 0.7777777777777778,
+          "horizontal_symmetry": 1.0
+        }
+      },
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\truck-view-2.png"
+    },
+    {
+      "summary": {
+        "score": 100,
+        "verdict": "ship",
+        "issues": [],
+        "warnings": []
+      },
+      "findings": {
+        "image_dimensions": [
+          28,
+          28
+        ],
+        "palette": {
+          "unique_color_count": 10,
+          "total_visible_pixels": 588,
+          "total_image_pixels": 784,
+          "palette_cap": 40,
+          "over_cap": false
+        },
+        "orphans": {
+          "orphan_count": 2,
+          "orphan_ratio": 0.003401360544217687,
+          "samples": [
+            {
+              "x": 3,
+              "y": 22,
+              "color": "#455665"
+            },
+            {
+              "x": 24,
+              "y": 22,
+              "color": "#455665"
+            }
+          ]
+        },
+        "doublies": {
+          "doublies_count": 0,
+          "samples": []
+        },
+        "pillow_shading": {
+          "detected": false,
+          "boundary_mean_lum": 116.39334406779663,
+          "interior_mean_lum": 154.70842638297876,
+          "tl_mean_lum": 174.62683076923074,
+          "br_mean_lum": 134.95882203389834,
+          "asymmetry": 39.66800873533239
+        },
+        "hue_rotation": {
+          "applicable": true,
+          "shadow_mean_hue": 203.85849056603774,
+          "highlight_mean_hue": 39.26923076923077,
+          "hue_rotation_deg": 164.58925979680697,
+          "rotation_passes_30": true,
+          "warm_highlight": true,
+          "cool_shadow": true
+        },
+        "anti_aa_slop": {
+          "boundary_pixel_count": 118,
+          "unique_boundary_colors": 7,
+          "distinct_ratio": 0.059322033898305086,
+          "warning": false
+        },
+        "silhouette": {
+          "visible_pixels": 588,
+          "bbox": [
+            28,
+            27
+          ],
+          "fill_ratio": 0.7777777777777778,
+          "horizontal_symmetry": 1.0
+        }
+      },
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\truck-view-3.png"
+    },
+    {
+      "summary": {
+        "score": 50,
+        "verdict": "redesign",
+        "issues": [
+          "Pillow shading detected \u2014 refactor with explicit light direction"
+        ],
+        "warnings": []
+      },
+      "findings": {
+        "image_dimensions": [
+          64,
+          64
+        ],
+        "palette": {
+          "unique_color_count": 25,
+          "total_visible_pixels": 2831,
+          "total_image_pixels": 4096,
+          "palette_cap": 40,
+          "over_cap": false
+        },
+        "orphans": {
+          "orphan_count": 19,
+          "orphan_ratio": 0.006711409395973154,
+          "samples": [
+            {
+              "x": 49,
+              "y": 4,
+              "color": "#455665"
+            },
+            {
+              "x": 26,
+              "y": 7,
+              "color": "#68424a"
+            },
+            {
+              "x": 43,
+              "y": 12,
+              "color": "#92514e"
+            },
+            {
+              "x": 25,
+              "y": 15,
+              "color": "#4d758c"
+            },
+            {
+              "x": 25,
+              "y": 16,
+              "color": "#80aaa9"
+            },
+            {
+              "x": 45,
+              "y": 16,
+              "color": "#68424a"
+            },
+            {
+              "x": 25,
+              "y": 17,
+              "color": "#4d758c"
+            },
+            {
+              "x": 25,
+              "y": 18,
+              "color": "#2e475b"
+            },
+            {
+              "x": 20,
+              "y": 20,
+              "color": "#92514e"
+            },
+            {
+              "x": 32,
+              "y": 20,
+              "color": "#92514e"
+            }
+          ]
+        },
+        "doublies": {
+          "doublies_count": 0,
+          "samples": []
+        },
+        "pillow_shading": {
+          "detected": true,
+          "boundary_mean_lum": 50.322443103448286,
+          "interior_mean_lum": 134.80899499807617,
+          "tl_mean_lum": 127.87998536585366,
+          "br_mean_lum": 142.25493322932917,
+          "asymmetry": 14.374947863475512
+        },
+        "hue_rotation": {
+          "applicable": true,
+          "shadow_mean_hue": 196.09062258634006,
+          "highlight_mean_hue": 54.541553862221924,
+          "hue_rotation_deg": 141.54906872411814,
+          "rotation_passes_30": true,
+          "warm_highlight": true,
+          "cool_shadow": true
+        },
+        "anti_aa_slop": {
+          "boundary_pixel_count": 232,
+          "unique_boundary_colors": 4,
+          "distinct_ratio": 0.017241379310344827,
+          "warning": false
+        },
+        "silhouette": {
+          "visible_pixels": 2831,
+          "bbox": [
+            56,
+            58
+          ],
+          "fill_ratio": 0.8716133004926109,
+          "horizontal_symmetry": 0.9954079830448604
+        }
+      },
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\street\\house-source.png"
+    },
+    {
+      "summary": {
+        "score": 50,
+        "verdict": "redesign",
+        "issues": [
+          "Pillow shading detected \u2014 refactor with explicit light direction"
+        ],
+        "warnings": []
+      },
+      "findings": {
+        "image_dimensions": [
+          64,
+          64
+        ],
+        "palette": {
+          "unique_color_count": 24,
+          "total_visible_pixels": 2952,
+          "total_image_pixels": 4096,
+          "palette_cap": 40,
+          "over_cap": false
+        },
+        "orphans": {
+          "orphan_count": 33,
+          "orphan_ratio": 0.011178861788617886,
+          "samples": [
+            {
+              "x": 15,
+              "y": 20,
+              "color": "#4d758c"
+            },
+            {
+              "x": 17,
+              "y": 20,
+              "color": "#80aaa9"
+            },
+            {
+              "x": 32,
+              "y": 20,
+              "color": "#80aaa9"
+            },
+            {
+              "x": 47,
+              "y": 20,
+              "color": "#80aaa9"
+            },
+            {
+              "x": 15,
+              "y": 21,
+              "color": "#80aaa9"
+            },
+            {
+              "x": 17,
+              "y": 21,
+              "color": "#bfd5c5"
+            },
+            {
+              "x": 32,
+              "y": 21,
+              "color": "#bfd5c5"
+            },
+            {
+              "x": 47,
+              "y": 21,
+              "color": "#bfd5c5"
+            },
+            {
+              "x": 15,
+              "y": 22,
+              "color": "#bfd5c5"
+            },
+            {
+              "x": 25,
+              "y": 26,
+              "color": "#a4b2af"
+            }
+          ]
+        },
+        "doublies": {
+          "doublies_count": 0,
+          "samples": []
+        },
+        "pillow_shading": {
+          "detected": true,
+          "boundary_mean_lum": 48.88080000000001,
+          "interior_mean_lum": 136.30544260614934,
+          "tl_mean_lum": 134.7787585014409,
+          "br_mean_lum": 137.81351964285716,
+          "asymmetry": 3.0347611414162543
+        },
+        "hue_rotation": {
+          "applicable": true,
+          "shadow_mean_hue": 174.34973189808093,
+          "highlight_mean_hue": 54.541553862221924,
+          "hue_rotation_deg": 119.80817803585902,
+          "rotation_passes_30": true,
+          "warm_highlight": true,
+          "cool_shadow": false
+        },
+        "anti_aa_slop": {
+          "boundary_pixel_count": 220,
+          "unique_boundary_colors": 1,
+          "distinct_ratio": 0.004545454545454545,
+          "warning": false
+        },
+        "silhouette": {
+          "visible_pixels": 2952,
+          "bbox": [
+            54,
+            58
+          ],
+          "fill_ratio": 0.9425287356321839,
+          "horizontal_symmetry": 1.0
+        }
+      },
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\street\\apartment-source.png"
+    },
+    {
+      "summary": {
+        "score": 100,
+        "verdict": "ship",
+        "issues": [],
+        "warnings": []
+      },
+      "findings": {
+        "image_dimensions": [
+          64,
+          64
+        ],
+        "palette": {
+          "unique_color_count": 25,
+          "total_visible_pixels": 2931,
+          "total_image_pixels": 4096,
+          "palette_cap": 40,
+          "over_cap": false
+        },
+        "orphans": {
+          "orphan_count": 10,
+          "orphan_ratio": 0.0034118048447628795,
+          "samples": [
+            {
+              "x": 56,
+              "y": 13,
+              "color": "#92514e"
+            },
+            {
+              "x": 18,
+              "y": 28,
+              "color": "#4d758c"
+            },
+            {
+              "x": 46,
+              "y": 28,
+              "color": "#4d758c"
+            },
+            {
+              "x": 16,
+              "y": 30,
+              "color": "#80aaa9"
+            },
+            {
+              "x": 19,
+              "y": 30,
+              "color": "#4d758c"
+            },
+            {
+              "x": 44,
+              "y": 30,
+              "color": "#80aaa9"
+            },
+            {
+              "x": 47,
+              "y": 30,
+              "color": "#4d758c"
+            },
+            {
+              "x": 14,
+              "y": 32,
+              "color": "#80aaa9"
+            },
+            {
+              "x": 15,
+              "y": 32,
+              "color": "#bfd5c5"
+            },
+            {
+              "x": 44,
+              "y": 34,
+              "color": "#2e475b"
+            }
+          ]
+        },
+        "doublies": {
+          "doublies_count": 0,
+          "samples": []
+        },
+        "pillow_shading": {
+          "detected": false,
+          "boundary_mean_lum": 52.01913670886078,
+          "interior_mean_lum": 116.6511997030438,
+          "tl_mean_lum": 126.73787008797652,
+          "br_mean_lum": 105.85271462686569,
+          "asymmetry": 20.885155461110827
+        },
+        "hue_rotation": {
+          "applicable": true,
+          "shadow_mean_hue": 188.4864559196734,
+          "highlight_mean_hue": 46.823086363298124,
+          "hue_rotation_deg": 141.66336955637527,
+          "rotation_passes_30": true,
+          "warm_highlight": true,
+          "cool_shadow": true
+        },
+        "anti_aa_slop": {
+          "boundary_pixel_count": 237,
+          "unique_boundary_colors": 4,
+          "distinct_ratio": 0.016877637130801686,
+          "warning": false
+        },
+        "silhouette": {
+          "visible_pixels": 2931,
+          "bbox": [
+            59,
+            56
+          ],
+          "fill_ratio": 0.8871065375302664,
+          "horizontal_symmetry": 0.9948822927328557
+        }
+      },
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\street\\shop-source.png"
+    },
+    {
+      "summary": {
+        "score": 50,
+        "verdict": "redesign",
+        "issues": [
+          "Pillow shading detected \u2014 refactor with explicit light direction"
+        ],
+        "warnings": []
+      },
+      "findings": {
+        "image_dimensions": [
+          64,
+          64
+        ],
+        "palette": {
+          "unique_color_count": 15,
+          "total_visible_pixels": 2956,
+          "total_image_pixels": 4096,
+          "palette_cap": 40,
+          "over_cap": false
+        },
+        "orphans": {
+          "orphan_count": 42,
+          "orphan_ratio": 0.014208389715832206,
+          "samples": [
+            {
+              "x": 18,
+              "y": 21,
+              "color": "#4d758c"
+            },
+            {
+              "x": 20,
+              "y": 21,
+              "color": "#80aaa9"
+            },
+            {
+              "x": 33,
+              "y": 21,
+              "color": "#80aaa9"
+            },
+            {
+              "x": 46,
+              "y": 21,
+              "color": "#80aaa9"
+            },
+            {
+              "x": 18,
+              "y": 22,
+              "color": "#80aaa9"
+            },
+            {
+              "x": 31,
+              "y": 22,
+              "color": "#80aaa9"
+            },
+            {
+              "x": 44,
+              "y": 22,
+              "color": "#80aaa9"
+            },
+            {
+              "x": 16,
+              "y": 23,
+              "color": "#80aaa9"
+            },
+            {
+              "x": 29,
+              "y": 23,
+              "color": "#80aaa9"
+            },
+            {
+              "x": 42,
+              "y": 23,
+              "color": "#80aaa9"
+            }
+          ]
+        },
+        "doublies": {
+          "doublies_count": 0,
+          "samples": []
+        },
+        "pillow_shading": {
+          "detected": true,
+          "boundary_mean_lum": 50.042049090909096,
+          "interior_mean_lum": 131.3983103070175,
+          "tl_mean_lum": 131.92292068965517,
+          "br_mean_lum": 130.3005663690476,
+          "asymmetry": 1.6223543206075703
+        },
+        "hue_rotation": {
+          "applicable": true,
+          "shadow_mean_hue": 212.1965811965812,
+          "highlight_mean_hue": 83.64852538765584,
+          "hue_rotation_deg": 128.54805580892537,
+          "rotation_passes_30": true,
+          "warm_highlight": true,
+          "cool_shadow": true
+        },
+        "anti_aa_slop": {
+          "boundary_pixel_count": 220,
+          "unique_boundary_colors": 2,
+          "distinct_ratio": 0.00909090909090909,
+          "warning": false
+        },
+        "silhouette": {
+          "visible_pixels": 2956,
+          "bbox": [
+            54,
+            58
+          ],
+          "fill_ratio": 0.9438058748403576,
+          "horizontal_symmetry": 1.0
+        }
+      },
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\street\\office-source.png"
+    },
+    {
+      "summary": {
+        "score": 50,
+        "verdict": "redesign",
+        "issues": [
+          "Pillow shading detected \u2014 refactor with explicit light direction"
+        ],
+        "warnings": []
+      },
+      "findings": {
+        "image_dimensions": [
+          64,
+          64
+        ],
+        "palette": {
+          "unique_color_count": 21,
+          "total_visible_pixels": 2687,
+          "total_image_pixels": 4096,
+          "palette_cap": 40,
+          "over_cap": false
+        },
+        "orphans": {
+          "orphan_count": 12,
+          "orphan_ratio": 0.00446594715295869,
+          "samples": [
+            {
+              "x": 52,
+              "y": 3,
+              "color": "#455665"
+            },
+            {
+              "x": 14,
+              "y": 13,
+              "color": "#70818a"
+            },
+            {
+              "x": 50,
+              "y": 14,
+              "color": "#70818a"
+            },
+            {
+              "x": 48,
+              "y": 15,
+              "color": "#70818a"
+            },
+            {
+              "x": 9,
+              "y": 16,
+              "color": "#70818a"
+            },
+            {
+              "x": 46,
+              "y": 16,
+              "color": "#70818a"
+            },
+            {
+              "x": 7,
+              "y": 17,
+              "color": "#70818a"
+            },
+            {
+              "x": 12,
+              "y": 43,
+              "color": "#80aaa9"
+            },
+            {
+              "x": 46,
+              "y": 52,
+              "color": "#bc7058"
+            },
+            {
+              "x": 11,
+              "y": 53,
+              "color": "#92514e"
+            }
+          ]
+        },
+        "doublies": {
+          "doublies_count": 0,
+          "samples": []
+        },
+        "pillow_shading": {
+          "detected": true,
+          "boundary_mean_lum": 53.31310503597123,
+          "interior_mean_lum": 115.49599584889995,
+          "tl_mean_lum": 119.50967772020724,
+          "br_mean_lum": 116.80890399999997,
+          "asymmetry": 2.700773720207266
+        },
+        "hue_rotation": {
+          "applicable": true,
+          "shadow_mean_hue": 170.27628205128207,
+          "highlight_mean_hue": 91.01768666116493,
+          "hue_rotation_deg": 79.25859539011714,
+          "rotation_passes_30": true,
+          "warm_highlight": false,
+          "cool_shadow": false
+        },
+        "anti_aa_slop": {
+          "boundary_pixel_count": 278,
+          "unique_boundary_colors": 3,
+          "distinct_ratio": 0.01079136690647482,
+          "warning": false
+        },
+        "silhouette": {
+          "visible_pixels": 2687,
+          "bbox": [
+            58,
+            58
+          ],
+          "fill_ratio": 0.7987514863258026,
+          "horizontal_symmetry": 0.9311499813918869
+        }
+      },
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\street\\factory-source.png"
+    },
+    {
+      "summary": {
+        "score": 50,
+        "verdict": "redesign",
+        "issues": [
+          "Pillow shading detected \u2014 refactor with explicit light direction"
+        ],
+        "warnings": []
+      },
+      "findings": {
+        "image_dimensions": [
+          64,
+          64
+        ],
+        "palette": {
+          "unique_color_count": 24,
+          "total_visible_pixels": 2793,
+          "total_image_pixels": 4096,
+          "palette_cap": 40,
+          "over_cap": false
+        },
+        "orphans": {
+          "orphan_count": 16,
+          "orphan_ratio": 0.005728607232366631,
+          "samples": [
+            {
+              "x": 39,
+              "y": 20,
+              "color": "#92514e"
+            },
+            {
+              "x": 29,
+              "y": 24,
+              "color": "#68424a"
+            },
+            {
+              "x": 36,
+              "y": 24,
+              "color": "#68424a"
+            },
+            {
+              "x": 58,
+              "y": 24,
+              "color": "#92514e"
+            },
+            {
+              "x": 16,
+              "y": 31,
+              "color": "#4d758c"
+            },
+            {
+              "x": 49,
+              "y": 31,
+              "color": "#4d758c"
+            },
+            {
+              "x": 14,
+              "y": 34,
+              "color": "#80aaa9"
+            },
+            {
+              "x": 47,
+              "y": 34,
+              "color": "#80aaa9"
+            },
+            {
+              "x": 45,
+              "y": 36,
+              "color": "#80aaa9"
+            },
+            {
+              "x": 46,
+              "y": 36,
+              "color": "#bfd5c5"
+            }
+          ]
+        },
+        "doublies": {
+          "doublies_count": 0,
+          "samples": []
+        },
+        "pillow_shading": {
+          "detected": true,
+          "boundary_mean_lum": 57.68936280991736,
+          "interior_mean_lum": 137.25803810270483,
+          "tl_mean_lum": 134.04379053627758,
+          "br_mean_lum": 139.30706666666666,
+          "asymmetry": 5.263276130389073
+        },
+        "hue_rotation": {
+          "applicable": true,
+          "shadow_mean_hue": 178.67584985906737,
+          "highlight_mean_hue": 46.823086363298124,
+          "hue_rotation_deg": 131.85276349576924,
+          "rotation_passes_30": true,
+          "warm_highlight": true,
+          "cool_shadow": false
+        },
+        "anti_aa_slop": {
+          "boundary_pixel_count": 242,
+          "unique_boundary_colors": 4,
+          "distinct_ratio": 0.01652892561983471,
+          "warning": false
+        },
+        "silhouette": {
+          "visible_pixels": 2793,
+          "bbox": [
+            58,
+            58
+          ],
+          "fill_ratio": 0.8302615933412604,
+          "horizontal_symmetry": 0.9881847475832438
+        }
+      },
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\street\\school-source.png"
+    },
+    {
+      "summary": {
+        "score": 50,
+        "verdict": "redesign",
+        "issues": [
+          "Pillow shading detected \u2014 refactor with explicit light direction"
+        ],
+        "warnings": []
+      },
+      "findings": {
+        "image_dimensions": [
+          64,
+          128
+        ],
+        "palette": {
+          "unique_color_count": 8,
+          "total_visible_pixels": 3647,
+          "total_image_pixels": 8192,
+          "palette_cap": 40,
+          "over_cap": false
+        },
+        "orphans": {
+          "orphan_count": 14,
+          "orphan_ratio": 0.003838771593090211,
+          "samples": [
+            {
+              "x": 18,
+              "y": 13,
+              "color": "#506847"
+            },
+            {
+              "x": 16,
+              "y": 14,
+              "color": "#506847"
+            },
+            {
+              "x": 11,
+              "y": 20,
+              "color": "#506847"
+            },
+            {
+              "x": 27,
+              "y": 21,
+              "color": "#506847"
+            },
+            {
+              "x": 5,
+              "y": 32,
+              "color": "#506847"
+            },
+            {
+              "x": 20,
+              "y": 33,
+              "color": "#506847"
+            },
+            {
+              "x": 19,
+              "y": 35,
+              "color": "#506847"
+            },
+            {
+              "x": 18,
+              "y": 37,
+              "color": "#344c45"
+            },
+            {
+              "x": 26,
+              "y": 38,
+              "color": "#506847"
+            },
+            {
+              "x": 36,
+              "y": 38,
+              "color": "#506847"
+            }
+          ]
+        },
+        "doublies": {
+          "doublies_count": 0,
+          "samples": []
+        },
+        "pillow_shading": {
+          "detected": true,
+          "boundary_mean_lum": 78.23729576719577,
+          "interior_mean_lum": 119.50740911593758,
+          "tl_mean_lum": 128.98343496027238,
+          "br_mean_lum": 111.26183387470996,
+          "asymmetry": 17.721601085562412
+        },
+        "hue_rotation": {
+          "applicable": true,
+          "shadow_mean_hue": 187.75,
+          "highlight_mean_hue": 46.29646215853113,
+          "hue_rotation_deg": 141.45353784146886,
+          "rotation_passes_30": true,
+          "warm_highlight": true,
+          "cool_shadow": true
+        },
+        "anti_aa_slop": {
+          "boundary_pixel_count": 378,
+          "unique_boundary_colors": 7,
+          "distinct_ratio": 0.018518518518518517,
+          "warning": false
+        },
+        "silhouette": {
+          "visible_pixels": 3647,
+          "bbox": [
+            57,
+            108
+          ],
+          "fill_ratio": 0.5924301494476933,
+          "horizontal_symmetry": 0.9158212229229503
+        }
+      },
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\street\\tree-source.png"
+    }
+  ],
+  "note": "Pillow-shading, hue and other warnings are retained, not silently waived. See independent visual review."
+}

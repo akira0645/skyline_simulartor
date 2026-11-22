@@ -1,0 +1,33 @@
+{
+  "date": "2026-11-23",
+  "art_source": "code",
+  "image_model_used": false,
+  "native_asset_check": { "frames": 49, "hard_failures": 0, "flagged_frames": 13 },
+  "independent_reviews": { "actors": 86, "civic": 88, "blocking_issues": 0 },
+  "tests": {
+    "fast": { "files": 56, "passed": 216 },
+    "simulation_initial": { "files": 11, "passed": 40, "deadline_failures": 2 },
+    "deadline_rerun": {
+      "passed": 2,
+      "unrelated_cases_skipped_by_name_filter": 4,
+      "command": "npm exec vitest -- run src/app/demoCity.test.ts src/simulation/CityBalance.test.ts --mode simulation -t \"leaves the far bank|keeps the large city\"",
+      "note": "The two timed-out cases passed after adopting the serial group's 60-second default for twelve-month town growth and a 90-second CityBalance integration deadline. Assertions and simulated duration were not reduced."
+    },
+    "distinct_cases_verified_after_fixes": 258,
+    "focused_collision_and_rendering": { "files": 16, "passed": 69 }
+  },
+  "production_build": {
+    "command": "npm run build",
+    "passed": true,
+    "includes": ["three regenerated demo cities", "simulation TypeScript", "application TypeScript", "Vite production bundle"],
+    "warning": "The pre-existing application entry remains above Vite's 500 kB chunk advisory."
+  },
+  "browser": {
+    "street_palettes_checked": ["classic", "california", "sf", "newyork"],
+    "zoom_checked": 6,
+    "game": "Loaded the small demo city and confirmed new facilities in the actual zoomed city renderer.",
+    "console_errors_on_final_loads": 0,
+    "screenshots": ["civic-street.jpg", "traffic-spacing.jpg"]
+  },
+  "remaining_scope": "See remaining-assets.md for unredrawn art. Decorative parked vehicles and clock-derived ambulance return motion are not yet in the shared moving-body scheduler."
+}

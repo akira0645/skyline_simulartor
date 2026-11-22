@@ -21,7 +21,7 @@ it('slows down in congestion and remains unchanged while paused', () => {
   advance(jam, 0, 2, true);
   expect(jam).toEqual(before);
 });
-it('waits at the terminal before returning, and eventually releases a deadlock', () => {
+it('waits at the terminal before returning and never drives through a blocked body', () => {
   const car = { ...state(), along: 9.99 };
   advance(car);
   expect(car).toMatchObject({ along: 10, returning: true, wait: 650 });
@@ -31,7 +31,29 @@ it('waits at the terminal before returning, and eventually releases a deadlock',
   expect(car.along).toBeLessThan(10);
   const stuck = state();
   advance(stuck, 3600, 0, true);
+  expect(stuck.along).toBe(1);
+  advance(stuck, 20000, 0, true);
+  expect(stuck.along).toBe(1);
+  advance(stuck);
   expect(stuck.along).toBeGreaterThan(1);
+});
+
+it('continues to obey red lights after several cycles', () => {
+  const car = state();
+  advance(car, 20000, 0, false, true);
+  expect(car.along).toBe(1);
+  advance(car);
+  expect(car.along).toBeGreaterThan(1);
+});
+
+it('checks every substep before accepting motion or a turn completion', () => {
+  const path = Array.from({ length: 6 }, (_, x) => ({ x, y: 0 }));
+  const car = state();
+  advancePathVehicle(car, path, 4000, 400, 0, false, false, 1500, (_before, after) => after.along <= 2);
+  expect(car.along).toBe(2);
+  const turning = { ...state(), along: 5, returning: true, turnFrom: false, wait: TURN_MS };
+  advancePathVehicle(turning, path, TURN_MS, 400, 0, false, false, 1500, () => false);
+  expect(turning).toMatchObject({ along: 5, returning: true, turnFrom: false, wait: TURN_MS });
 });
 
 

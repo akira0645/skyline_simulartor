@@ -24,6 +24,7 @@ import { services } from '../simulation/Services';
 import { transit } from '../simulation/Transit';
 import { vehicleSizes } from './vehicleSizes';
 import { CarQueue } from './CarQueue';
+import { clearRoadAdvance, type RoadBody } from '../simulation/RoadOccupancy';
 import { land, parcelAt, parcelCentre, parcelOrigin } from '../simulation/Land';
 import { lineColour } from '../app/lineColours';
 import { advancePathVehicle, roadVehiclePose, roadPathKey, type RoadVehicle } from './roadVehicle';
@@ -178,12 +179,13 @@ export class CityRenderer {
     const roadVehiclePaths = new Map<string, string>();
     const pathKeys = new WeakMap<readonly Cell[], string>();
     const roadVehicles = new Map<string, RoadVehicle>();
+    const pendingRoadVehicles = new Set<string>();
     const trips = new Map<string, { at: 'home' | 'work'; along?: number; wait: number; driving?: boolean;
       garage?: { home: boolean; work: boolean }; lot?: { home?: number; work?: number }; held?: number;
       /** How many times they have set out, and the way by the filling station when this trip goes that way. */
       count?: number; detour?: { path: Cell[]; stop: number; wait: number } }>();
     /** The cars that were on the road in the last frame, for the ones behind to keep clear of. */
-    let cars: { x: number; y: number; hx: number; hy: number; index: number }[] = [];
+    let cars: RoadBody[] = [];
     /** Whether a car in the same lane is just ahead of this spot: one going the same way, within `reach` of a tile. */
     const queue = new CarQueue();
     const carAhead = (x: number, y: number, hx: number, hy: number, self: number, reach = 0.48) =>
@@ -425,6 +427,12 @@ export class CityRenderer {
 
     const drawPeople = (elapsed = 0) => {
       queue.reset(cars);
+      // Authoritative deliveries are present before commuters move, including the first frame.
+      for (const [i, shipment] of this.city.shipments.frames().entries()) {
+        if (shipment.activity === 'working') continue;
+        queue.add({ ...roadVehiclePose(shipment.route.path, shipment), index: -10000 - i,
+          length: (vehicleSizes.freight.length + 2) / TILE_SIZE, width: (vehicleSizes.freight.width + 2) / TILE_SIZE });
+      }
       vehicleFrames = [];
       people.clear();
       people.alpha = streetOpacity();
@@ -543,6 +551,20 @@ export class CityRenderer {
           const position = commuterPosition(route, 0, driving ? 'drive' : 'walk', index / steps, returning)!;
           return centre(position);
         };
+        const carPoint = (progress: number) => {
+          const spot = onRoad(progress);
+          const edge = Math.min(progress - 1, steps - 1 - progress);
+          if (edge >= 0.5) return spot;
+          const parked = kerb(progress - 1 < 0.5 ? from : to);
+          const part = Math.max(0, edge / 0.5);
+          return { x: parked.x + (spot.x - parked.x) * part, y: parked.y + (spot.y - parked.y) * part };
+        };
+        const bodyAt = (progress: number): RoadBody => {
+          const spot = carPoint(progress);
+          const a = onRoad(Math.max(1, progress - 0.01)), b = onRoad(Math.min(steps - 1, progress + 0.01));
+          const angle = carHeading(b.x - a.x, b.y - a.y, kerb(from).heading);
+          return { x: spot.x / TILE_SIZE, y: spot.y / TILE_SIZE, hx: Math.cos(angle), hy: Math.sin(angle), index: i };
+        };
         const along = trip.along;
         let speed = 1 / WALK_MS_PER_TILE;
 
@@ -583,12 +605,10 @@ export class CityRenderer {
           const hy = vertical ? Math.sign(dy) : 0;
           const out = along - 1;
           const inn = steps - 1 - along;
-          let inLane = true;
           if (out < 0.5 || inn < 0.5) {
             const car = kerb(out < 0.5 ? from : to);
             const part = Math.min(out, inn) / 0.5;
             spot = { x: car.x + (spot.x - car.x) * part, y: car.y + (spot.y - car.y) * part };
-            inLane = part > 0.6;
           }
           // Keep clear of the car in front.
           const tileX = spot.x / TILE_SIZE;
@@ -599,10 +619,6 @@ export class CityRenderer {
           const aheadY = Math.floor(tileY + hy * 0.55);
           const red = (aheadX !== Math.floor(tileX) || aheadY !== Math.floor(tileY)) &&
             junctions.has(aheadY * MAP_SIZE + aheadX) && greenUpright(aheadX, aheadY) !== vertical;
-          // Nobody waits behind another for ever: after a few seconds the car edges past, which
-          // undoes any knot that cars from several ways have tied.
-          // The same goes for a light: one that has not let the car through in two full turns is
-          // taken to be stuck, whatever the reason, and the car goes.
           // At the pump: stand a moment while the tank fills.
           let filling = false;
           if (trip.detour && trip.detour.wait > 0 && along >= trip.detour.stop) {
@@ -612,11 +628,18 @@ export class CityRenderer {
               .rect(Math.round(spot.x) - 1, Math.round(spot.y) - 11, 3, 4).fill(0xf2c94c);
           }
           trip.held = blocked || red ? (trip.held ?? 0) + elapsed : 0;
-          speed = filling || (trip.held > 0 && trip.held < (red ? 2 * LIGHT + 600 : 3500)) ? 0 : 1 / VEHICLE_PACE[tier];
+          speed = filling || blocked || red ? 0 : 1 / VEHICLE_PACE[tier];
           if (this.city.crashDelay({ x: Math.floor(tileX), y: Math.floor(tileY) })) speed *= 0.35;
-          drawCar(spot.x, spot.y, vertical, i, tier, carHeading(dx, dy, vertical ? Math.PI / 2 : 0));
-          seenAt(spot);
-          if (inLane) moving.push({ x: tileX, y: tileY, hx, hy, index: i });
+          const desired = Math.min(steps - 1, along + elapsed * speed);
+          const accepted = clearRoadAdvance(along, desired, bodyAt, queue);
+          if (accepted < desired - 1e-6) trip.held = (trip.held ?? 0) + elapsed;
+          const body = bodyAt(accepted);
+          const drawn = { x: body.x * TILE_SIZE, y: body.y * TILE_SIZE };
+          drawCar(drawn.x, drawn.y, Math.abs(body.hy) > Math.abs(body.hx), i, tier, Math.atan2(body.hy, body.hx));
+          seenAt(drawn);
+          // Include vehicles merging from the kerb; update this frame's occupancy immediately.
+          moving.push(body); queue.add(body);
+          trip.along = accepted;
           if (elapsed > 0) {
             const id = Math.floor(tileY) * MAP_SIZE + Math.floor(tileX);
             counted[id] += blocked ? 3 : 1;
@@ -624,12 +647,23 @@ export class CityRenderer {
           }
         }
 
-        trip.along = driving ? along + elapsed * speed : walkForward(route.path, returning ? workplace : home, along, elapsed * speed, returning);
+        if (driving && along >= 1 && along <= steps - 1) {
+          if (trip.along === steps - 1) trip.along += Math.min(0.01, elapsed / WALK_MS_PER_TILE);
+        } else if (driving) {
+          const proposed = along + elapsed * speed;
+          // Wait in the building/kerb until there is room for the entire body to merge.
+          if (along < 1 && proposed >= 1) {
+            if (queue.canOccupy(bodyAt(1))) {
+              trip.along = 1;
+              const body = bodyAt(1);
+              moving.push(body); queue.add(body);
+            }
+          } else trip.along = proposed;
+        } else trip.along = walkForward(route.path, returning ? workplace : home, along, elapsed * speed, returning);
         if (trip.along >= steps) trips.set(key, { at: to, wait: 0, count: trip.count });
       }
       if (elapsed > 0) {
         cars = moving;
-        queue.reset(cars);
 
       }
       // The cars standing in each car park: up to six, in its bays.
@@ -714,23 +748,31 @@ export class CityRenderer {
         if (!state || roadVehiclePaths.get(key) !== signature) {
           state = { along: initial * last, returning: false, held: 0, wait: 0 };
           roadVehicles.set(key, state); roadVehiclePaths.set(key, signature);
+          pendingRoadVehicles.add(key);
         }
         state.along = Math.min(last, state.along);
         const before = roadVehiclePose(path, state);
         const { x, y, hx, hy } = before;
         const self = -1000 - liveVehicles.size;
+        const bodyAt = (state: RoadVehicle): RoadBody => ({ ...roadVehiclePose(path, state), index: self,
+          length: (vehicleSizes.bus.length + 2) / TILE_SIZE, width: (vehicleSizes.bus.width + 2) / TILE_SIZE });
+        if (pendingRoadVehicles.has(key)) {
+          if (!queue.canOccupy(bodyAt(state))) return undefined;
+          pendingRoadVehicles.delete(key);
+        }
         const blocked = carAhead(x, y, hx, hy, self, 0.8);
         const aheadX = Math.floor(x + hx * 0.55);
         const aheadY = Math.floor(y + hy * 0.55);
         const red = (aheadX !== Math.floor(x) || aheadY !== Math.floor(y)) &&
           junctions.has(aheadY * MAP_SIZE + aheadX) && greenUpright(aheadX, aheadY) !== before.upright;
         const load = this.city.congestionAt(path[before.index], this.hour());
-        const completed = advancePathVehicle(state, path, elapsed, pace, load, blocked, red, LIGHT);
+        const completed = advancePathVehicle(state, path, elapsed, pace, load, blocked, red, LIGHT,
+          (from, to) => queue.canTravel(bodyAt(from), bodyAt(to)));
         const pose = roadVehiclePose(path, state);
-        const held = state.held > 0 && state.held <= (red ? 2 * LIGHT + 600 : 3500);
+        const held = state.held > 0;
         const activity: VehicleActivity = state.turnFrom !== undefined ? 'turning' : held ? red ? 'red' : 'queued' : load > 1 ? 'slow' : 'moving';
         if (elapsed > 0) {
-          const car = { x: pose.x, y: pose.y, hx: pose.hx, hy: pose.hy, index: self };
+          const car = bodyAt(state);
           cars.push(car);
           queue.add(car);
           const id = Math.floor(y) * MAP_SIZE + Math.floor(x);
@@ -743,7 +785,7 @@ export class CityRenderer {
       };
       const freightRouteShown = this.freightVisible || this.overlay() === 'freight' || getTool() === 'freight-line';
       const chosenFreight = freightRouteShown ? selectedFreightKey(this.city.getFreightMode(), this.city.getFreightLines(), this.city.getFreight(), this.selectedFreight) : undefined;
-      for (const shipment of this.city.shipments.frames()) {
+      for (const [shipmentIndex, shipment] of this.city.shipments.frames().entries()) {
         const run = shipment.route;
         const pose = roadVehiclePose(run.path, shipment);
         const at = { x: pose.x * TILE_SIZE, y: pose.y * TILE_SIZE, angle: pose.angle,
@@ -764,7 +806,8 @@ export class CityRenderer {
           warehouseOrigin: this.city.map.at(run.from) === 'warehouse', plannedGoods: run.goods, plannedTrips: run.trucks, cargo: shipment.cargo.reduce((sum, item) => sum + item.amount, 0), capacity: 24 };
         vehicleFrames.push(info);
         if (shipment.activity !== 'working') {
-          const car = { x: pose.x, y: pose.y, hx: pose.hx, hy: pose.hy, index: -10000 - vehicleFrames.length };
+          const car = { x: pose.x, y: pose.y, hx: pose.hx, hy: pose.hy, index: -10000 - shipmentIndex,
+            length: (size.length + 2) / TILE_SIZE, width: (size.width + 2) / TILE_SIZE };
           cars.push(car); queue.add(car);
         }
         if (!info.visible) continue;
@@ -815,6 +858,7 @@ export class CityRenderer {
           const along = (outbound ? progress : 1 - progress) * last;
           const bus = line.kind === 'bus' ? vehicleOnRoad(`bus:${line.id}:${vehicle}`, line.path,
             LINE_PACE.bus, vehicle / line.vehicles) : undefined;
+          if (line.kind === 'bus' && !bus) continue;
           // A bus is one box; a train is three cars, the later ones trailing behind the first.
           const cars = line.kind === 'metro' ? 3 : 1;
           for (let car = 0; car < cars; car++) {
@@ -857,7 +901,9 @@ export class CityRenderer {
           }
         }
       }
-      for (const key of roadVehicles.keys()) if (!liveVehicles.has(key)) { roadVehicles.delete(key); roadVehiclePaths.delete(key); }
+      for (const key of roadVehicles.keys()) if (!liveVehicles.has(key)) {
+        roadVehicles.delete(key); roadVehiclePaths.delete(key); pendingRoadVehicles.delete(key);
+      }
       if (elapsed > 0) settleCrowd(elapsed);
     };
     const drawEffects = () => {
@@ -897,6 +943,9 @@ export class CityRenderer {
         }
       }
       drawLife();
+      // Deliveries advance in the simulation before the next animation frame; let them see
+      // the same physical cars and buses, so a truck cannot drive into a stopped car's rear.
+      this.city.shipments.setStreetTraffic(cars.filter(car => car.index > -10000));
     };
 
     /**
@@ -1326,6 +1375,7 @@ export class CityRenderer {
   }
 
   destroy(): void {
+    this.city.shipments.setStreetTraffic([]);
     this.refresh = undefined;
     this.resetView = undefined;
     this.setPlaying = undefined;

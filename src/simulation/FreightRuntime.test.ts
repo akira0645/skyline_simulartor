@@ -16,6 +16,46 @@ function prepared() {
 const empty = () => 0;
 
 describe('actual freight', () => {
+  it('shares physical street occupancy with cars, waits without passing and releases when clear', () => {
+    const runtime = prepared();
+    const line = { ...route(11, 10) };
+    runtime.sync([line], [{ id: 8, amount: 240 }], [{ id: 11, amount: 240 }]);
+    runtime.setStreetTraffic([{ index: 0, x: 10.5, y: 1.69, hx: 1, hy: 0 }]);
+    runtime.advance(10000, empty);
+    expect(runtime.frames()[0].along).toBeLessThan(1.5);
+    expect(runtime.report().current[0].delivered).toBe(0);
+    expect(runtime.frames()[0].activity).toBe('queued');
+    runtime.setStreetTraffic([]);
+    runtime.advance(500, empty);
+    expect(runtime.frames()[0].along).toBeGreaterThan(2);
+  });
+  it('waits at an occupied driveway before loading and does not save transient street bodies', () => {
+    const runtime = prepared();
+    runtime.setStreetTraffic([{ index: 0, x: 8.5, y: 1.69, hx: 1, hy: 0 }]);
+    runtime.advance(1000, empty);
+    expect(runtime.report().inTransit).toBe(0);
+    const save = runtime.save();
+    runtime.load(save, 0);
+    runtime.advance(50, empty);
+    expect(runtime.report().inTransit).toBeGreaterThan(0);
+  });
+  it('keeps a queued truck behind a red-light truck for longer than the former timeout', () => {
+    const runtime = prepared();
+    const line = { ...route(11, 10), vehicles: 2 };
+    runtime.sync([line], [{ id: 8, amount: 240 }], [{ id: 11, amount: 240 }]);
+    const save = runtime.save();
+    save.vehicles.forEach((vehicle, index) => {
+      vehicle.activity = 'moving'; vehicle.along = index === 0 ? 3 : 2.3;
+      vehicle.nextDeparture = 20000;
+    });
+    runtime.load(save, 0);
+    runtime.advance(10000, (_route, _along, vehicle) => ({ load: 0, red: vehicle === runtime.frames()[0] }));
+    expect(runtime.frames()[0].along).toBe(3);
+    expect(runtime.frames()[1].along).toBeLessThanOrEqual(2.3);
+    runtime.advance(100, empty);
+    expect(runtime.frames()[0].along).toBeGreaterThan(3);
+    expect(runtime.frames()[1].along).toBeGreaterThan(2.3);
+  });
   it('deducts a finite manifest at departure and credits shop stock only upon reaching it', () => {
     const runtime = prepared();
     runtime.advance(100, empty);

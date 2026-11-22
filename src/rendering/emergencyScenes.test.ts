@@ -11,13 +11,14 @@ it('keeps a rescue vehicle in the right-hand lane, heading the way it drives', (
   expect(vehicleAt(route, 5)).toMatchObject({ x: 8.5, hx: 1, hy: 0 });
 });
 
-it('stands behind a car in its lane, then is let by, and the scene waits for it', () => {
+it('stands behind a car without crossing its body and the scene waits for it', () => {
   const stuck = scene();
   for (let age = 100; age <= 1000; age += 100) advanceScene(stuck, age, () => true);
   expect(stuck.travelled ?? 0).toBe(0);
   expect(sceneLength(stuck)).toBe(Infinity);
-  // After a moment with the siren on, the car in front lets it squeeze past.
-  for (let age = 1100; age <= 2000; age += 100) advanceScene(stuck, age, () => true);
+  for (let age = 1100; age <= 6000; age += 100) advanceScene(stuck, age, () => true);
+  expect(stuck.travelled ?? 0).toBe(0);
+  advanceScene(stuck, 6100, () => false);
   expect(stuck.travelled).toBeGreaterThan(0);
 
   const free = scene();

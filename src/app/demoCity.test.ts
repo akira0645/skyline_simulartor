@@ -73,7 +73,8 @@ it('opens as a town that is lived in, pays its way and has work left to do', { t
   expect(city.getStats().employed).toBeLessThan(before);
 });
 
-it('leaves the far bank without power, water or police until the player sees to it', { timeout: 30000 }, () => {
+// This advances a town twelve months; use the serial simulation group's normal deadline.
+it('leaves the far bank without power, water or police until the player sees to it', () => {
   const engine = demo();
   const { city } = engine;
   const opening = city.getStats();

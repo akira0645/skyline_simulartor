@@ -382,8 +382,10 @@ export class TileRenderer {
         } else if (tile === 'warehouse') {
           tileAt(GRASS[0], x, y);
           cityAt(0, HOME_ROW + 5, x, y);
-          g.rect(x * TILE_SIZE + 3, y * TILE_SIZE + 24, 26, 4).fill(0x668eac);
-          g.rect(x * TILE_SIZE + 6, y * TILE_SIZE + 25, 4, 2).rect(x * TILE_SIZE + 22, y * TILE_SIZE + 25, 4, 2).fill(0xe8c589);
+          if (!detailed) {
+            g.rect(x * TILE_SIZE + 3, y * TILE_SIZE + 24, 26, 4).fill(0x668eac);
+            g.rect(x * TILE_SIZE + 6, y * TILE_SIZE + 25, 4, 2).rect(x * TILE_SIZE + 22, y * TILE_SIZE + 25, 4, 2).fill(0xe8c589);
+          }
         } else if (tile in CIVIC_DETAIL_ART) {
           tileAt(GRASS[0], x, y);
           cityAt(CIVIC_DETAIL_ART[tile]!, 14, x, y);

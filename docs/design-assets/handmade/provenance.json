@@ -2,6 +2,8 @@
   "art_source": "code",
   "image_model_used": false,
   "authoring_script": "tools/draw-handmade.py",
+  "actor_authoring_script": "tools/pixel_actors.py",
+  "vehicle_geometry": "one code-authored volume per vehicle; slices and diagnostic views share geometry",
   "skill": "pixel-art-studio",
   "palette": {
     "ink": "#29323d",
@@ -50,6 +52,5 @@
   ],
   "person_walk_frames": 6,
   "source_specs": "specs/",
-  "actor_authoring_script": "tools/pixel_actors.py",
-  "vehicle_geometry": "one code-authored volume per vehicle; slices and diagnostic views share geometry"
+  "civic_authoring_script": "tools/pixel_civic.py"
 }

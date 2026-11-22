@@ -22,7 +22,7 @@ def main():
     art = ROOT / 'docs/design-assets/handmade'
     paths = sorted((art / 'people').glob('*.png')) + sorted(art.glob('*-view-*.png'))
     paths += [ROOT / f'docs/design-assets/street/{name}-source.png' for name in
-              ['house', 'apartment', 'shop', 'office', 'factory', 'school', 'tree']]
+              ['house', 'apartment', 'shop', 'office', 'factory', 'school', 'tree', 'power', 'water', 'fire', 'police', 'clinic', 'warehouse']]
     results, hard = [], []
     for path in paths:
         result = module.evaluate_image(str(path), palette_cap=40)

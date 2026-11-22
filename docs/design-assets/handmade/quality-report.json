@@ -1,7 +1,7 @@
 {
   "art_source": "code",
   "image_model_used": false,
-  "frames_checked": 43,
+  "frames_checked": 49,
   "hard_failures": [],
   "automated_results": [
     {
@@ -3393,6 +3393,568 @@
         }
       },
       "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\street\\tree-source.png"
+    },
+    {
+      "summary": {
+        "score": 50,
+        "verdict": "redesign",
+        "issues": [
+          "Pillow shading detected \u2014 refactor with explicit light direction"
+        ],
+        "warnings": []
+      },
+      "findings": {
+        "image_dimensions": [
+          64,
+          64
+        ],
+        "palette": {
+          "unique_color_count": 18,
+          "total_visible_pixels": 2315,
+          "total_image_pixels": 4096,
+          "palette_cap": 40,
+          "over_cap": false
+        },
+        "orphans": {
+          "orphan_count": 5,
+          "orphan_ratio": 0.0021598272138228943,
+          "samples": [
+            {
+              "x": 27,
+              "y": 38,
+              "color": "#4d758c"
+            },
+            {
+              "x": 12,
+              "y": 40,
+              "color": "#80aaa9"
+            },
+            {
+              "x": 15,
+              "y": 40,
+              "color": "#4d758c"
+            },
+            {
+              "x": 25,
+              "y": 40,
+              "color": "#80aaa9"
+            },
+            {
+              "x": 28,
+              "y": 40,
+              "color": "#4d758c"
+            }
+          ]
+        },
+        "doublies": {
+          "doublies_count": 0,
+          "samples": []
+        },
+        "pillow_shading": {
+          "detected": true,
+          "boundary_mean_lum": 75.05369647058828,
+          "interior_mean_lum": 105.09679388349514,
+          "tl_mean_lum": 110.02590109890109,
+          "br_mean_lum": 95.43548678571426,
+          "asymmetry": 14.590414313186827
+        },
+        "hue_rotation": {
+          "applicable": true,
+          "shadow_mean_hue": 211.1786858974359,
+          "highlight_mean_hue": 71.98639404074187,
+          "hue_rotation_deg": 139.19229185669406,
+          "rotation_passes_30": true,
+          "warm_highlight": true,
+          "cool_shadow": true
+        },
+        "anti_aa_slop": {
+          "boundary_pixel_count": 255,
+          "unique_boundary_colors": 2,
+          "distinct_ratio": 0.00784313725490196,
+          "warning": false
+        },
+        "silhouette": {
+          "visible_pixels": 2315,
+          "bbox": [
+            60,
+            54
+          ],
+          "fill_ratio": 0.7145061728395061,
+          "horizontal_symmetry": 0.8786177105831533
+        }
+      },
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\street\\power-source.png"
+    },
+    {
+      "summary": {
+        "score": 100,
+        "verdict": "ship",
+        "issues": [],
+        "warnings": []
+      },
+      "findings": {
+        "image_dimensions": [
+          64,
+          64
+        ],
+        "palette": {
+          "unique_color_count": 14,
+          "total_visible_pixels": 1936,
+          "total_image_pixels": 4096,
+          "palette_cap": 40,
+          "over_cap": false
+        },
+        "orphans": {
+          "orphan_count": 3,
+          "orphan_ratio": 0.0015495867768595042,
+          "samples": [
+            {
+              "x": 20,
+              "y": 8,
+              "color": "#29323d"
+            },
+            {
+              "x": 44,
+              "y": 8,
+              "color": "#29323d"
+            },
+            {
+              "x": 51,
+              "y": 28,
+              "color": "#28505d"
+            }
+          ]
+        },
+        "doublies": {
+          "doublies_count": 0,
+          "samples": []
+        },
+        "pillow_shading": {
+          "detected": false,
+          "boundary_mean_lum": 80.96623730337076,
+          "interior_mean_lum": 129.06132099262243,
+          "tl_mean_lum": 145.3431532879819,
+          "br_mean_lum": 112.20030426829268,
+          "asymmetry": 33.14284901968921
+        },
+        "hue_rotation": {
+          "applicable": true,
+          "shadow_mean_hue": 208.2133526850508,
+          "highlight_mean_hue": 79.4121915820029,
+          "hue_rotation_deg": 128.8011611030479,
+          "rotation_passes_30": true,
+          "warm_highlight": true,
+          "cool_shadow": true
+        },
+        "anti_aa_slop": {
+          "boundary_pixel_count": 445,
+          "unique_boundary_colors": 6,
+          "distinct_ratio": 0.01348314606741573,
+          "warning": false
+        },
+        "silhouette": {
+          "visible_pixels": 1936,
+          "bbox": [
+            50,
+            55
+          ],
+          "fill_ratio": 0.704,
+          "horizontal_symmetry": 0.893595041322314
+        }
+      },
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\street\\water-source.png"
+    },
+    {
+      "summary": {
+        "score": 50,
+        "verdict": "redesign",
+        "issues": [
+          "Pillow shading detected \u2014 refactor with explicit light direction"
+        ],
+        "warnings": []
+      },
+      "findings": {
+        "image_dimensions": [
+          64,
+          64
+        ],
+        "palette": {
+          "unique_color_count": 22,
+          "total_visible_pixels": 2861,
+          "total_image_pixels": 4096,
+          "palette_cap": 40,
+          "over_cap": false
+        },
+        "orphans": {
+          "orphan_count": 13,
+          "orphan_ratio": 0.004543865781195386,
+          "samples": [
+            {
+              "x": 5,
+              "y": 20,
+              "color": "#92514e"
+            },
+            {
+              "x": 7,
+              "y": 30,
+              "color": "#68424a"
+            },
+            {
+              "x": 12,
+              "y": 30,
+              "color": "#80aaa9"
+            },
+            {
+              "x": 9,
+              "y": 31,
+              "color": "#80aaa9"
+            },
+            {
+              "x": 10,
+              "y": 31,
+              "color": "#bfd5c5"
+            },
+            {
+              "x": 12,
+              "y": 31,
+              "color": "#bfd5c5"
+            },
+            {
+              "x": 12,
+              "y": 32,
+              "color": "#4d758c"
+            },
+            {
+              "x": 14,
+              "y": 37,
+              "color": "#dda578"
+            },
+            {
+              "x": 28,
+              "y": 49,
+              "color": "#dda578"
+            },
+            {
+              "x": 44,
+              "y": 49,
+              "color": "#dda578"
+            }
+          ]
+        },
+        "doublies": {
+          "doublies_count": 0,
+          "samples": []
+        },
+        "pillow_shading": {
+          "detected": true,
+          "boundary_mean_lum": 49.97087142857144,
+          "interior_mean_lum": 111.92825096700797,
+          "tl_mean_lum": 118.92378757396447,
+          "br_mean_lum": 101.27282023809524,
+          "asymmetry": 17.65096733586924
+        },
+        "hue_rotation": {
+          "applicable": true,
+          "shadow_mean_hue": 167.59467827769714,
+          "highlight_mean_hue": 59.110241993156876,
+          "hue_rotation_deg": 108.48443628454027,
+          "rotation_passes_30": true,
+          "warm_highlight": true,
+          "cool_shadow": false
+        },
+        "anti_aa_slop": {
+          "boundary_pixel_count": 224,
+          "unique_boundary_colors": 3,
+          "distinct_ratio": 0.013392857142857142,
+          "warning": false
+        },
+        "silhouette": {
+          "visible_pixels": 2861,
+          "bbox": [
+            58,
+            56
+          ],
+          "fill_ratio": 0.8808497536945813,
+          "horizontal_symmetry": 0.9772806710940231
+        }
+      },
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\street\\fire-source.png"
+    },
+    {
+      "summary": {
+        "score": 50,
+        "verdict": "redesign",
+        "issues": [
+          "Pillow shading detected \u2014 refactor with explicit light direction"
+        ],
+        "warnings": []
+      },
+      "findings": {
+        "image_dimensions": [
+          64,
+          64
+        ],
+        "palette": {
+          "unique_color_count": 25,
+          "total_visible_pixels": 2794,
+          "total_image_pixels": 4096,
+          "palette_cap": 40,
+          "over_cap": false
+        },
+        "orphans": {
+          "orphan_count": 12,
+          "orphan_ratio": 0.004294917680744453,
+          "samples": [
+            {
+              "x": 45,
+              "y": 24,
+              "color": "#4d758c"
+            },
+            {
+              "x": 15,
+              "y": 27,
+              "color": "#80aaa9"
+            },
+            {
+              "x": 43,
+              "y": 27,
+              "color": "#80aaa9"
+            },
+            {
+              "x": 41,
+              "y": 29,
+              "color": "#80aaa9"
+            },
+            {
+              "x": 42,
+              "y": 29,
+              "color": "#bfd5c5"
+            },
+            {
+              "x": 15,
+              "y": 46,
+              "color": "#4d758c"
+            },
+            {
+              "x": 17,
+              "y": 46,
+              "color": "#80aaa9"
+            },
+            {
+              "x": 48,
+              "y": 46,
+              "color": "#80aaa9"
+            },
+            {
+              "x": 15,
+              "y": 47,
+              "color": "#80aaa9"
+            },
+            {
+              "x": 17,
+              "y": 47,
+              "color": "#bfd5c5"
+            }
+          ]
+        },
+        "doublies": {
+          "doublies_count": 0,
+          "samples": []
+        },
+        "pillow_shading": {
+          "detected": true,
+          "boundary_mean_lum": 70.89893217391304,
+          "interior_mean_lum": 134.29729196567862,
+          "tl_mean_lum": 140.45790976744183,
+          "br_mean_lum": 129.05118913738022,
+          "asymmetry": 11.406720630061614
+        },
+        "hue_rotation": {
+          "applicable": true,
+          "shadow_mean_hue": 174.34973189808093,
+          "highlight_mean_hue": 76.75853499429739,
+          "hue_rotation_deg": 97.59119690378354,
+          "rotation_passes_30": true,
+          "warm_highlight": true,
+          "cool_shadow": false
+        },
+        "anti_aa_slop": {
+          "boundary_pixel_count": 230,
+          "unique_boundary_colors": 3,
+          "distinct_ratio": 0.013043478260869565,
+          "warning": false
+        },
+        "silhouette": {
+          "visible_pixels": 2794,
+          "bbox": [
+            59,
+            54
+          ],
+          "fill_ratio": 0.8769617074701821,
+          "horizontal_symmetry": 0.964924838940587
+        }
+      },
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\street\\police-source.png"
+    },
+    {
+      "summary": {
+        "score": 100,
+        "verdict": "ship",
+        "issues": [],
+        "warnings": []
+      },
+      "findings": {
+        "image_dimensions": [
+          64,
+          64
+        ],
+        "palette": {
+          "unique_color_count": 22,
+          "total_visible_pixels": 2532,
+          "total_image_pixels": 4096,
+          "palette_cap": 40,
+          "over_cap": false
+        },
+        "orphans": {
+          "orphan_count": 1,
+          "orphan_ratio": 0.00039494470774091627,
+          "samples": [
+            {
+              "x": 12,
+              "y": 39,
+              "color": "#80aaa9"
+            }
+          ]
+        },
+        "doublies": {
+          "doublies_count": 0,
+          "samples": []
+        },
+        "pillow_shading": {
+          "detected": false,
+          "boundary_mean_lum": 48.88080000000001,
+          "interior_mean_lum": 141.33302898172323,
+          "tl_mean_lum": 150.45216878402906,
+          "br_mean_lum": 128.7792914675768,
+          "asymmetry": 21.672877316452258
+        },
+        "hue_rotation": {
+          "applicable": true,
+          "shadow_mean_hue": 165.83506289308178,
+          "highlight_mean_hue": 90.5891152325935,
+          "hue_rotation_deg": 75.24594766048828,
+          "rotation_passes_30": true,
+          "warm_highlight": false,
+          "cool_shadow": false
+        },
+        "anti_aa_slop": {
+          "boundary_pixel_count": 234,
+          "unique_boundary_colors": 1,
+          "distinct_ratio": 0.004273504273504274,
+          "warning": false
+        },
+        "silhouette": {
+          "visible_pixels": 2532,
+          "bbox": [
+            60,
+            55
+          ],
+          "fill_ratio": 0.7672727272727272,
+          "horizontal_symmetry": 0.9842022116903634
+        }
+      },
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\street\\clinic-source.png"
+    },
+    {
+      "summary": {
+        "score": 50,
+        "verdict": "redesign",
+        "issues": [
+          "Pillow shading detected \u2014 refactor with explicit light direction"
+        ],
+        "warnings": []
+      },
+      "findings": {
+        "image_dimensions": [
+          64,
+          64
+        ],
+        "palette": {
+          "unique_color_count": 21,
+          "total_visible_pixels": 2618,
+          "total_image_pixels": 4096,
+          "palette_cap": 40,
+          "over_cap": false
+        },
+        "orphans": {
+          "orphan_count": 5,
+          "orphan_ratio": 0.0019098548510313217,
+          "samples": [
+            {
+              "x": 23,
+              "y": 30,
+              "color": "#4d758c"
+            },
+            {
+              "x": 48,
+              "y": 30,
+              "color": "#80aaa9"
+            },
+            {
+              "x": 10,
+              "y": 31,
+              "color": "#80aaa9"
+            },
+            {
+              "x": 23,
+              "y": 31,
+              "color": "#bfd5c5"
+            },
+            {
+              "x": 23,
+              "y": 32,
+              "color": "#4d758c"
+            }
+          ]
+        },
+        "doublies": {
+          "doublies_count": 0,
+          "samples": []
+        },
+        "pillow_shading": {
+          "detected": true,
+          "boundary_mean_lum": 48.88080000000001,
+          "interior_mean_lum": 124.49993646960864,
+          "tl_mean_lum": 130.05977109243696,
+          "br_mean_lum": 121.43666554054053,
+          "asymmetry": 8.62310555189643
+        },
+        "hue_rotation": {
+          "applicable": true,
+          "shadow_mean_hue": 167.59467827769714,
+          "highlight_mean_hue": 63.928737874102936,
+          "hue_rotation_deg": 103.6659404035942,
+          "rotation_passes_30": true,
+          "warm_highlight": true,
+          "cool_shadow": false
+        },
+        "anti_aa_slop": {
+          "boundary_pixel_count": 216,
+          "unique_boundary_colors": 1,
+          "distinct_ratio": 0.004629629629629629,
+          "warning": false
+        },
+        "silhouette": {
+          "visible_pixels": 2618,
+          "bbox": [
+            59,
+            50
+          ],
+          "fill_ratio": 0.8874576271186441,
+          "horizontal_symmetry": 0.9801375095492743
+        }
+      },
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\street\\warehouse-source.png"
     }
   ],
   "note": "Pillow-shading, hue and other warnings are retained, not silently waived. See independent visual review."

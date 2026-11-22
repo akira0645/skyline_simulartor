@@ -8,7 +8,13 @@
     "shop",
     "office",
     "factory",
-    "school"
+    "school",
+    "power",
+    "water",
+    "fire",
+    "police",
+    "clinic",
+    "warehouse"
   ],
   "treeFrame": [
     128,

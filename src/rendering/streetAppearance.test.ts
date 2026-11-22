@@ -9,6 +9,12 @@ it('maps representative building families without replacing landmarks or taller 
   expect(streetBuilding(2, 3)).toBe('office');
   expect(streetBuilding(0, 11)).toBe('factory');
   expect(streetBuilding(4, 5)).toBe('school');
+  expect(streetBuilding(0, 5)).toBe('power');
+  expect(streetBuilding(1, 5)).toBe('water');
+  expect(streetBuilding(2, 5)).toBe('fire');
+  expect(streetBuilding(3, 5)).toBe('police');
+  expect(streetBuilding(5, 5)).toBe('clinic');
+  expect(streetBuilding(0, 13)).toBe('warehouse');
   expect(streetBuilding(10, 5)).toBeUndefined();
   expect(streetBuilding(5, 2)).toBeUndefined();
 });

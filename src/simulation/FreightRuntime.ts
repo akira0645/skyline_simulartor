@@ -1,6 +1,7 @@
 import { freight, freightFleetSize, type FreightRoute, type FreightSite } from './Freight';
 import { MAP_SIZE } from './TileMap';
 import { advancePathVehicle, roadPathKey, roadVehiclePose, type RoadVehicle } from './RoadVehicle';
+import { RoadOccupancy, type RoadBody } from './RoadOccupancy';
 
 export const WAREHOUSE_CAPACITY = 240;
 export interface FreightWarehouse { id: number; capacity: number }
@@ -44,6 +45,17 @@ export class FreightRuntime {
   private shopAmounts = new Map<number, number>();
   private reserved = new Map<number, number>();
   private outgoingReserved = new Map<number, number>();
+  private readonly roadOccupancy = new RoadOccupancy();
+  private streetTraffic: RoadBody[] = [];
+  /** Physical cars/buses supplied by the street animation, including vehicles outside the viewport.
+   * This transient input is not cargo/save data and is cleared when the street view detaches. */
+  setStreetTraffic(bodies: readonly RoadBody[]): void {
+    this.streetTraffic = bodies.map((body, index) => ({ ...body, index: -100000 - index }));
+  }
+  private roadBody(truck: ShipmentVehicle, state: RoadVehicle = truck): RoadBody {
+    return { ...roadVehiclePose(truck.route.path, state), index: this.vehicles.indexOf(truck),
+      length: 18 / 32, width: 9 / 32 };
+  }
 
   sync(routes: ShippingRoute[], sources: readonly FreightSite[], shops: readonly FreightSite[], warehouses: readonly FreightWarehouse[] = []): void {
     this.routes = routes.filter(route => route.path.length > 1 || route.lineId !== undefined); this.directRoutes = routes.filter(route => route.path.length === 1 && route.lineId === undefined);
@@ -111,7 +123,12 @@ export class FreightRuntime {
         metric.loaded += amount; metric.delivered += amount; metric.departures++; metric.completed++;
         this.directNext.set(route.key, this.time + DAY);
       }
-      for (const vehicle of this.vehicles) this.step(vehicle, dt, loadAt);
+      this.roadOccupancy.reset([...this.streetTraffic,
+        ...this.vehicles.filter(vehicle => vehicle.activity !== 'working').map(vehicle => this.roadBody(vehicle))]);
+      for (const vehicle of this.vehicles) {
+        this.step(vehicle, dt, loadAt);
+        if (vehicle.activity !== 'working') this.roadOccupancy.add(this.roadBody(vehicle));
+      }
       this.time += dt; this.pending -= dt;
       if ((this.time + 2000) % MONTH === 0) { this.previous = [...this.current.values()].map(value => ({ ...value })); this.current.clear(); }
     }
@@ -129,6 +146,9 @@ export class FreightRuntime {
         if (this.stock(candidate.from) >= 0.05 && candidate.stops.some(stop => this.wanted(stop.to) > 0.05)) { route = candidate; break; }
       }
       if (!route) { vehicle.nextDeparture = this.time + 1000; return; }
+      // Do not materialize a loaded truck on top of a car at the shared driveway.
+      if (!this.roadOccupancy.canOccupy({ ...roadVehiclePose(route.path, vehicle),
+        index: this.vehicles.indexOf(vehicle), length: 18 / 32, width: 9 / 32 })) return;
       vehicle.route = route;
       let available = Math.min(freight.load, this.stock(route.from));
       const cargo: ShipmentVehicle['cargo'] = [];
@@ -152,14 +172,9 @@ export class FreightRuntime {
     const load = Math.max(0, typeof traffic === 'number' ? traffic : traffic.load);
     const red = typeof traffic === 'number' ? false : traffic.red;
     const pose = roadVehiclePose(vehicle.route.path, vehicle);
-    const blocked = this.vehicles.some(other => {
-      if (other === vehicle || other.activity === 'working') return false;
-      const at = roadVehiclePose(other.route.path, other);
-      const dx = at.x - pose.x, dy = at.y - pose.y;
-      const ahead = dx * pose.hx + dy * pose.hy;
-      return ahead > 0.02 && ahead < 0.8 && Math.abs(dx * pose.hy - dy * pose.hx) < 0.3 && at.hx * pose.hx + at.hy * pose.hy > 0.5;
-    });
-    let done = advancePathVehicle(vehicle, vehicle.route.path, dt, PACE, load, blocked, red, 2600);
+    const blocked = this.roadOccupancy.ahead(pose.x, pose.y, pose.hx, pose.hy, this.vehicles.indexOf(vehicle), 0.8);
+    let done = advancePathVehicle(vehicle, vehicle.route.path, dt, PACE, load, blocked, red, 2600,
+      (from, to) => this.roadOccupancy.canTravel(this.roadBody(vehicle, from), this.roadBody(vehicle, to)));
     const distance = Math.abs(vehicle.along - before);
     metric.distance += distance;
     if (cargoOf(vehicle) < 0.000001) metric.emptyDistance += distance;
@@ -197,6 +212,7 @@ export class FreightRuntime {
   }
   save(): FreightRuntimeSave { return { time: this.time, pending: this.pending, directNext: [...this.directNext], stocks: [...this.stocks], vehicles: this.vehicles.map(cloneVehicle), current: [...this.current.values()].map(m => ({ ...m })), previous: this.previous.map(m => ({ ...m })) }; }
   load(save: FreightRuntimeSave | undefined, tick: number): void {
+    this.streetTraffic = [];
     this.time = save?.time ?? tick * 1000; this.pending = save?.pending ?? 0; this.directNext = new Map(save?.directNext ?? []); this.stocks = new Map(save?.stocks ?? []);
     this.vehicles = (save?.vehicles ?? []).map(cloneVehicle); this.current = new Map((save?.current ?? []).map(value => [value.key, { ...value }]));
     this.previous = (save?.previous ?? []).map(m => ({ ...m }));

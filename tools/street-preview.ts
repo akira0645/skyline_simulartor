@@ -5,6 +5,7 @@ import carsUrl from '../src/assets/vehicles/cars.png';
 import type { Theme } from '../src/simulation/SaveData';
 import type { StreetBuilding } from '../src/rendering/streetAppearance';
 import { WalkerMotion } from '../src/rendering/WalkerMotion';
+import { PreviewTraffic } from '../src/rendering/PreviewTraffic';
 
 const app = new Application();
 await app.init({ width: 1536, height: 912, antialias: false, resolution: 1, autoStart: false, background: '#8b9c77' });
@@ -17,8 +18,20 @@ const g = new Graphics();
 world.addChild(g);
 app.stage.addChild(world);
 let zoom = 6, theme: Theme = 'classic', time = 0, moving = true, inspection = false;
-const names: StreetBuilding[] = ['house', 'apartment', 'shop', 'office', 'factory', 'school'];
+const residential: StreetBuilding[] = ['house', 'apartment', 'shop', 'office', 'factory', 'school'];
+const civic: StreetBuilding[] = ['power', 'water', 'fire', 'police', 'clinic', 'warehouse'];
+let civicView = false;
+let names = residential;
+const updateLabels = () => {
+  const labels = inspection ? ['右側', '正面', '左側', '背面'] : civicView
+    ? ['發電廠', '水塔', '消防局', '警察局', '診所', '物流倉庫']
+    : ['獨棟住宅', '公寓', '街角商店', '辦公樓', '工廠', '小學'];
+  document.querySelector<HTMLElement>('.labels')!.innerHTML = labels.map(label => `<span>${label}</span>`).join('');
+  document.querySelector<HTMLElement>('.labels')!.style.gridTemplateColumns = `repeat(${labels.length},1fr)`;
+};
 const motion = new WalkerMotion();
+const traffic = new PreviewTraffic();
+let trafficTime = 0;
 
 function route(seconds: number, min: number, max: number, offset = 0) {
   const speed = 10, travel = (max - min) / speed, pause = 0.6;
@@ -54,6 +67,7 @@ function paint() {
   g.clear();
   world.scale.set(zoom);
   if (inspection) {
+    trafficTime = time;
     inspectActors();
     app.render();
     document.documentElement.dataset.ready = 'true';
@@ -76,10 +90,13 @@ function paint() {
     g.rect(x + 2, 45, 29, 3).fill({ color: 0x354b43, alpha: 0.22 });
     art.drawBuilding(g, names[i], x, 16, theme);
   }
-  const drift = time / 60;
-  cars.draw(g, (drift + 44) % 292 - 18, 63, 0, 2, 0, theme);
-  cars.draw(g, 274 - (drift + 50) % 292, 79, Math.PI, 3, 2, theme);
-  art.drawTruck(g, 280 - (time / 75 + 76) % 304, 79, Math.PI, 0x3b82f6);
+  traffic.advance(time - trafficTime);
+  trafficTime = time;
+  for (const vehicle of traffic.vehicles) {
+    const x = vehicle.x * 32, y = vehicle.y * 32, angle = vehicle.hx > 0 ? 0 : Math.PI;
+    if (vehicle.index === 2) art.drawTruck(g, x, y, angle, 0x3b82f6);
+    else cars.draw(g, x, y, angle, vehicle.index === 0 ? 2 : 3, vehicle.index === 0 ? 0 : 2, theme);
+  }
   for (const [i, x] of [27, 76, 123, 183, 229].entries()) {
     const at = route(time / 1000, x - 7, x + 7, i * 0.7);
     pedestrian(`street:${i}`, at.value, 48, at.heading, i);
@@ -94,7 +111,7 @@ function paint() {
     pedestrian(`park:${index}`, x, at.value, at.heading + Math.PI / 2, index + 1);
   }
   app.render();
-  document.querySelector('#status')!.textContent = `程式繪製・${zoom}×　六種建築／闊葉樹／四方向六幀行走／16 方向汽車與貨車`;
+  document.querySelector('#status')!.textContent = `程式繪製・${zoom}×　十二種建築／闊葉樹／四方向六幀行走／16 方向汽車與貨車`;
   document.querySelector('#guide')!.textContent = '街景人物依路徑行走、停步和轉身，車輛由畫面外進出。';
   document.documentElement.dataset.ready = 'true';
 }
@@ -117,11 +134,15 @@ document.querySelector<HTMLButtonElement>('#motion')!.onclick = event => {
 document.querySelector<HTMLButtonElement>('#actors')!.onclick = event => {
   inspection = !inspection;
   (event.target as HTMLButtonElement).textContent = inspection ? '返回完整街景' : '檢查人物與車體';
-  document.querySelector<HTMLElement>('.labels')!.innerHTML = inspection
-    ? '<span>右側</span><span>正面</span><span>左側</span><span>背面</span>'
-    : '<span>獨棟住宅</span><span>公寓</span><span>街角商店</span><span>辦公樓</span><span>工廠</span><span>小學</span>';
-  document.querySelector<HTMLElement>('.labels')!.style.gridTemplateColumns = inspection ? 'repeat(4,1fr)' : 'repeat(6,1fr)';
+  updateLabels();
   paint();
+};
+document.querySelector<HTMLButtonElement>('#civic')!.onclick = event => {
+  civicView = !civicView; names = civicView ? civic : residential;
+  inspection = false;
+  document.querySelector<HTMLButtonElement>('#actors')!.textContent = '檢查人物與車體';
+  (event.target as HTMLButtonElement).textContent = civicView ? '住宅與商業' : '公共設施';
+  updateLabels(); paint();
 };
 document.querySelector<HTMLButtonElement>('#step')!.onclick = () => {
   moving = false;

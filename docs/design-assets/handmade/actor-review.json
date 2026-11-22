@@ -1,0 +1,87 @@
+{
+  "verdict": "PASS",
+  "score": 86,
+  "ship_ready": true,
+  "automated_score": 95.83333333333333,
+  "human_adjusted_score": 86,
+  "blocking_issues": [],
+  "soft_issues": [
+    "Front/back walking poses use restrained arm swing, partly masked by the satchel/strap; the action reads as a small walking cycle rather than an exaggerated gait.",
+    "Roof and paint/glass values are close on the blue car variant; its window structure is clearer enlarged than at very small runtime scales.",
+    "Six-step timing, ground speed synchronization and foot sliding cannot be certified from still atlases."
+  ],
+  "false_positives": [
+    "Pillow shading on people/0-1.png and 0-2.png is caused by the bright face/forearm and dark rear leg/outlines being balanced between quadrants. Shirt and hair retain directional flat clusters without a concentric shading ramp.",
+    "Pillow shading on hatchback-view-0.png reflects dark perimeter, dark glass, bright central roof and distinct material planes. Roof is flat, with a brighter left edge; this is not a continuous inward lighting ramp."
+  ],
+  "reasoning": "Independently inspected current 28 native person poses, the actual people atlas, all 16 car and truck orientation cells in enlarged nearest-neighbor sheets, and the full car atlas across three size groups and palette variants. Front face and rear hair/collar are clearly different. Both side views preserve brighter screen-left trim instead of blindly mirroring the shading. Legs alternate spread/contact and narrow/passing poses, with a small body bob and opposed arm movement; no detached limbs or boot doublies are visible. Vehicle cabin/roof, windshield/rear window, bumpers and two axle positions rotate coherently without obvious frame-local discontinuities.",
+  "specific_fixes": [],
+  "optional_polish": [
+    "If tiny car windows need stronger recognition, separate the blue glass from the body by one existing darker palette step while keeping window masks unchanged."
+  ],
+  "actual_asset_paths": [
+    "docs/design-assets/handmade/people",
+    "src/assets/street/people.png",
+    "src/assets/vehicles/cars.png",
+    "src/assets/street/truck.png"
+  ],
+  "validation": {
+    "native_actor_inputs": 36,
+    "flagged_native_actor_inputs": 3,
+    "independently_rechecked_flagged_actor_inputs": 3,
+    "car_orientations_inspected": 16,
+    "truck_orientations_inspected": 16,
+    "people_directions": 4,
+    "poses_per_direction": 7,
+    "inspection_images": [
+      "work/actor-people-review.png",
+      "work/actor-car-review.png",
+      "work/actor-truck-review.png"
+    ],
+    "browser_used": false,
+    "generator_code_inspected": false
+  },
+  "warning_adjudications": [
+    {
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\people\\0-1.png",
+      "summary_retained": {
+        "score": 50,
+        "verdict": "redesign",
+        "issues": [
+          "Pillow shading detected — refactor with explicit light direction"
+        ],
+        "warnings": []
+      },
+      "blocking": false
+    },
+    {
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\people\\0-2.png",
+      "summary_retained": {
+        "score": 50,
+        "verdict": "redesign",
+        "issues": [
+          "Pillow shading detected — refactor with explicit light direction"
+        ],
+        "warnings": []
+      },
+      "blocking": false
+    },
+    {
+      "input": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\handmade\\hatchback-view-0.png",
+      "summary_retained": {
+        "score": 50,
+        "verdict": "redesign",
+        "issues": [
+          "Pillow shading detected — refactor with explicit light direction"
+        ],
+        "warnings": []
+      },
+      "blocking": false
+    }
+  ],
+  "limitations": [
+    "Visual atlas inspection establishes per-frame structure, not animation playback timing or runtime velocity.",
+    "Full vehicle palettes/size groups were visually scanned; detailed 16-angle enlarged sheets use one representative color for each vehicle.",
+    "No assets or generator code were changed."
+  ]
+}

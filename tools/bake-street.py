@@ -14,7 +14,7 @@ from PIL import Image, ImageDraw
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / 'docs/design-assets/street'
 OUT = ROOT / 'src/assets/street'
-BUILDINGS = ['house', 'apartment', 'shop', 'office', 'factory', 'school']
+BUILDINGS = ['house', 'apartment', 'shop', 'office', 'factory', 'school', 'power', 'water', 'fire', 'police', 'clinic', 'warehouse']
 PEOPLE_COLOURS = ['7edbed', 'f6ba67', 'e8799a', '8fbf6a', 'd6d9de']
 TRUCK_COLOURS = ['e5484d', '3b82f6', 'f2c94c', 'a56eff', 'ff8a3d', '2ec4b6', 'ec4899', '84cc16']
 
@@ -34,6 +34,9 @@ def restyle(image, style):
     r, g, b = np.moveaxis(rgb, -1, 0)
     # Architectural masonry/plaster only: preserve glass, foliage, metal and dark recesses.
     walls = (r > b * 1.12) & (r > g * 1.03) & (g > 75) & (r > 115) & (data[..., 3] > 0)
+    # Retain medical signs, flowers, police badges and safety markings in every city palette.
+    for colour in ['97586d', 'd89a91', 'e2bb71']:
+        walls &= ~np.all(data[..., :3] == np.array(list(bytes.fromhex(colour))), axis=-1)
     light = (r * 0.26 + g * 0.62 + b * 0.12) / 200
     target = np.array({'sf': [205, 185, 203], 'california': [232, 217, 180], 'newyork': [165, 108, 86]}[style])
     tinted = np.clip(target * light[..., None], 0, 255)
@@ -49,12 +52,13 @@ def buildings():
             atlas.paste(restyle(frame, style), (i * 128, 0))
         atlas.save(OUT / f'buildings-{style}.png', optimize=True)
     # A readable 6x art-pixel contact sheet, using the exact normalized game sprites.
-    preview = Image.new('RGB', (1440, 310), '#1b2b2b')
+    preview = Image.new('RGB', (1440, 310 * ((len(BUILDINGS) + 5) // 6)), '#1b2b2b')
     draw = ImageDraw.Draw(preview)
     for i, (name, frame) in enumerate(zip(BUILDINGS, frames)):
         frame = frame.resize((216, 216), Image.Resampling.NEAREST)
-        preview.paste(frame, (12 + i * 240, 24), frame)
-        draw.text((20 + i * 240, 265), name.upper(), fill='#e0e8db')
+        x, y = (i % 6) * 240, (i // 6) * 310
+        preview.paste(frame, (12 + x, 24 + y), frame)
+        draw.text((20 + x, 265 + y), name.upper(), fill='#e0e8db')
     preview.save(SOURCE / 'buildings-contact.png')
 
 

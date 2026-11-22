@@ -48,13 +48,10 @@ export function vehicleAt(route: readonly Cell[], progress: number): OnRoad {
     hx: upright ? 0 : Math.sign(b.x - a.x), hy: upright ? Math.sign(b.y - a.y) : 0 };
 }
 
-/** How long a vehicle with its siren on stands behind a car before the car lets it by. */
-const GIVE_WAY = 1500;
-
 /**
  * Moves a scene's vehicle on to `age` and says where on the road it now is, while it is on its
  * way. `blocked` says whether a car is just ahead of a spot in the same lane: the vehicle
- * stands behind it like anyone else, until after a moment the car lets it squeeze by. Red
+ * stands behind it until the occupied space is clear. Red
  * lights it does not stop for.
  */
 export function advanceScene(scene: Scene, age: number, blocked: (at: OnRoad) => boolean): OnRoad | undefined {
@@ -63,9 +60,21 @@ export function advanceScene(scene: Scene, age: number, blocked: (at: OnRoad) =>
   if (!scene.route || scene.arrived !== undefined) return undefined;
   const last = scene.route.length - 1;
   const at = vehicleAt(scene.route, scene.travelled ?? 0);
-  scene.held = blocked(at) ? (scene.held ?? 0) + step : 0;
-  if (scene.held > 0 && scene.held < GIVE_WAY) return at;
-  scene.travelled = (scene.travelled ?? 0) + step / DASH;
+  if (step <= 0) return at;
+  const heldBefore = scene.held ?? 0;
+  scene.held = 0;
+  const from = scene.travelled ?? 0;
+  scene.travelled = from;
+  const desired = Math.min(last, from + step / DASH);
+  const count = Math.max(1, Math.ceil((desired - from) / 0.025));
+  for (let i = 1; i <= count; i++) {
+    const next = from + (desired - from) * i / count;
+    if (blocked(vehicleAt(scene.route, next))) {
+      scene.held = heldBefore + step;
+      break;
+    }
+    scene.travelled = next;
+  }
   if (scene.travelled >= last) {
     scene.travelled = last;
     scene.arrived = age;
@@ -213,6 +222,6 @@ export function sceneVehicle(scene: Scene, age: number) {
   const trouble = scene.event.kind === 'crash-hospital' ? 'sick' : scene.event.kind.startsWith('crash') || scene.event.kind.startsWith('robbery') ? 'crime' : scene.event.kind.split('-')[0];
   return { ...pose, angle: Math.atan2(pose.hy, pose.hx) + (returning ? Math.PI : 0), trouble,
     returning, activity: returning ? 'moving' as const : scene.arrived !== undefined ? 'working' as const :
-      (scene.held ?? 0) > 0 && (scene.held ?? 0) < GIVE_WAY ? 'queued' as const : 'moving' as const,
+      (scene.held ?? 0) > 0 ? 'queued' as const : 'moving' as const,
     progress: scene.route.length > 1 ? (returning ? scene.route.length - 1 - progress : progress) / (scene.route.length - 1) : 1 };
 }

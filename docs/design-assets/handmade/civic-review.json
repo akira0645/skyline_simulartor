@@ -1,0 +1,190 @@
+{
+  "verdict": "PASS",
+  "score": 88,
+  "ship_ready": true,
+  "automated_score": 66.66666666666667,
+  "human_adjusted_score": 88,
+  "blocking_issues": [],
+  "soft_issues": [
+    "Power plaque still carries limited semantic detail at 96px; stacks alone can read as generic industry. Other nonupdated asset comments remain unchanged."
+  ],
+  "false_positives": [
+    "Four pillow-shading flags (power/fire/police/warehouse) arise from dark contours versus light flat architecture, not inward concentric lighting."
+  ],
+  "reasoning": "Reviewed the current two-row 12-building contact sheet, each of the six native 64x64 civic sprites and a 4x nearest-neighbor sheet. All share the original set’s muted warm walls, cool window ramps, dark outlines and upper-left highlights; dimensions and detail density are compatible. All six retain readable silhouettes, with especially clear water/clinic/warehouse functions. Checker orphan rates are 0.039–0.559%, the isolated pixels are purposeful window/roof marks, and no doublies or blurred edges were observed. Targeted follow-up reviewed only the updated fire/police sprites at native and 4x scale: enlarged symbols improve service recognition without covering entrances or neighboring windows. Independently reran the checker on both; orphan counts decreased from 16 to 13 and 14 to 12, with zero doublies and unchanged palettes. Existing pillow warnings remain retained and visually adjudicated as false positives.",
+  "specific_fixes": [],
+  "optional_polish": [
+    "If power service identification must stand alone at 96px, simplify its lightning plaque into one larger existing-color cluster."
+  ],
+  "assets": [
+    {
+      "asset": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\street\\power-source.png",
+      "verdict": "PASS",
+      "human_adjusted_score": 84,
+      "automated_score": 50,
+      "summary_retained": {
+        "score": 50,
+        "verdict": "redesign",
+        "issues": [
+          "Pillow shading detected — refactor with explicit light direction"
+        ],
+        "warnings": []
+      },
+      "colors": 18,
+      "orphan_count": 5,
+      "orphan_percent": 0.21598272138228944,
+      "doublies": 0,
+      "score": 84,
+      "recognition": "Two stacks, industrial bay and lightning plaque distinguish power from the original sawtooth-roof factory.",
+      "soft_issue": "Lightning plaque is small at a 96px display; the stacks alone could read as generic industry.",
+      "warning_adjudication": "Pillow flag is false positive: dark architectural contour and roof contrast with flat facade/bay materials. Upper-left trim/roof highlights and lower/right structural shadows are visible; no concentric center glow.",
+      "blocking": false
+    },
+    {
+      "asset": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\street\\water-source.png",
+      "verdict": "PASS",
+      "human_adjusted_score": 90,
+      "automated_score": 100,
+      "summary_retained": {
+        "score": 100,
+        "verdict": "ship",
+        "issues": [],
+        "warnings": []
+      },
+      "colors": 14,
+      "orphan_count": 3,
+      "orphan_percent": 0.15495867768595042,
+      "doublies": 0,
+      "score": 90,
+      "recognition": "Raised round tank, X-braced legs, ladder and side valve read clearly as water infrastructure.",
+      "soft_issue": "Thin ladder/bracing is precise but remains aligned on the native grid.",
+      "warning_adjudication": "No checker issue or warning.",
+      "blocking": false
+    },
+    {
+      "asset": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\street\\fire-source.png",
+      "verdict": "PASS",
+      "human_adjusted_score": 87,
+      "automated_score": 50,
+      "summary_retained": {
+        "score": 50,
+        "verdict": "redesign",
+        "issues": [
+          "Pillow shading detected — refactor with explicit light direction"
+        ],
+        "warnings": []
+      },
+      "colors": 22,
+      "orphan_count": 13,
+      "orphan_percent": 0.45438657811953864,
+      "doublies": 0,
+      "score": 87,
+      "recognition": "Enlarged warm flame cluster on the pale sign is distinct, alongside the red engine, bay and ladder tower.",
+      "soft_issue": "Previous small ambiguous sign concern resolved. No new critical obstruction; flame remains inside the sign margins.",
+      "warning_adjudication": "Pillow flag is false positive: dark architectural contour and roof contrast with flat facade/bay materials. Upper-left trim/roof highlights and lower/right structural shadows are visible; no concentric center glow.",
+      "blocking": false
+    },
+    {
+      "asset": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\street\\police-source.png",
+      "verdict": "PASS",
+      "human_adjusted_score": 87,
+      "automated_score": 50,
+      "summary_retained": {
+        "score": 50,
+        "verdict": "redesign",
+        "issues": [
+          "Pillow shading detected — refactor with explicit light direction"
+        ],
+        "warnings": []
+      },
+      "colors": 25,
+      "orphan_count": 12,
+      "orphan_percent": 0.4294917680744453,
+      "doublies": 0,
+      "score": 87,
+      "recognition": "Enlarged dark-and-gold shield with a pale center emblem makes the police identity substantially clearer.",
+      "soft_issue": "Previous tiny shield concern resolved. Shield occupies the former middle upper-window region and crosses the service stripe at its lower tip; adjacent windows and the entry remain unobstructed.",
+      "warning_adjudication": "Pillow flag is false positive: dark architectural contour and roof contrast with flat facade/bay materials. Upper-left trim/roof highlights and lower/right structural shadows are visible; no concentric center glow.",
+      "blocking": false
+    },
+    {
+      "asset": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\street\\clinic-source.png",
+      "verdict": "PASS",
+      "human_adjusted_score": 90,
+      "automated_score": 100,
+      "summary_retained": {
+        "score": 100,
+        "verdict": "ship",
+        "issues": [],
+        "warnings": []
+      },
+      "colors": 22,
+      "orphan_count": 1,
+      "orphan_percent": 0.03949447077409163,
+      "doublies": 0,
+      "score": 90,
+      "recognition": "Large rose medical cross and projecting teal entrance make the function immediately clear.",
+      "soft_issue": "No material visual blocker.",
+      "warning_adjudication": "No checker issue or warning.",
+      "blocking": false
+    },
+    {
+      "asset": "C:\\Users\\sunny\\Desktop\\game\\docs\\design-assets\\street\\warehouse-source.png",
+      "verdict": "PASS",
+      "human_adjusted_score": 86,
+      "automated_score": 50,
+      "summary_retained": {
+        "score": 50,
+        "verdict": "redesign",
+        "issues": [
+          "Pillow shading detected — refactor with explicit light direction"
+        ],
+        "warnings": []
+      },
+      "colors": 21,
+      "orphan_count": 5,
+      "orphan_percent": 0.19098548510313218,
+      "doublies": 0,
+      "score": 86,
+      "recognition": "Wide shutter, pitched metal roof, crates and loading bollards read as storage/loading.",
+      "soft_issue": "Crate marks become texture at 96px, but their box silhouettes remain readable.",
+      "warning_adjudication": "Pillow flag is false positive: dark architectural contour and roof contrast with flat facade/bay materials. Upper-left trim/roof highlights and lower/right structural shadows are visible; no concentric center glow.",
+      "blocking": false
+    }
+  ],
+  "validation": {
+    "native_inputs": 6,
+    "independently_rechecked": 6,
+    "native_dimensions": [
+      64,
+      64
+    ],
+    "palette_range": [
+      14,
+      25
+    ],
+    "doublies": 0,
+    "generator_code_inspected": false,
+    "browser_used": false,
+    "contact_sheet": "docs/design-assets/street/buildings-contact.png",
+    "enlarged_inspection": "work/civic-review-native.png",
+    "recheck_artifact": "work/actor-civic-recheck.json"
+  },
+  "limitations": [
+    "Review covers artifact readability at native/enlarged scale. Civic assets were not inspected in a running game or varied terrain backgrounds.",
+    "No code or assets modified; previous all-material review left unchanged."
+  ],
+  "symbol_followup": {
+    "scope": [
+      "fire-source.png",
+      "police-source.png"
+    ],
+    "verdict": "PASS",
+    "blocking_issues": [],
+    "new_symbol_orphans_observed": false,
+    "unwanted_occlusion_observed": false,
+    "inspection": "work/civic-symbol-recheck.png",
+    "automated_recheck": "work/civic-symbol-quality-recheck.json",
+    "remaining_assets_rereviewed": false
+  }
+}

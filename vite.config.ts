@@ -3,6 +3,9 @@ import { defineConfig } from 'vitest/config';
 
 const longSimulations = ['Prices', 'People', 'Jobs', 'LandValue', 'Seasons', 'Services', 'Trade', 'RushHour', 'Viaduct', 'CityBalance']
   .map(name => `src/simulation/${name}.test.ts`);
+// Demo construction warms several cities for months. Keep it in the existing serial group;
+// competing fast workers otherwise contend with unrelated regressions.
+longSimulations.push('src/app/demoCity.test.ts');
 
 export default defineConfig(({ mode }) => ({
   // Relative paths, so the built site works from any folder, such as a GitHub Pages project site.

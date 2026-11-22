@@ -1,18 +1,22 @@
 import atlas from '../assets/street/atlas.json';
 
-export type StreetBuilding = 'house' | 'apartment' | 'shop' | 'office' | 'factory' | 'school';
+export type StreetBuilding = 'house' | 'apartment' | 'shop' | 'office' | 'factory' | 'school' |
+  'power' | 'water' | 'fire' | 'police' | 'clinic' | 'warehouse';
 
-/** Only the approved representative families are replaced in this first art pass. */
+/** Authored families only: preserve landmarks and towers until they have their own art. */
 export function streetBuilding(column: number, row: number): StreetBuilding | undefined {
   if (row === 2 && [0, 1, 2, 10].includes(column)) return 'house';
   if (row === 2 && [3, 4, 6, 7].includes(column)) return 'apartment';
   if (row === 3 && [0, 1, 3].includes(column)) return 'shop';
   if (row === 3 && [2, 6].includes(column)) return 'office';
   if (row === 4 && [0, 3, 6].includes(column)) return 'factory';
+  if (row === 4 && [1, 7, 8].includes(column)) return 'warehouse';
   if (row === 5 && column === 4) return 'school';
+  if (row === 5) return ({ 0: 'power', 1: 'water', 2: 'fire', 3: 'police', 5: 'clinic' } as Record<number, StreetBuilding>)[column];
   if (row === 8 && [2, 3, 14, 15].includes(column)) return 'house';
   if (row === 9 && [0, 1, 4, 5, 10, 11].includes(column)) return 'apartment';
   if (row === 11 && [0, 1].includes(column)) return 'factory';
+  if (row === 13 && [0, 1, 2].includes(column)) return 'warehouse';
   return undefined;
 }
 

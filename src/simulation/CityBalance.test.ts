@@ -3,7 +3,9 @@ import { demoCity, works, type DemoSize } from '../app/demoCity';
 import { SimulationEngine } from './SimulationEngine';
 import { calendar } from './calendar';
 
-it.each<DemoSize>(['small', 'medium', 'large'])('keeps the %s city finite and reproducible across a month and a road interruption', size => {
+// Each case constructs two cities, warms them for months, advances another month and verifies a
+// save/load replay. The large case takes about 62s here; retain headroom without reducing its work.
+it.each<DemoSize>(['small', 'medium', 'large'])('keeps the %s city finite and reproducible across a month and a road interruption', { timeout: 90000 }, size => {
   for (const seed of [7, 42]) {
     const engine = new SimulationEngine({ version: 1, seed, tick: 0 });
     demoCity(engine, size);

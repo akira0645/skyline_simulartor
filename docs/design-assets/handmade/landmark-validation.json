@@ -1,0 +1,28 @@
+{
+  "date": "2026-11-23",
+  "art_source": "code",
+  "image_model_used": false,
+  "new_landmarks": ["hospital", "university", "museum", "stadium"],
+  "native_grid": [128, 128],
+  "world_footprint": [64, 64],
+  "native_asset_check": { "total_frames": 53, "hard_failures": 0, "flagged_frames": 14 },
+  "independent_review": { "score": 88, "blocking_issues": 0, "report": "landmark-review.json" },
+  "rendering_tests": { "files": 14, "passed": 46 },
+  "production_build": { "command": "npm run build", "passed": true },
+  "preview": {
+    "palettes_checked_in_browser": ["classic", "california", "newyork", "sf"],
+    "zoom": 6,
+    "console_errors": 0,
+    "screenshot": "landmark-street.jpg",
+    "palette_fix": "Preserve stadium field markings/floodlights and university clock face during wall recoloring."
+  },
+  "game_integration": {
+    "code": "TileRenderer draws one complete landmark frame at the existing 2x2 anchor at detail zoom; mapping and full-frame footprint are tested.",
+    "live_city_visual_probe": "Not completed: the native overwrite-map confirmation blocked browser automation. The prior small test town was saved to slot 6 before the probe. This is not recorded as a passed in-city visual test."
+  },
+  "limitations": [
+    "Stadium seating rings have simplified directional lighting.",
+    "University and museum architecture benefit from game labels for exact facility identification.",
+    "Simulation and traffic logic were unchanged; long city simulations were not repeated for this art-only batch."
+  ]
+}

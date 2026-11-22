@@ -322,6 +322,9 @@ def main():
     from pixel_civic import DRAWERS
     for name, draw in DRAWERS.items():
         save_spec(name, draw(Canvas), STREET / f'{name}-source.png', renderer)
+    from pixel_landmarks import DRAWERS as LANDMARKS
+    for name, draw in LANDMARKS.items():
+        save_spec(name, draw(Canvas), STREET / f'{name}-source.png', renderer)
     people = Image.new('RGBA', (128, 48 * 7))
     for phase in range(7):
         for direction in range(4):
@@ -347,10 +350,11 @@ def main():
     (ART / 'provenance.json').write_text(json.dumps(dict(art_source='code', image_model_used=False,
         authoring_script='tools/draw-handmade.py', actor_authoring_script='tools/pixel_actors.py',
         civic_authoring_script='tools/pixel_civic.py',
+        landmark_authoring_script='tools/pixel_landmarks.py', native_landmark_grid=128,
         vehicle_geometry='one code-authored volume per vehicle; slices and diagnostic views share geometry',
         skill='pixel-art-studio', palette=P, native_building_grid=64,
         person_directions=['east', 'south', 'west', 'north'], person_walk_frames=6, source_specs='specs/'), indent=2) + '\n', encoding='utf-8')
-    print('Authored 13 static sprites, 28 pedestrian frames and 8 orthographic vehicle views from code.')
+    print('Authored 17 static sprites, 28 pedestrian frames and 8 orthographic vehicle views from code.')
 
 
 if __name__ == '__main__':

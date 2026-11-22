@@ -16,6 +16,13 @@
     "clinic",
     "warehouse"
   ],
+  "landmarkFrame": 256,
+  "landmarks": [
+    "hospital",
+    "university",
+    "museum",
+    "stadium"
+  ],
   "treeFrame": [
     128,
     256

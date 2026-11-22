@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { streetBuilding, personDirection, truckColourRow } from './streetAppearance';
+import { streetBuilding, streetLandmark, personDirection, truckColourRow } from './streetAppearance';
 import { lineColour } from '../app/lineColours';
 
 it('maps representative building families without replacing landmarks or taller towers', () => {
@@ -17,6 +17,9 @@ it('maps representative building families without replacing landmarks or taller 
   expect(streetBuilding(0, 13)).toBe('warehouse');
   expect(streetBuilding(10, 5)).toBeUndefined();
   expect(streetBuilding(5, 2)).toBeUndefined();
+  expect([1, 2, 3, 4].map(streetLandmark)).toEqual(['hospital', 'university', 'museum', 'stadium']);
+  expect(streetLandmark(0)).toBeUndefined();
+  expect(streetLandmark(5)).toBeUndefined();
 });
 
 it('keeps person direction and all eight existing route colours consistent with the game', () => {

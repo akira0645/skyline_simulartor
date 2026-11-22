@@ -9,7 +9,7 @@ import { industryAt } from '../simulation/Industry';
 import { Camera } from './Camera';
 import buildingAtlas from '../assets/buildings/atlas.json';
 import { DETAIL_ZOOM, terrainResolution } from './detailLevel';
-import { streetBuilding } from './streetAppearance';
+import { streetBuilding, streetLandmark } from './streetAppearance';
 import type { StreetArt } from './StreetArt';
 export { DETAIL_ZOOM } from './detailLevel';
 
@@ -488,8 +488,10 @@ export class TileRenderer {
     }
 
     for (const [anchor, art] of bigs) {
-      g.texture(this.bigFrame(art), 0xffffff, anchor % MAP_SIZE * TILE_SIZE,
-        Math.floor(anchor / MAP_SIZE) * TILE_SIZE, 2 * TILE_SIZE, 2 * TILE_SIZE);
+      const landmark = detailed && streetLandmark(art);
+      const x = anchor % MAP_SIZE * TILE_SIZE, y = Math.floor(anchor / MAP_SIZE) * TILE_SIZE;
+      if (landmark) this.streetArt.drawLandmark(g, landmark, x, y, theme);
+      else g.texture(this.bigFrame(art), 0xffffff, x, y, 2 * TILE_SIZE, 2 * TILE_SIZE);
     }
     for (const anchor of complexes) {
       g.texture(this.bigFrame(COMPLEX_ART), 0xffffff, anchor % MAP_SIZE * TILE_SIZE,

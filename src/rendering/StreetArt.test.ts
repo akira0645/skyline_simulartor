@@ -8,18 +8,38 @@ import carAtlas from '../assets/vehicles/cars.json';
 const source = (width: number, height: number) => new TextureSource({ width, height });
 function street() {
   const building = source(atlas.buildings.length * atlas.buildingFrame, atlas.buildingFrame);
+  const landmark = source(atlas.landmarks.length * atlas.landmarkFrame, atlas.landmarkFrame);
   return new StreetArt({ classic: building, sf: building, california: building, newyork: building },
     source(...atlas.treeFrame as [number, number]),
     source(4 * atlas.personFrame[0], atlas.personPoses * atlas.personColours.length * atlas.personFrame[1]),
-    source(16 * atlas.truckFrame, atlas.truckColours.length * atlas.truckFrame));
+    source(16 * atlas.truckFrame, atlas.truckColours.length * atlas.truckFrame),
+    { classic: landmark, sf: landmark, california: landmark, newyork: landmark });
 }
+
+it('draws each landmark as one complete two-by-two footprint at its anchor', () => {
+  const art = street(), g = new Graphics();
+  for (const kind of ['hospital', 'university', 'museum', 'stadium'] as const) {
+    g.clear();
+    art.drawLandmark(g, kind, 96, 160, 'classic');
+    const instruction = g.context.instructions.at(-1)!;
+    if (instruction.action !== 'texture') throw Error('Missing landmark texture');
+    expect(instruction.data.dx).toBe(96);
+    expect(instruction.data.dy).toBe(160);
+    expect(instruction.data.dw).toBe(64);
+    expect(instruction.data.dh).toBe(64);
+    expect(instruction.data.image.frame.width).toBe(256);
+    expect(instruction.data.image.frame.height).toBe(256);
+  }
+  g.destroy(); art.destroy();
+});
 
 it('does not let a preceding translucent ground shadow fade buildings, trees, pedestrians or vehicles', () => {
   const art = street();
   const cars = new CarSprites(source(carAtlas.directions * carAtlas.frameSize,
     carAtlas.sizes.length * carAtlas.colours.length * carAtlas.frameSize));
   const g = new Graphics();
-  for (const draw of [() => art.drawBuilding(g, 'house', 0, 0, 'classic'), () => art.drawTree(g, 0, 0),
+  for (const draw of [() => art.drawBuilding(g, 'house', 0, 0, 'classic'),
+    () => art.drawLandmark(g, 'hospital', 0, 0, 'classic'), () => art.drawTree(g, 0, 0),
     () => art.drawPerson(g, 10, 10, 0, 0, 0), () => art.drawTruck(g, 10, 10, 0, 0xe5484d),
     () => cars.draw(g, 10, 10, 0, 2, 0, 'classic')]) {
     g.clear().rect(0, 0, 4, 4).fill({ color: 0x222222, alpha: 0.2 });

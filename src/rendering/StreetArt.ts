@@ -5,21 +5,31 @@ import classicUrl from '../assets/street/buildings-classic.png';
 import sfUrl from '../assets/street/buildings-sf.png';
 import californiaUrl from '../assets/street/buildings-california.png';
 import newyorkUrl from '../assets/street/buildings-newyork.png';
+import landmarkClassicUrl from '../assets/street/landmarks-classic.png';
+import landmarkSfUrl from '../assets/street/landmarks-sf.png';
+import landmarkCaliforniaUrl from '../assets/street/landmarks-california.png';
+import landmarkNewyorkUrl from '../assets/street/landmarks-newyork.png';
 import treeUrl from '../assets/street/tree.png';
 import peopleUrl from '../assets/street/people.png';
 import truckUrl from '../assets/street/truck.png';
 import { carDirection } from './carAppearance';
-import { personDirection, truckColourRow, type StreetBuilding } from './streetAppearance';
+import { personDirection, truckColourRow, type StreetBuilding, type StreetLandmark } from './streetAppearance';
 
 /** Shared by the actual city renderer and the review street; no separate drawing implementation. */
 export class StreetArt {
   private readonly frames = new Map<TextureSource, Map<number, Texture>>();
 
   constructor(private readonly buildings: Record<Theme, TextureSource>,
-    private readonly tree: TextureSource, private readonly people: TextureSource, private readonly truck: TextureSource) {
+    private readonly tree: TextureSource, private readonly people: TextureSource, private readonly truck: TextureSource,
+    private readonly landmarks: Record<Theme, TextureSource>) {
     for (const source of Object.values(buildings)) {
       if (source.width !== atlas.buildings.length * atlas.buildingFrame || source.height !== atlas.buildingFrame) {
         throw new Error('Street building atlas does not match its metadata');
+      }
+    }
+    for (const source of Object.values(landmarks)) {
+      if (source.width !== atlas.landmarks.length * atlas.landmarkFrame || source.height !== atlas.landmarkFrame) {
+        throw new Error('Street landmark atlas does not match its metadata');
       }
     }
     if (people.width !== atlas.personFrame[0] * 4 || people.height !== atlas.personFrame[1] * atlas.personPoses * atlas.personColours.length ||
@@ -30,11 +40,13 @@ export class StreetArt {
   }
 
   static async load(): Promise<StreetArt> {
-    const sheets = await Promise.all([classicUrl, sfUrl, californiaUrl, newyorkUrl, treeUrl, peopleUrl, truckUrl]
+    const sheets = await Promise.all([classicUrl, sfUrl, californiaUrl, newyorkUrl, treeUrl, peopleUrl, truckUrl,
+      landmarkClassicUrl, landmarkSfUrl, landmarkCaliforniaUrl, landmarkNewyorkUrl]
       .map(url => Assets.load<Texture>(url)));
     for (const sheet of sheets) sheet.source.scaleMode = 'nearest';
     return new StreetArt({ classic: sheets[0].source, sf: sheets[1].source,
-      california: sheets[2].source, newyork: sheets[3].source }, sheets[4].source, sheets[5].source, sheets[6].source);
+      california: sheets[2].source, newyork: sheets[3].source }, sheets[4].source, sheets[5].source, sheets[6].source,
+      { classic: sheets[7].source, sf: sheets[8].source, california: sheets[9].source, newyork: sheets[10].source });
   }
 
   private frame(source: TextureSource, x: number, y: number, width: number, height: number): Texture {
@@ -59,6 +71,13 @@ export class StreetArt {
   drawTree(g: Graphics, x: number, y: number) {
     g.setFillStyle({ color: 0xffffff, alpha: 1 })
       .texture(this.frame(this.tree, 0, 0, ...atlas.treeFrame as [number, number]), 0xffffff, x, y, 32, 64);
+  }
+
+  drawLandmark(g: Graphics, kind: StreetLandmark, x: number, y: number, theme: Theme) {
+    const size = atlas.landmarkFrame;
+    const column = atlas.landmarks.indexOf(kind);
+    g.setFillStyle({ color: 0xffffff, alpha: 1 })
+      .texture(this.frame(this.landmarks[theme], column * size, 0, size, size), 0xffffff, x, y, 64, 64);
   }
 
   drawPerson(g: Graphics, x: number, y: number, heading: number, index: number, distance: number, walking = true) {

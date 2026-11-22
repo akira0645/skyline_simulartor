@@ -15,6 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / 'docs/design-assets/street'
 OUT = ROOT / 'src/assets/street'
 BUILDINGS = ['house', 'apartment', 'shop', 'office', 'factory', 'school', 'power', 'water', 'fire', 'police', 'clinic', 'warehouse']
+LANDMARKS = ['hospital', 'university', 'museum', 'stadium']
 PEOPLE_COLOURS = ['7edbed', 'f6ba67', 'e8799a', '8fbf6a', 'd6d9de']
 TRUCK_COLOURS = ['e5484d', '3b82f6', 'f2c94c', 'a56eff', 'ff8a3d', '2ec4b6', 'ec4899', '84cc16']
 
@@ -26,7 +27,7 @@ def source(name):
     return Image.fromarray(data)
 
 
-def restyle(image, style):
+def restyle(image, style, protected_regions=()):
     if style == 'classic':
         return image
     data = np.array(image)
@@ -37,6 +38,8 @@ def restyle(image, style):
     # Retain medical signs, flowers, police badges and safety markings in every city palette.
     for colour in ['97586d', 'd89a91', 'e2bb71']:
         walls &= ~np.all(data[..., :3] == np.array(list(bytes.fromhex(colour))), axis=-1)
+    for x0, y0, x1, y1 in protected_regions:
+        walls[y0:y1 + 1, x0:x1 + 1] = False
     light = (r * 0.26 + g * 0.62 + b * 0.12) / 200
     target = np.array({'sf': [205, 185, 203], 'california': [232, 217, 180], 'newyork': [165, 108, 86]}[style])
     tinted = np.clip(target * light[..., None], 0, 255)
@@ -87,6 +90,25 @@ def actors():
     atlas.save(OUT / 'people.png', optimize=True)
 
 
+def landmarks():
+    frames = [source(name) for name in LANDMARKS]
+    assert all(frame.size == (128, 128) for frame in frames)
+    for style in ['classic', 'sf', 'california', 'newyork']:
+        atlas = Image.new('RGBA', (256 * len(frames), 256))
+        for i, (name, frame) in enumerate(zip(LANDMARKS, frames)):
+            protected = {'stadium': [(39, 50, 88, 75), (2, 5, 19, 16), (100, 5, 117, 16)],
+                         'university': [(56, 25, 71, 40)]}.get(name, [])
+            atlas.paste(restyle(frame, style, protected).resize((256, 256), Image.Resampling.NEAREST), (i * 256, 0))
+        atlas.save(OUT / f'landmarks-{style}.png', optimize=True)
+    preview = Image.new('RGB', (1280, 350), '#1b2b2b')
+    draw = ImageDraw.Draw(preview)
+    for i, (name, frame) in enumerate(zip(LANDMARKS, frames)):
+        large = frame.resize((288, 288), Image.Resampling.NEAREST)
+        preview.paste(large, (16 + i * 320, 12), large)
+        draw.text((20 + i * 320, 320), name.upper(), fill='#e0e8db')
+    preview.save(SOURCE / 'landmarks-contact.png')
+
+
 def trucks():
     path = ROOT / 'tools/bake-cars.py'
     spec = importlib.util.spec_from_file_location('bake_cars', path)
@@ -108,11 +130,13 @@ def trucks():
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
     buildings()
+    landmarks()
     if (SOURCE / 'people-source.png').exists() and (SOURCE / 'tree-source.png').exists():
         actors()
     if (SOURCE / 'truck-slices.png').exists():
         trucks()
-    metadata = dict(artSource='code', density=4, buildingFrame=128, buildings=BUILDINGS, treeFrame=[128, 256], personPoses=7,
+    metadata = dict(artSource='code', density=4, buildingFrame=128, buildings=BUILDINGS,
+                    landmarkFrame=256, landmarks=LANDMARKS, treeFrame=[128, 256], personPoses=7,
                     personFrame=[32, 48], personPivot=[16, 24], personColours=PEOPLE_COLOURS,
                     truckFrame=96, truckPivot=[48, 56], truckColours=TRUCK_COLOURS)
     (OUT / 'atlas.json').write_text(json.dumps(metadata, indent=2) + '\n', encoding='utf-8')

@@ -2,6 +2,11 @@ import atlas from '../assets/street/atlas.json';
 
 export type StreetBuilding = 'house' | 'apartment' | 'shop' | 'office' | 'factory' | 'school' |
   'power' | 'water' | 'fire' | 'police' | 'clinic' | 'warehouse';
+export type StreetLandmark = 'hospital' | 'university' | 'museum' | 'stadium';
+/** Whole 2x2 sprites; never map their individual quadrants as four small buildings. */
+export function streetLandmark(column: number): StreetLandmark | undefined {
+  return ({ 1: 'hospital', 2: 'university', 3: 'museum', 4: 'stadium' } as Record<number, StreetLandmark>)[column];
+}
 
 /** Authored families only: preserve landmarks and towers until they have their own art. */
 export function streetBuilding(column: number, row: number): StreetBuilding | undefined {

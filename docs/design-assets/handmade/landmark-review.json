@@ -1,0 +1,196 @@
+{
+  "verdict": "PASS",
+  "score": 88,
+  "ship_ready": true,
+  "automated_score": 87.5,
+  "human_adjusted_score": 88,
+  "blocking_issues": [],
+  "soft_issues": [
+    "Without its game label, the clock-tower composition could also read as a large school or town hall.",
+    "Classical architecture alone does not uniquely distinguish a museum from a civic hall; banners and label carry the precise role.",
+    "Seating rings have less left/right light modulation than the architectural props; their material separation communicates the form more strongly than lighting."
+  ],
+  "false_positives": [
+    "Stadium pillow-shading detection arises from repeated material rings and a dark structural perimeter; independently inspected at native and 4x and not confirmed as concentric shading."
+  ],
+  "reasoning": "Reviewed the landmark contact sheet, every 128x128 native source, separate nearest-neighbor 4x images, and the classic/SF exported atlases. All four entrances are visible and unobstructed, and the palette/outline/glass treatment matches the existing 64px building set. Larger buildings use additional native-size detail units rather than simply enlarging small sprites. Independent checker runs reproduce scores 100/100/100/50; the stadium issue is retained and adjudicated below. Targeted palette follow-up inspected rebaked New York and San Francisco atlases: pitch lines, floodlight panels and university clock faces remain pale and readable, with no brick/purple tint obscuring these semantic details. Native images were unchanged, so native checker findings remain applicable.",
+  "specific_fixes": [],
+  "optional_polish": [
+    "If stronger stadium depth is desired, add a restrained existing-palette shadow on the lower-right outer stand wall without changing the colors of the pitch or track markings.",
+    "Use the game labels to disambiguate museum and university rather than adding tiny illegible text to their facades."
+  ],
+  "assets": [
+    {
+      "asset": "docs/design-assets/street/hospital-source.png",
+      "verdict": "PASS",
+      "human_adjusted_score": 90,
+      "summary_retained": {
+        "score": 100,
+        "verdict": "ship",
+        "issues": [],
+        "warnings": []
+      },
+      "native_dimensions": [
+        128,
+        128
+      ],
+      "colors": 25,
+      "orphans": 38,
+      "orphan_percent": 0.3392,
+      "doublies": 0,
+      "score": 90,
+      "recognition": "Large rose cross, central multi-storey clinical block and two lower wings read as a hospital.",
+      "entrance": "Two dark-framed doors under the teal canopy align with a broad central stair; the entrance is visible without covering windows.",
+      "lighting": "Main wall has a narrow darker right face; roof, canopy, glazing and sill highlights consistently favor the top/left.",
+      "detail_density": "Window units remain approximately the native size of the small buildings; the larger footprint adds windows instead of magnifying the pixel grid.",
+      "soft_issues": [],
+      "warning_adjudication": "No automated issue or warning.",
+      "blocking_issues": []
+    },
+    {
+      "asset": "docs/design-assets/street/university-source.png",
+      "verdict": "PASS",
+      "human_adjusted_score": 88,
+      "summary_retained": {
+        "score": 100,
+        "verdict": "ship",
+        "issues": [],
+        "warnings": []
+      },
+      "native_dimensions": [
+        128,
+        128
+      ],
+      "colors": 28,
+      "orphans": 28,
+      "orphan_percent": 0.2552,
+      "doublies": 0,
+      "score": 88,
+      "recognition": "Clock tower, formal central arch, flanking red-brick classroom wings and flag establish a large educational institution.",
+      "entrance": "Dark arched double doors and a central stair are clearly separated from wall and glazing.",
+      "lighting": "Left/top roof-tile highlights, darker eaves and consistent window reflections match the original set.",
+      "detail_density": "Tile courses and glass glints retain small-building pixel density; clock and entrance use larger purposeful shapes.",
+      "soft_issues": [
+        "Without its game label, the clock-tower composition could also read as a large school or town hall."
+      ],
+      "warning_adjudication": "No automated issue or warning.",
+      "blocking_issues": []
+    },
+    {
+      "asset": "docs/design-assets/street/museum-source.png",
+      "verdict": "PASS",
+      "human_adjusted_score": 88,
+      "summary_retained": {
+        "score": 100,
+        "verdict": "ship",
+        "issues": [],
+        "warnings": []
+      },
+      "native_dimensions": [
+        128,
+        128
+      ],
+      "colors": 22,
+      "orphans": 14,
+      "orphan_percent": 0.1254,
+      "doublies": 0,
+      "score": 88,
+      "recognition": "Pediment, four columns, central formal entrance and side banners read as a classical cultural/public institution.",
+      "entrance": "Central tall teal door is visually centered between columns, with an unobstructed broad stair. Side glazed panels remain secondary.",
+      "lighting": "Column highlights sit left of the shafts, shadows right; pediment trim and lower recess shading are coherent with top-left light.",
+      "detail_density": "Large stone planes are appropriately quieter than brick facades; one-pixel trim and stair edges remain consistent with smaller props.",
+      "soft_issues": [
+        "Classical architecture alone does not uniquely distinguish a museum from a civic hall; banners and label carry the precise role."
+      ],
+      "warning_adjudication": "No automated issue or warning.",
+      "blocking_issues": []
+    },
+    {
+      "asset": "docs/design-assets/street/stadium-source.png",
+      "verdict": "PASS",
+      "human_adjusted_score": 85,
+      "summary_retained": {
+        "score": 50,
+        "verdict": "redesign",
+        "issues": [
+          "Pillow shading detected — refactor with explicit light direction"
+        ],
+        "warnings": []
+      },
+      "native_dimensions": [
+        128,
+        128
+      ],
+      "colors": 17,
+      "orphans": 10,
+      "orphan_percent": 0.089,
+      "doublies": 0,
+      "score": 85,
+      "recognition": "Oval stands/track, marked green pitch, scoreboard and paired floodlights immediately read as a sports stadium.",
+      "entrance": "Three dark gate bays form a clear front gatehouse, distinct from the pitch and aligned with the front pavement.",
+      "lighting": "Poles/gatehouse retain edge highlights and structural dark sides. Seating bands are flatter and more symmetric than the other landmarks, so directional depth is weaker but not contradictory.",
+      "detail_density": "Pitch markings and gates use simple legible clusters. Oval outline steps are native pixels without blur or over-detailed subpixel texture.",
+      "soft_issues": [
+        "Seating rings have less left/right light modulation than the architectural props; their material separation communicates the form more strongly than lighting."
+      ],
+      "warning_adjudication": "Pillow warning is a false positive. Alternating red/cream oval bands are discrete stand/track materials around a differently colored green pitch, not a monotonically brighter inward luminance ramp. Gatehouse, perimeter and scoreboard outlines are structural dark shapes. The central pitch is not a symmetric luminous highlight; no verified pillow shading is visible.",
+      "blocking_issues": []
+    }
+  ],
+  "validation": {
+    "native_inputs": 4,
+    "independently_rechecked": 4,
+    "native_dimensions": [
+      128,
+      128
+    ],
+    "palette_range": [
+      17,
+      28
+    ],
+    "maximum_orphan_percent": 0.3393,
+    "doublies": 0,
+    "inspection_artifacts": [
+      "docs/design-assets/street/landmarks-contact.png",
+      "work/hospital-review-4x.png",
+      "work/university-review-4x.png",
+      "work/museum-review-4x.png",
+      "work/stadium-review-4x.png"
+    ],
+    "atlases_visually_inspected": [
+      "src/assets/street/landmarks-classic.png",
+      "src/assets/street/landmarks-sf.png",
+      "src/assets/street/landmarks-newyork.png"
+    ],
+    "recheck_artifact": "work/landmark-quality-recheck.json",
+    "generator_code_inspected": false,
+    "browser_used": false
+  },
+  "limitations": [
+    "No running-game inspection of 2x2 placement, terrain integration, occupancy or clipping was performed.",
+    "California atlas was located but not visually reviewed; four-city review status is explicitly recorded in palette_followup.",
+    "This review concerns raster artifact quality; it does not verify placement dimensions or runtime asset indexing.",
+    "No code or assets modified."
+  ],
+  "palette_followup": {
+    "scope": [
+      "src/assets/street/landmarks-newyork.png",
+      "src/assets/street/landmarks-sf.png"
+    ],
+    "verdict": "PASS",
+    "native_images_changed": false,
+    "findings": [
+      "New York: pitch outline, halfway line and center circle remain pale cream against green, not brick-colored; floodlight panels remain pale and distinct from dark frames.",
+      "San Francisco: the same pitch markings and floodlight panels remain pale cream against green/slate, distinct from purple building materials.",
+      "Both: university clock face remains cream with dark hands/border; it is distinct from surrounding brick/purple masonry.",
+      "No new material masking or loss of entry visibility is apparent in either updated atlas."
+    ],
+    "city_palette_review_status": {
+      "classic": "Visually inspected in original pass; native material readability passed.",
+      "newyork": "Updated atlas visually inspected in this follow-up; protected pitch/lights/clock readability passed.",
+      "sf": "Updated atlas visually reinspected in this follow-up; protected pitch/lights/clock readability passed.",
+      "california": "Not visually reviewed; outside the requested two-atlas follow-up scope."
+    },
+    "blocking_issues": []
+  }
+}

@@ -3,7 +3,7 @@ import { StreetArt } from '../src/rendering/StreetArt';
 import { CarSprites } from '../src/rendering/CarSprites';
 import carsUrl from '../src/assets/vehicles/cars.png';
 import type { Theme } from '../src/simulation/SaveData';
-import type { StreetBuilding } from '../src/rendering/streetAppearance';
+import type { StreetBuilding, StreetLandmark } from '../src/rendering/streetAppearance';
 import { WalkerMotion } from '../src/rendering/WalkerMotion';
 import { PreviewTraffic } from '../src/rendering/PreviewTraffic';
 
@@ -21,9 +21,11 @@ let zoom = 6, theme: Theme = 'classic', time = 0, moving = true, inspection = fa
 const residential: StreetBuilding[] = ['house', 'apartment', 'shop', 'office', 'factory', 'school'];
 const civic: StreetBuilding[] = ['power', 'water', 'fire', 'police', 'clinic', 'warehouse'];
 let civicView = false;
+let landmarkView = false;
 let names = residential;
 const updateLabels = () => {
-  const labels = inspection ? ['右側', '正面', '左側', '背面'] : civicView
+  const labels = inspection ? ['右側', '正面', '左側', '背面'] : landmarkView
+    ? ['醫院', '大學', '博物館', '體育場'] : civicView
     ? ['發電廠', '水塔', '消防局', '警察局', '診所', '物流倉庫']
     : ['獨棟住宅', '公寓', '街角商店', '辦公樓', '工廠', '小學'];
   document.querySelector<HTMLElement>('.labels')!.innerHTML = labels.map(label => `<span>${label}</span>`).join('');
@@ -63,6 +65,31 @@ function inspectActors() {
   document.querySelector('#guide')!.textContent = '上排依序為：右側、正面、左側、背面。可暫停後按「下一幀」，逐格檢查步態；這個檢查模式刻意原地播放。';
 }
 
+function drawTraffic(offsetY = 0) {
+  traffic.advance(time - trafficTime);
+  trafficTime = time;
+  for (const vehicle of traffic.vehicles) {
+    const x = vehicle.x * 32, y = vehicle.y * 32 + offsetY, angle = vehicle.hx > 0 ? 0 : Math.PI;
+    if (vehicle.index === 2) art.drawTruck(g, x, y, angle, 0x3b82f6);
+    else cars.draw(g, x, y, angle, vehicle.index === 0 ? 2 : 3, vehicle.index === 0 ? 0 : 2, theme);
+  }
+}
+
+function inspectLandmarks() {
+  g.rect(0, 0, 256, 152).fill(0x8b9c77);
+  const landmarks: StreetLandmark[] = ['hospital', 'university', 'museum', 'stadium'];
+  for (const [i, name] of landmarks.entries()) {
+    g.rect(i * 64 + 2, 19, 60, 62).fill(0xa1ac87);
+    art.drawLandmark(g, name, i * 64, 12, theme);
+  }
+  g.rect(0, 81, 256, 8).fill(0xd1c8ac);
+  g.rect(0, 98, 256, 33).fill(0x4b535a);
+  for (let x = 0; x < 256; x += 16) g.rect(x + 3, 114, 8, 1).fill(0xd9c99b);
+  drawTraffic(45);
+  document.querySelector('#status')!.textContent = `程式繪製・${zoom}×　四種完整 2×2 大型建築／四城市配色`;
+  document.querySelector('#guide')!.textContent = '醫院、大學、博物館與體育場使用與遊戲相同的完整大圖；原生 128×128，顯示占地 64×64。';
+}
+
 function paint() {
   g.clear();
   world.scale.set(zoom);
@@ -70,6 +97,11 @@ function paint() {
     trafficTime = time;
     inspectActors();
     app.render();
+    document.documentElement.dataset.ready = 'true';
+    return;
+  }
+  if (landmarkView) {
+    inspectLandmarks(); app.render();
     document.documentElement.dataset.ready = 'true';
     return;
   }
@@ -90,13 +122,7 @@ function paint() {
     g.rect(x + 2, 45, 29, 3).fill({ color: 0x354b43, alpha: 0.22 });
     art.drawBuilding(g, names[i], x, 16, theme);
   }
-  traffic.advance(time - trafficTime);
-  trafficTime = time;
-  for (const vehicle of traffic.vehicles) {
-    const x = vehicle.x * 32, y = vehicle.y * 32, angle = vehicle.hx > 0 ? 0 : Math.PI;
-    if (vehicle.index === 2) art.drawTruck(g, x, y, angle, 0x3b82f6);
-    else cars.draw(g, x, y, angle, vehicle.index === 0 ? 2 : 3, vehicle.index === 0 ? 0 : 2, theme);
-  }
+  drawTraffic();
   for (const [i, x] of [27, 76, 123, 183, 229].entries()) {
     const at = route(time / 1000, x - 7, x + 7, i * 0.7);
     pedestrian(`street:${i}`, at.value, 48, at.heading, i);
@@ -138,10 +164,18 @@ document.querySelector<HTMLButtonElement>('#actors')!.onclick = event => {
   paint();
 };
 document.querySelector<HTMLButtonElement>('#civic')!.onclick = event => {
+  landmarkView = false;
+  document.querySelector<HTMLButtonElement>('#landmarks')!.textContent = '大型建築';
   civicView = !civicView; names = civicView ? civic : residential;
   inspection = false;
   document.querySelector<HTMLButtonElement>('#actors')!.textContent = '檢查人物與車體';
   (event.target as HTMLButtonElement).textContent = civicView ? '住宅與商業' : '公共設施';
+  updateLabels(); paint();
+};
+document.querySelector<HTMLButtonElement>('#landmarks')!.onclick = event => {
+  landmarkView = !landmarkView; inspection = false;
+  document.querySelector<HTMLButtonElement>('#actors')!.textContent = '檢查人物與車體';
+  (event.target as HTMLButtonElement).textContent = landmarkView ? '返回一般街景' : '大型建築';
   updateLabels(); paint();
 };
 document.querySelector<HTMLButtonElement>('#step')!.onclick = () => {

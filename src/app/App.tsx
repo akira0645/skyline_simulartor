@@ -1,5 +1,6 @@
 import { VehiclePanel } from './VehiclePanel';
 import { PersonPortrait } from './PersonPortrait';
+import { genderNames } from '../simulation/ResidentGender';
 import { cellFromId } from '../simulation/FacilityAccess';
 import { weatherAt, weatherNames } from '../simulation/Weather';
 import { AutosaveSession, type AutosaveStatus } from '../storage/AutosaveSession';
@@ -636,11 +637,12 @@ export function App() {
   const personCard = seen && doing && <section className="person">
     <button type="button" className="back" onClick={() => setWho(undefined)}>← 回上一頁</button>
     <div className="person-heading">
-      <PersonPortrait seed={engine.city.seed} id={seen.id ?? seen.homeId * 64 + seen.slot} age={seen.age} name={seen.name} />
+      <PersonPortrait seed={engine.city.seed} id={seen.id ?? seen.homeId * 64 + seen.slot} age={seen.age} name={seen.name} gender={seen.gender} />
       <h2>{seen.name}</h2>
     </div>
     <div className="tags">
       <Tag label={`${seen.age} 歲`} />
+      {seen.gender && <Tag label={genderNames[seen.gender]} />}
       {seen.trait && <Tag label={traitNames[seen.trait][0]} tip={traitNames[seen.trait][1]} />}
       {seen.kids > 0 && <Tag label="小孩" value={seen.kids} />}
       {seen.birthday && <Tag label="今天生日" tone="good" tip="附近有蛋糕店的話，家裡會有人去買蛋糕" />}

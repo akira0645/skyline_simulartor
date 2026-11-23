@@ -83,6 +83,12 @@ def volume(look, age, phase, rider=True):
         for x,y in [(3,18),(6,17),(9,20)]: box(x-1,x+1,y-1,y+1,40-shrink,43-shrink,'hair0')
     if style=='cap':
         box(2,10,17,23,41-shrink,43-shrink,'body0'); box(2,10,24,26,40-shrink,41-shrink,'body2')
+    if style=='glasses':
+        box(3,9,24,24,37-shrink,38-shrink,'ink')
+        box(5,7,24,24,37-shrink,37-shrink,'skin1')
+        if look.get('gender')=='female':
+            box(2,3,17,21,34-shrink,40-shrink,'hair0')
+            box(9,10,17,21,34-shrink,40-shrink,'hair0')
     return v
 
 

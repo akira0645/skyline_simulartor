@@ -322,7 +322,7 @@ export class CityRenderer {
         carSprites.draw(people, cx, cy, heading, tier, index, this.city.theme);
         return;
       }
-      if (tier === 0 && camera.scale >= DETAIL_ZOOM) {
+      if (tier === 0) {
         if (this.bicycles) { this.bicycles.draw(people, cx, cy, heading, bicycle?.profile, bicycle?.distance); return; }
         requestBicycles();
       }
@@ -396,7 +396,7 @@ export class CityRenderer {
       // A person is small beside a house: three pixels across and nine tall.
       const x = Math.round(cx) - 1;
       const y = Math.round(cy) - 4;
-      if (camera.scale >= DETAIL_ZOOM) {
+      if (camera.scale >= 1) {
         streetArt.drawPerson(people, cx, cy, motion.heading, index, motion.distance, motion.walking, profile);
         if (wet) {
           const colour = [0xe5484d, 0x3f6fb0, 0xf2c94c, 0x5f9a6a, 0xf4f6f8][index % 5];
@@ -539,7 +539,7 @@ export class CityRenderer {
         const { key, index: i, tier, wanted } = real;
         const slot = real.person?.slot ?? this.city.personOn(real.homeId, real.workId);
         const identity = slot === undefined ? undefined : this.city.residentLook(real.person?.home ?? real.homeId, slot);
-        const profile = residentAppearance(this.city.seed, identity?.id ?? real.homeId * 64 + (slot ?? 0), identity?.age ?? 30);
+        const profile = residentAppearance(this.city.seed, identity?.id ?? real.homeId * 64 + (slot ?? 0), identity?.age ?? 30, identity?.gender);
         const actor = `commute:${key}`;
         let trip = trips.get(key);
         if (!trip) trips.set(key, trip = { at: (real.initialProgress ?? 0) >= 1 ? 'work' : 'home', wait: 0,
@@ -830,7 +830,7 @@ export class CityRenderer {
           const identity = this.city.residentLook(trip.home, trip.slot);
           drawWalker(spot.x, spot.y, trip.home + trip.slot, carHeading(next.x - point.x, next.y - point.y, Math.PI / 2),
             `visit:${trip.home}:${trip.slot}`, residentAppearance(this.city.seed,
-              identity?.id ?? trip.home * 64 + trip.slot, identity?.age ?? 30));
+              identity?.id ?? trip.home * 64 + trip.slot, identity?.age ?? 30, identity?.gender));
         }
         spots.push({ ...spot, homeId: trip.home, slot: trip.slot });
         if (this.followVisitor?.home === trip.home && this.followVisitor.slot === trip.slot) pin = spot;

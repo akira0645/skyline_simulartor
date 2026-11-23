@@ -5,7 +5,8 @@ import { freightLines as freightRules, planFreightLines, type FreightLine, type 
 import { LifeSystem, EMPTY_LIFE, type LifeResident } from './LifeSystem';
 import { planFacilityVisits, type CivicVisitContext } from './CivicVisits';
 import { ActivityDiary, activityDay, visitReasons } from './ActivityDiary';
-import { createIdentity, identityAt, YEAR_TICKS } from './ResidentIdentity';
+import { createIdentity, identityAt, identityGender, YEAR_TICKS } from './ResidentIdentity';
+import { legacyGender, type ResidentGender } from './ResidentGender';
 import { Relationships } from './Relationships';
 import { seats } from './Capacity';
 import { spacesAt } from './Parking';
@@ -126,12 +127,16 @@ export class BuildingSystem {
 
   private ensureIdentities(): void {
     this.peopleById.clear();
-    for (const child of this.life.children) this.nextPersonId = Math.max(this.nextPersonId, child.identity.id + 1);
+    for (const child of this.life.children) {
+      child.identity.gender ??= identityGender(child.identity);
+      this.nextPersonId = Math.max(this.nextPersonId, child.identity.id + 1);
+    }
     for (const building of this.buildings.values()) for (const person of building.people ?? []) {
       if (person.identity) this.nextPersonId = Math.max(this.nextPersonId, person.identity.id + 1);
     }
     for (const [home, building] of this.buildings) for (const person of building.people ?? []) {
       person.identity ??= createIdentity(this.nextPersonId++, this.seed, home, person.slot, person.came, building.kind);
+      person.identity.gender ??= identityGender(person.identity);
       this.nextPersonId = Math.max(this.nextPersonId, person.identity.id + 1);
       this.peopleById.set(person.identity.id, { home, person });
     }
@@ -144,10 +149,11 @@ export class BuildingSystem {
       const first = members.reduce((a, b) => a.came < b.came ? a : b);
       const legacy = childrenAt(this.seed, home, building.kind, members.length,
         this.whoAt(home, first).name[0], Math.floor((this.clock - first.came) / YEAR_TICKS));
-      this.life.establish(home, legacy.map(child => ({ home,
-        guardians: members.slice(0, 2).map(person => person.identity!.id),
-        identity: { id: this.nextPersonId++, name: child.name, born: this.clock - child.age * YEAR_TICKS },
-      })));
+      this.life.establish(home, legacy.map(child => {
+        const id = this.nextPersonId++;
+        return { home, guardians: members.slice(0, 2).map(person => person.identity!.id),
+          identity: { id, name: child.name, born: this.clock - child.age * YEAR_TICKS, gender: legacyGender(id) } };
+      }));
     }
   }
   private whoAt(home: number, person: SavedPerson) {
@@ -1975,9 +1981,10 @@ export class BuildingSystem {
   }
 
   /** Lightweight identity lookup for map appearance; avoids constructing the full person panel every frame. */
-  residentLook(home: number, slot: number): { id: number; age: number } | undefined {
+  residentLook(home: number, slot: number): { id: number; age: number; gender: ResidentGender } | undefined {
     const person = this.buildings.get(home)?.people?.find(person => person.slot === slot);
-    return person ? { id: person.identity?.id ?? home * 64 + slot, age: this.whoAt(home, person).age } : undefined;
+    const id = person?.identity?.id ?? home * 64 + slot;
+    return person ? { id, age: this.whoAt(home, person).age, gender: person.identity?.gender ?? legacyGender(id) } : undefined;
   }
 
   /** What the whole city thinks: the average mood, and how many people have each thought, most first. */

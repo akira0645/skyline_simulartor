@@ -22,6 +22,7 @@ import { challenges, type Challenge } from './Seasons';
 import { brands, dilemmas, type Boost, type Brand, type Dilemma } from './Dilemmas';
 
 /**
+ * 12 stores resident gender, shared by cards, walkers and bicycle riders.
  * 11 preserves sub-tick visits and travel delays on the slower live clock.
  * 10 adds logistics warehouse tiles and transshipment inventory.
  * 9 adds actual local freight stocks, vehicle manifests and monthly operating reports.
@@ -32,14 +33,14 @@ import { brands, dilemmas, type Boost, type Brand, type Dilemma } from './Dilemm
  * 4 added funds, the milestone rank and avenue tiles; 3 added power and water facility tiles;
  * 2 added per-building capacity and occupants.
  */
-export const SCHEMA_VERSION = 11;
+export const SCHEMA_VERSION = 12;
 /**
  * How a city looks: which city's colours its homes and shops wear, and the trees, cars and
  * bridges that go with them. Nothing in the simulation goes by it.
  */
 export const THEMES = ['classic', 'sf', 'california', 'newyork'] as const;
 export type Theme = (typeof THEMES)[number];
-const READABLE = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, SCHEMA_VERSION];
+const READABLE = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, SCHEMA_VERSION];
 
 export interface SavedBuilding {
   id: number;

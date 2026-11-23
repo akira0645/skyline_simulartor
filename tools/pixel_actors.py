@@ -7,7 +7,7 @@ import numpy as np
 from PIL import Image
 
 
-def draw_person(Canvas, direction, phase, carry=True):
+def draw_person(Canvas, direction, phase, carry=True, female=False):
     c = Canvas(32, 48)
     side = direction in (0, 2)
     west = direction == 2
@@ -71,7 +71,7 @@ def draw_person(Canvas, direction, phase, carry=True):
             c.line([(x, 28), (x, 35), (end_x, end_y - 1)], 'ink', 5)
             c.line([(x, 29), (x, 35), (end_x, end_y - 1)], colour, 3)
             c.rect((end_x - 2, end_y - 1, end_x + 2, end_y + 1), 'ink')
-        c.slab((9, 18 + bob, 22, 31 + bob), 'body1', 'body2', 'body0')
+        c.slab((10 if female else 9, 18 + bob, 21 if female else 22, 31 + bob), 'body1', 'body2', 'body0')
         c.rect((11, 7 + bob, 21, 17 + bob), 'ink')
         if direction == 1:
             c.rect((12, 8 + bob, 20, 15 + bob), 'skin1')

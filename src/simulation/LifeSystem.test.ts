@@ -14,7 +14,7 @@ const options = () => {
 
 it('preserves a child through a save and promotes the same identity exactly once', () => {
   const life = new LifeSystem();
-  const child = { identity: { id: 2, name: '林安', born: -18 * YEAR_TICKS + DAY }, home: 1, guardians: [1] };
+  const child = { identity: { id: 2, name: '林安', born: -18 * YEAR_TICKS + DAY, gender: 'female' as const }, home: 1, guardians: [1] };
   life.establish(1, [child]);
   const restored = new LifeSystem();
   restored.load(parseLife(life.save(), 0)!);
@@ -59,6 +59,7 @@ it('delivers a planned birth once, retaining parents and identity after loading'
   life.advance(DAY, 4, parents, options());
   expect(life.children).toHaveLength(1);
   expect(life.children[0]).toMatchObject({ guardians: [1, 2], identity: { id: 100, born: DAY } });
+  expect(['male', 'female']).toContain(life.children[0].identity.gender);
   const restored = new LifeSystem();
   restored.load(parseLife(life.save(), DAY)!);
   restored.advance(2 * DAY, 4, parents, options());

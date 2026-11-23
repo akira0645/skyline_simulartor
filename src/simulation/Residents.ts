@@ -6,6 +6,7 @@
  * reused, so nobody comes back under the same name.
  */
 import type { Zone } from './TileMap';
+import type { ResidentGender } from './ResidentGender';
 
 export type Trait = 'rich' | 'driver' | 'rider' | 'helper' | 'gardener';
 
@@ -71,6 +72,7 @@ export const traits = {
 
 export interface Resident {
   name: string;
+  gender?: ResidentGender;
   trait?: Trait;
   /** Their age on the day they moved in. */
   age: number;
@@ -88,6 +90,12 @@ const GIVEN_NAMES = [
   '子軒', '品妤', '宇翔', '思妤', '國華', '麗華', '彥廷', '郁婷', '明哲', '佳穎',
   '阿土', '春嬌', '大同', '小玉', '金水', '月娥', '添財', '素貞', '榮發', '寶珠',
 ];
+
+/** Category of our own generated-name catalog; unknown names are handled by stable identity. */
+export function genderForGeneratedName(name: string): ResidentGender | undefined {
+  const index = GIVEN_NAMES.indexOf(name.slice(1));
+  return index < 0 ? undefined : index % 2 ? 'female' : 'male';
+}
 
 /** A 32-bit mix of the seed, the home and the place in it. */
 function mix(seed: number, home: number, place: number, salt: number): number {
@@ -110,11 +118,12 @@ export function traitOf(seed: number, home: number, place: number, kind?: HomeKi
 
 export function residentAt(seed: number, home: number, place: number, kind?: HomeKind): Resident {
   const surname = SURNAMES[mix(seed, home, place, 1) % SURNAMES.length];
-  const given = GIVEN_NAMES[mix(seed, home, place, 2) % GIVEN_NAMES.length];
+  const givenIndex = mix(seed, home, place, 2) % GIVEN_NAMES.length;
+  const given = GIVEN_NAMES[givenIndex];
   const { youngest, oldest } = people;
   const liking = (kind && homeKinds[kind].liking) || people.liking;
   const taste = mix(seed, home, place, 4) / 2 ** 32;
-  return { name: surname + given, trait: traitOf(seed, home, place, kind),
+  return { name: surname + given, gender: givenIndex % 2 ? 'female' : 'male', trait: traitOf(seed, home, place, kind),
     age: youngest + mix(seed, home, place, 3) % (oldest - youngest + 1),
     liking: taste < liking.commercial ? 'commercial' :
       taste < liking.commercial + liking.industrial ? 'industrial' : undefined };

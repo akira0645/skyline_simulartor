@@ -10,13 +10,13 @@ it('gives the map and person card the same identity, including after moving and 
     people: [{ slot: 0, job: -1, came: 0, hired: 0, identity: { id: 42, name: '居民甲', born: -30 * YEAR_TICKS } }] }] });
   const look = engine.city.residentLook(519, 0)!;
   const card = engine.city.person(519, 0, 6)!;
-  expect(look).toEqual({ id: card.id, age: card.age });
-  const profile = residentAppearance(engine.city.seed, look.id, look.age);
+  expect(look).toEqual({ id: card.id, age: card.age, gender: card.gender });
+  const profile = residentAppearance(engine.city.seed, look.id, look.age, look.gender);
   const save = engine.save();
   save.buildings = save.buildings.map(building => ({ ...building, id: 647 }));
   engine.load(structuredClone(save));
   const moved = engine.city.residentLook(647, 0)!;
   expect(moved).toEqual(look);
-  expect(residentAppearance(engine.city.seed, moved.id, moved.age)).toBe(profile);
+  expect(residentAppearance(engine.city.seed, moved.id, moved.age, moved.gender)).toBe(profile);
   expect(engine.city.residentLook(519, 0)).toBeUndefined();
 });

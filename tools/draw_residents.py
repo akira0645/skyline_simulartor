@@ -36,16 +36,18 @@ def head(c, look, age, direction, bob=0, portrait=False):
     d = c.d
     p = c.colour
     hair = look['hair']
+    female = look.get('gender') == 'female'
     if portrait:
         # Draw directly at portrait resolution, including neck, ears and face planes.
-        c.slab((7, 31, 40, 47), 'body1', 'body2', 'body0')
+        c.slab((9 if female else 7, 31, 38 if female else 40, 47), 'body1', 'body2', 'body0')
         c.poly([(14, 32), (23, 38), (33, 32), (30, 29), (17, 29)], 'wall3')
         c.rect((19, 26, 28, 34), 'skin0')
         c.rect((20, 26, 26, 32), 'skin1')
-        c.ellipse((11, 10, 36, 32), 'ink')
-        c.ellipse((12, 9, 35, 30), 'skin1')
-        c.ellipse((12, 10, 32, 27), 'skin2')
-        c.rect((10, 19, 13, 24), 'skin1'); c.rect((34, 19, 37, 24), 'skin0')
+        c.ellipse((13 if female else 11, 10, 34 if female else 36, 32), 'ink')
+        c.ellipse((14 if female else 12, 9, 33 if female else 35, 30), 'skin1')
+        c.ellipse((14 if female else 12, 10, 31 if female else 32, 27), 'skin2')
+        c.rect((12 if female else 10, 19, 15 if female else 13, 23 if female else 24), 'skin1')
+        c.rect((32 if female else 34, 19, 35 if female else 37, 23 if female else 24), 'skin0')
         c.rect((16, 19, 19, 21), 'ink'); c.rect((28, 19, 31, 21), 'ink')
         c.line((16, 16, 20, 16), 'hair0'); c.line((27, 16, 31, 16), 'hair0')
         c.line((24, 21, 23, 24, 25, 24), 'skin0')
@@ -66,6 +68,12 @@ def head(c, look, age, direction, bob=0, portrait=False):
                     (30, 12), (24, 11), (18, 14), (14, 12), (14, 18)], 'hair0')
         if hair in ['ponytail', 'bun']:
             c.ellipse((32, 6 if hair == 'bun' else 15, 40, 14 if hair == 'bun' else 29), 'hair0')
+            c.line((12, 14, 12, 24), 'hair0', 3)
+            c.line((34, 14, 34, 23), 'hair0', 2)
+            c.rect((34, 13 if hair == 'bun' else 18, 37, 14 if hair == 'bun' else 19), 'body2')
+        if female and hair == 'glasses':
+            c.poly([(10, 12), (14, 13), (14, 25), (17, 30), (12, 29)], 'hair0')
+            c.poly([(33, 12), (36, 12), (37, 29), (32, 31), (32, 27)], 'hair0')
         if hair not in ['cap', 'curly']:
             c.line((14, 10, 21, 6, 27, 7), 'hair2', 2)
         if hair == 'parted': c.line((23, 4, 24, 10), 'hair2', 2)
@@ -107,6 +115,9 @@ def head(c, look, age, direction, bob=0, portrait=False):
         if hair == 'bob':
             poly([(10, 7), (12, 7), (13, 17), (10, 18), (9, 13)], 'hair0')
             if not side: c.rect((22, 8+bob, 24, 17+bob), 'hair0')
+        if female and hair == 'glasses':
+            poly([(10, 8), (12, 8), (13, 18), (10, 19), (9, 14)], 'hair0')
+            if not side: c.rect((22, 8+bob, 24, 19+bob), 'hair0')
         if hair in ['ponytail', 'bun']:
             poly([(9, 5 if hair == 'bun' else 10), (7, 7 if hair == 'bun' else 14),
                   (8, 10 if hair == 'bun' else 19), (11, 11 if hair == 'bun' else 17), (12, 7)], 'hair0')
@@ -125,7 +136,7 @@ def actor(look, age, direction, phase):
     colours = palette(look, age)
     class PersonCanvas(handmade.Canvas):
         def colour(self, c): return colours.get(c, c)
-    image = draw_person(PersonCanvas, direction, phase, look['bag'])
+    image = draw_person(PersonCanvas, direction, phase, look['bag'], female=look.get('gender') == 'female')
     c = PersonCanvas(32, 48); c.image = image; c.d = ImageDraw.Draw(image)
     bob = [0, 0, 1, -1, 0, 1, -1][phase]
     head(c, look, age, direction, bob)

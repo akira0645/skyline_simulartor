@@ -1,0 +1,142 @@
+{
+  "verdict": "PASS",
+  "score": 86,
+  "ship_ready": true,
+  "automated_score": 85,
+  "human_adjusted_score": 86,
+  "blocking_issues": [],
+  "soft_issues": [
+    "Existing rider hairstyles/glasses remain simplified compared with portraits, especially in head-on bicycle angles. The currently accepted bicycle turntable retains that style; no atlas expansion is requested.",
+    "Some elder hairstyles remain similar after gray hair and glasses are applied."
+  ],
+  "false_positives": [
+    "Three of ten checker samples return score50 for pillow shading. Direct inspection shows flat shirt/skin/hair planes with directional highlights and material contrast, not confirmed concentric lighting. These flags are retained separately from the actual ear/cheek presentation issue."
+  ],
+  "reasoning": "Targeted follow-up inspected the regenerated resident contact sheet and all nine affected ponytail/bun/glasses portraits across child/adult/elder at native scale and 5x nearest-neighbor enlargement. The exposed ear strips are now shorter and inset against the cheek/hair boundary; the previous detached-looking vertical bars are no longer visible. Eyes, glasses, hair ornaments and cheek outlines remain readable without new occlusion. The original body/head proportions, muted palette and accepted hand-drawn pixel treatment are preserved; no increase in resolution or broad redraw is needed. Previous actor-direction and clipping findings remain applicable to this scoped portrait correction.",
+  "specific_fixes": [],
+  "validation": {
+    "reference": "git HEAD:src/assets/street/portraits.png and git HEAD:src/assets/street/residents.png",
+    "profile_count": 24,
+    "female_looks": [
+      1,
+      3,
+      5,
+      7
+    ],
+    "male_looks_unchanged": [
+      0,
+      2,
+      4,
+      6
+    ],
+    "actor_frames_checked_for_bounds": 672,
+    "empty_or_edge_touching_actor_cells": [],
+    "visually_inspected_female_portraits": 12,
+    "visually_inspected_female_direction_cells": 48,
+    "checker_samples": 10,
+    "checker_flagged_samples": 3,
+    "maximum_sample_orphan_ratio": 0.008676789587852495,
+    "maximum_sample_doublies": 0,
+    "sample_palette_range": [
+      11,
+      14
+    ],
+    "native_actor_frame": [
+      32,
+      48
+    ],
+    "native_portrait": [
+      48,
+      48
+    ]
+  },
+  "checker_summaries": [
+    {
+      "input": "portrait child ponytail",
+      "score": 100,
+      "issues": []
+    },
+    {
+      "input": "portrait adult bob",
+      "score": 100,
+      "issues": []
+    },
+    {
+      "input": "portrait adult ponytail",
+      "score": 50,
+      "issues": [
+        "Pillow shading detected - retained; visually false positive"
+      ]
+    },
+    {
+      "input": "portrait adult bun",
+      "score": 100,
+      "issues": []
+    },
+    {
+      "input": "portrait adult glasses",
+      "score": 100,
+      "issues": []
+    },
+    {
+      "input": "portrait elder glasses",
+      "score": 50,
+      "issues": [
+        "Pillow shading detected - retained; visually false positive"
+      ]
+    },
+    {
+      "input": "actor adult bob dir0 pose1",
+      "score": 50,
+      "issues": [
+        "Pillow shading detected - retained; visually false positive"
+      ]
+    },
+    {
+      "input": "actor adult ponytail dir2 pose4",
+      "score": 100,
+      "issues": []
+    },
+    {
+      "input": "actor adult bun dir1 pose2",
+      "score": 100,
+      "issues": []
+    },
+    {
+      "input": "actor adult glasses dir3 pose6",
+      "score": 100,
+      "issues": []
+    }
+  ],
+  "limitations": [
+    "This follow-up rechecked only the changed portrait ear seams and contact sheet; prior actor/bicycle scope and runtime limitations remain in force.",
+    "All actor cells were checked for bounds; detailed per-pixel checker and walk-pose inspection used representative samples.",
+    "Bicycle correspondence was checked in the supplied turntable; the current task did not request a new full bicycle-atlas audit.",
+    "No animation timing, speed or runtime filtering verification performed.",
+    "Only this report was saved; no material or program file was modified."
+  ],
+  "resolved_findings": [
+    {
+      "previous_verdict": "HOLD",
+      "finding": "New side ears read as thin vertical skin strips outside the cheek/hair boundary. They touch the hair mass, so this is not a transparent disconnected-pixel error, but their separation from the cheek is more conspicuous than in the accepted HEAD reference.",
+      "status": "resolved",
+      "observed_resolution": "Left/right exposed ears are shortened and moved inward; all nine rechecked portraits now have a natural compact cheek/ear boundary."
+    }
+  ],
+  "ear_followup": {
+    "verdict": "PASS",
+    "scope": [
+      "child/adult/elder ponytail portraits",
+      "child/adult/elder bun portraits",
+      "child/adult/elder glasses portraits",
+      "regenerated residents-contact.png"
+    ],
+    "affected_portraits_visually_rechecked": 9,
+    "enlargement": "5x nearest-neighbor, generated in memory",
+    "new_occlusion_observed": false,
+    "new_disconnected_ear_strip_observed": false,
+    "code_or_materials_modified_by_reviewer": false,
+    "new_quality_check_run": false,
+    "quality_note": "automated_score=85 and checker_summaries retain the prior ten-sample run; this small follow-up is a direct visual verification of the ear correction, not a new checker score."
+  }
+}

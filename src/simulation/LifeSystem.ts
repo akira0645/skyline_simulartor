@@ -1,5 +1,6 @@
 import { calendar } from './calendar';
 import { YEAR_TICKS, type ResidentIdentity } from './ResidentIdentity';
+import { legacyGender } from './ResidentGender';
 
 const DAY = calendar.ticksPerDay;
 export interface LifeChild { identity: ResidentIdentity; home: number; guardians: number[] }
@@ -150,7 +151,7 @@ export class LifeSystem {
       const id = options.allocateId();
       const surname = live.get(plan.parents[0])!.identity.name[0];
       const name = surname + ['安安', '樂樂', '恩恩', '小宇', '彤彤', '小華'][id % 6];
-      this.state.children.push({ home: plan.home, guardians: [...plan.parents], identity: { id, name, born: tick } });
+      this.state.children.push({ home: plan.home, guardians: [...plan.parents], identity: { id, name, born: tick, gender: legacyGender(id) } });
       reserved.set(plan.home, (reserved.get(plan.home) ?? 0) + 1);
       this.tell({ tick, person: id, name, home: plan.home, kind: 'birth' });
       return false;

@@ -1170,8 +1170,8 @@ export function App() {
                   tip="蓋東西、維護費、稅收、薪水都跟著物價；錢放著會變薄，借的錢會變輕" />
               </dd>
               <dt>車子</dt>
-              <dd className="tags" title="存夠錢就買車，每台每月繳牌照稅">
-                {stats.cars.slice(1).map((count, index) => <Tag key={index} label={vehicleNames[index + 1]} value={count}
+              <dd className="tags" title="居民目前持有的交通工具；腳踏車不收牌照稅，存夠錢會升級交通工具">
+                {stats.cars.map((count, index) => <Tag key={index} label={vehicleNames[index]} value={count}
                   tone={count ? undefined : 'dim'} />)}
                 <Tag label="牌照稅" value={`${money(stats.budget.licence)}/月`} tone={stats.budget.licence ? 'good' : 'dim'} />
                 <Tag label="油稅" value={`${money(stats.budget.fuel)}/月`} tone={stats.budget.fuel ? 'good' : 'dim'} tip="要有加油站才收得到" />

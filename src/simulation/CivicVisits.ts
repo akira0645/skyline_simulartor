@@ -3,7 +3,7 @@ import { calendar, weekendAt } from './calendar';
 import { cellId as indexOf, cellFromId as cellAt, routeToSite } from './FacilityAccess';
 import { SHOP_SHIFT, type Doing } from './Mind';
 import { services } from './Services';
-import { wantsOutdoor, weatherAt } from './Weather';
+import { wantsOutdoor, weatherAt, weatherTravel } from './Weather';
 import type { VisitReason } from './ActivityDiary';
 import { RUSH_HOURS, shiftIndex, shifts } from './WorkShift';
 import { isService, type Cell, type TileMap, type Zone } from './TileMap';
@@ -291,8 +291,10 @@ export function planFacilityVisits(context: CivicVisitContext, hour: number, vis
             nearest = { path: [origin, ...route.path], distance: route.path.length, destination: indexOf(dest) };
         }
         if (!nearest) continue;
-        // Far enough, and they take the scooter or the car, which is quicker.
-        const ride = rideFor(person.car, nearest.path);
+        // Vehicle 0 is the resident's bicycle, including older saves omitting the default.
+        const vehicle = person.car ?? 0;
+        const ride = vehicle === 0 && weatherTravel(weatherAt(context.seed, context.clock), 0, nearest.path.length).way === 'walk'
+          ? undefined : rideFor(vehicle, nearest.path);
         // A car needs somewhere to stand; with every space taken, the driver goes round looking.
         const looking = (ride ?? 0) >= 2 && noSpace(nearest.destination);
         if (looking) nearest.path = circling(context.map, nearest.path);
@@ -304,7 +306,7 @@ export function planFacilityVisits(context: CivicVisitContext, hour: number, vis
         const returnHours = back ? travelTicks([nearest.path.at(-1)!, ...back.path], doing, ride) * 24 / calendar.ticksPerDay : travel;
         if (activityEnd > until || activityEnd + returnHours > homeBy) continue;
         if (looking) context.noSpace?.(nearest.destination);
-        send({ home, slot: person.slot, doing, path: nearest.path, destination: nearest.destination, ...(ride ? { ride } : {}),
+        send({ home, slot: person.slot, doing, path: nearest.path, destination: nearest.destination, ...(ride !== undefined ? { ride } : {}),
           reason: wanted(tile) === 0 ? 'hungry' : wanted(tile) === 1 ? 'lonely' : wanted(tile) === 2 ? (tile === 'market' ? 'groceries' : 'birthday') :
             reasonFor(doing, weatherAt(context.seed, context.clock) !== 'clear') });
         break;

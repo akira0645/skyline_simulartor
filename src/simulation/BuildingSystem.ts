@@ -452,11 +452,11 @@ export class BuildingSystem {
     const outings = this.facilityVisits(hour, () => true);
     this.visits.start(outings, tick);
     const plans = [...runs, ...outings];
-    // Those out on a scooter or in a car are on the roads with everyone else this hour.
+    // Bicycles, scooters and cars share the road flow while out this hour.
     this.outingFlows.fill(0);
     this.visits.each(trip => {
       // Parked at the place they went to, they are off the road.
-      if (!trip.ride || (trip.arrived && !trip.returning)) return;
+      if (trip.ride === undefined || (trip.arrived && !trip.returning)) return;
       const weight = trip.ride >= 2 ? 1 : 0.5;
       for (let step = 1; step < trip.path.length - 1; step++) this.outingFlows[indexOf(trip.path[step])] += weight;
     });

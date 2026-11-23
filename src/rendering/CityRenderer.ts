@@ -25,6 +25,7 @@ import { carHeading } from './carAppearance';
 import { StreetArt } from './StreetArt';
 import { WalkerMotion } from './WalkerMotion';
 import { residentAppearance } from './residentAppearance';
+import { acceptOutingForDisplay } from './outingDisplay';
 import { WALK_REAL_MS_PER_TILE, VEHICLE_REAL_PACE, REAL_TICK_MS } from '../simulation/TravelTiming';
 import { travelTicks } from '../simulation/VisitSystem';
 import residentStyles from '../assets/street/residents.json';
@@ -252,18 +253,21 @@ export class CityRenderer {
      * so lights, queues and parking delay arrival. The car waits at the kerb during the visit.
      */
     interface Leg { from: number; to: number; path: Cell[]; tier: number; id: number; started: number; returning: boolean; initialProgress: number }
-    const rides = new Map<string, { home: number; slot: number; queue: Leg[]; leg?: Leg; seen: number; live: boolean }>();
+    const rides = new Map<string, { home: number; slot: number; vehicle: number; queue: Leg[]; leg?: Leg; seen: number; live: boolean }>();
     let legs = 0;
     const outingRuns = (most: number): Run[] => {
       const current = this.city.now + Math.min(1, ((this.hour() - hourAt(this.city.now) + 24) % 24) / (24 / calendar.ticksPerDay));
       for (const ride of rides.values()) ride.live = false;
+      let motorsShown = [...rides.values()].filter(ride => ride.vehicle !== 0).length;
       this.city.visits.each(trip => {
-        if (!trip.ride || trip.doing === 'delivering' || trip.path.length < 4) return;
+        if (trip.ride === undefined || trip.doing === 'delivering' || trip.path.length < 4) return;
         const key = `${trip.home}:${trip.slot}`;
         let ride = rides.get(key);
         if (!ride) {
-          if (rides.size >= most) return;
-          rides.set(key, ride = { home: trip.home, slot: trip.slot, queue: [], seen: -1, live: true });
+          // Keep room for an actual bicycle outing; earlier motor trips must not consume every slot.
+          if (!acceptOutingForDisplay(trip.ride, rides.size, motorsShown, most)) return;
+          rides.set(key, ride = { home: trip.home, slot: trip.slot, vehicle: trip.ride, queue: [], seen: -1, live: true });
+          if (trip.ride !== 0) motorsShown++;
         }
         ride.live = true;
         if (trip.started === ride.seen) return;
@@ -805,7 +809,7 @@ export class CityRenderer {
       for (const trip of this.city.visits.frames(this.city.now + Math.min(1, fraction))) {
         if (trip.progress >= 1) continue;
         // Those on wheels are driven above, with the commuters.
-        if (trip.ride && trip.doing !== 'delivering' && rides.has(`${trip.home}:${trip.slot}`)) continue;
+        if (trip.ride !== undefined && trip.doing !== 'delivering' && rides.has(`${trip.home}:${trip.slot}`)) continue;
         const origin = trip.path[0];
         const dest = trip.path.at(-1)!;
         const point = commuterPosition({ homeId: origin.y * MAP_SIZE + origin.x,

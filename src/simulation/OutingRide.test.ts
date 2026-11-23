@@ -4,14 +4,16 @@ import { calendar } from './calendar';
 import { SimulationEngine } from './SimulationEngine';
 import { outingRide, rideFor, travelTicks, type FacilityVisit } from './VisitSystem';
 
-it('takes the scooter or the car on a longer outing, and gets there sooner', () => {
+it('takes the bicycle, scooter or car on longer outings and keeps walking distinct from bicycle zero', () => {
   const far = Array.from({ length: outingRide.from + 2 }, (_, x) => ({ x, y: 0 }));
-  expect(rideFor(0, far)).toBeUndefined();
+  expect(rideFor(0, far)).toBe(0);
   expect(rideFor(undefined, far)).toBeUndefined();
   expect(rideFor(1, far)).toBe(1);
   expect(rideFor(3, far)).toBe(3);
   // A short way is walked whatever stands in the garage.
   expect(rideFor(3, far.slice(1))).toBeUndefined();
+  expect(rideFor(0, far.slice(1))).toBeUndefined();
+  expect(travelTicks(far, 'shopping', 0)).toBeCloseTo(travelTicks(far) / 1.8);
   expect(travelTicks(far, 'shopping', 1)).toBeCloseTo(travelTicks(far) / outingRide.pace[1]);
   expect(travelTicks(far, 'shopping', 2)).toBeLessThan(travelTicks(far, 'shopping', 1));
 });
@@ -26,7 +28,7 @@ it('puts those out on wheels on the roads of the hour', () => {
   city.visits.start = (plans, tick) => {
     start(plans, tick);
     for (const plan of plans) {
-      if (!plan.ride || plan.doing === 'delivering') continue;
+      if (plan.ride === undefined || plan.doing === 'delivering') continue;
       rides.push(plan);
       // At an hour when nobody commutes, the road outside their door carries them all the same.
       busiest = Math.max(busiest, city.congestionAt(plan.path[1], 3));
@@ -36,6 +38,7 @@ it('puts those out on wheels on the roads of the hour', () => {
   expect(rides.length).toBeGreaterThan(50);
   expect(rides.every(plan => plan.path.length - 2 >= outingRide.from)).toBe(true);
   expect(rides.some(plan => plan.ride === 1)).toBe(true);
+  expect(rides.some(plan => plan.ride === 0)).toBe(true);
   expect(rides.some(plan => plan.ride! >= 2)).toBe(true);
   expect(busiest).toBeGreaterThan(0);
   // The trips survive a save and come back as they were.

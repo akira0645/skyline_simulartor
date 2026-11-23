@@ -4,6 +4,7 @@ import { planFacilityVisits, type CivicVisitContext } from './CivicVisits';
 import { RoadGraph } from './RoadGraph';
 import { TileMap } from './TileMap';
 import { VisitSystem } from './VisitSystem';
+import { parseVisits } from './SavedVisits';
 
 /** A home of `people` beside a bank and a clinic, at ten in the morning when both are open. */
 function street(people: number, extra: Partial<CivicVisitContext> = {}) {
@@ -71,4 +72,24 @@ it('counts people at a place or heading there, but not those on their way home',
   expect(system.occupancy(130)).toBe(0);
   system.cancelResident(129, 0);
   expect(system.occupancy(130)).toBe(0);
+});
+
+it('schedules a real bicycle errand for default ownership and preserves ride zero across saves', () => {
+  const { context } = street(1);
+  const map = new TileMap();
+  map.execute({ type: 'SET_ZONE', tiles: [{ x: 2, y: 1 }], zone: 'residential' });
+  map.execute({ type: 'BUILD_ROAD', path: Array.from({ length: 7 }, (_, i) => ({ x: i + 2, y: 2 })) });
+  map.execute({ type: 'BUILD_SERVICE', x: 8, y: 1, service: 'bank' });
+  const plans = planFacilityVisits({ ...context, map, roadGraph: new RoadGraph(map), seed: 0,
+    roadAccess: () => ({ x: 2, y: 2 }),
+    buildings: new Map([[130, { id: 130, capacity: 4, occupants: 1, level: 1, nextSlot: 1,
+      people: [{ slot: 0, job: -1, came: 0, hired: 0 }] }]]) }, 10, () => true);
+  expect(plans).toHaveLength(1);
+  expect(plans[0]).toMatchObject({ home: 130, destination: 136, doing: 'bank', ride: 0 });
+  const system = new VisitSystem();
+  system.start(plans, context.clock);
+  const loaded = parseVisits(system.save(), context.clock);
+  expect(loaded[0].ride).toBe(0);
+  const restored = new VisitSystem(); restored.load(loaded);
+  expect(restored.frames(context.clock)[0].ride).toBe(0);
 });

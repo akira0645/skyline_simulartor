@@ -13,14 +13,14 @@ export const stayTicks = (doing: Doing): number =>
   ['shopping', 'reading', 'park', 'remembering'].includes(doing) ? 0.5 :
   doing === 'exhibition' ? 0.75 : VISIT_STAY_TICKS;
 /**
- * Outings of this many road tiles or more are made on what the resident owns, a scooter or a
- * car, rather than on foot; `pace` is how many times a walker's speed each goes, by the kind
- * of vehicle (see Wealth.ts: 1 is a scooter, 2 and up are cars). Bicycles stay at home.
+ * Outings of this many road tiles or more use the resident's bicycle, scooter or car
+ * rather than going on foot. `pace` follows Wealth.ts: 0 is a bicycle,
+ * 1 is a scooter, 2 and up are cars. Undefined means walking, independently of bicycle 0.
  */
-export const outingRide = { from: 5, pace: [1, 3, 4, 4, 4] };
+export const outingRide = { from: 5, pace: [1.8, 3, 4, 4, 4] };
 /** What a resident with this vehicle takes on an outing along this way; nothing if they walk. */
 export const rideFor = (vehicle: number | undefined, path: readonly Cell[]) =>
-  (vehicle ?? 0) >= 1 && path.length - 2 >= outingRide.from ? vehicle : undefined;
+  vehicle !== undefined && vehicle >= 0 && path.length - 2 >= outingRide.from ? vehicle : undefined;
 
 export interface FacilityVisit {
   home: number;
@@ -45,7 +45,7 @@ export interface ActiveVisit extends FacilityVisit {
 export const visitKey = (visit: Pick<FacilityVisit, 'home' | 'slot'>) => `${visit.home}:${visit.slot}`;
 /** How long a way takes: on foot, on two wheels for someone out with deliveries, or on their own vehicle. */
 export const travelTicks = (path: readonly Cell[], doing?: Doing, ride?: number) =>
-  Math.max(1, path.length - 1) * VISIT_WALK_TICKS / (doing === 'delivering' ? delivery.speed : outingRide.pace[ride ?? 0] ?? 1);
+  Math.max(1, path.length - 1) * VISIT_WALK_TICKS / (doing === 'delivering' ? delivery.speed : ride === undefined ? 1 : outingRide.pace[ride] ?? 1);
 
 /** Pure simulation state: arriving once is the only event that increments monthly visits. */
 export class VisitSystem {

@@ -1,0 +1,10 @@
+{
+  "artSource": "code",
+  "imageModelUsed": false,
+  "authoring": "tools/draw_residents.py",
+  "profiles": 24,
+  "directions": 4,
+  "poses": 7,
+  "actorRgbaMiB": 3.9375,
+  "portraitRgbaMiB": 0.2109375
+}

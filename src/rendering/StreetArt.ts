@@ -10,7 +10,9 @@ import landmarkSfUrl from '../assets/street/landmarks-sf.png';
 import landmarkCaliforniaUrl from '../assets/street/landmarks-california.png';
 import landmarkNewyorkUrl from '../assets/street/landmarks-newyork.png';
 import treeUrl from '../assets/street/tree.png';
-import peopleUrl from '../assets/street/people.png';
+import peopleUrl from '../assets/street/residents.png';
+import residents from '../assets/street/residents.json';
+import { residentSprite } from './residentAppearance';
 import truckUrl from '../assets/street/truck.png';
 import { carDirection } from './carAppearance';
 import { personDirection, truckColourRow, type StreetBuilding, type StreetLandmark } from './streetAppearance';
@@ -32,7 +34,7 @@ export class StreetArt {
         throw new Error('Street landmark atlas does not match its metadata');
       }
     }
-    if (people.width !== atlas.personFrame[0] * 4 || people.height !== atlas.personFrame[1] * atlas.personPoses * atlas.personColours.length ||
+    if (people.width !== residents.frame[0] * residents.directions * residents.variants * residents.ages.length || people.height !== residents.frame[1] * residents.poses ||
       truck.width !== atlas.truckFrame * 16 || truck.height !== atlas.truckFrame * atlas.truckColours.length ||
       tree.width !== atlas.treeFrame[0] || tree.height !== atlas.treeFrame[1]) {
       throw new Error('Street actor atlas does not match its metadata');
@@ -80,11 +82,12 @@ export class StreetArt {
       .texture(this.frame(this.landmarks[theme], column * size, 0, size, size), 0xffffff, x, y, 64, 64);
   }
 
-  drawPerson(g: Graphics, x: number, y: number, heading: number, index: number, distance: number, walking = true) {
+  drawPerson(g: Graphics, x: number, y: number, heading: number, index: number, distance: number, walking = true,
+    profile = residents.variants + Math.abs(index) % residents.variants) {
     const [width, height] = atlas.personFrame;
     const phase = walking ? 1 + Math.floor(distance / 2 + index) % (atlas.personPoses - 1) : 0;
-    const row = (index % atlas.personColours.length) * atlas.personPoses + phase;
-    const frame = this.frame(this.people, personDirection(heading) * width, row * height, width, height);
+    const rect = residentSprite(profile, personDirection(heading), phase);
+    const frame = this.frame(this.people, rect.x, rect.y, width, height);
     g.setFillStyle({ color: 0xffffff, alpha: 1 })
       .texture(frame, 0xffffff, x - atlas.personPivot[0] / 4, y - atlas.personPivot[1] / 4, width / 4, height / 4);
   }

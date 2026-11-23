@@ -3,6 +3,7 @@ import { Graphics, TextureSource } from 'pixi.js';
 import { StreetArt } from './StreetArt';
 import { CarSprites } from './CarSprites';
 import atlas from '../assets/street/atlas.json';
+import residents from '../assets/street/residents.json';
 import carAtlas from '../assets/vehicles/cars.json';
 
 const source = (width: number, height: number) => new TextureSource({ width, height });
@@ -11,7 +12,7 @@ function street() {
   const landmark = source(atlas.landmarks.length * atlas.landmarkFrame, atlas.landmarkFrame);
   return new StreetArt({ classic: building, sf: building, california: building, newyork: building },
     source(...atlas.treeFrame as [number, number]),
-    source(4 * atlas.personFrame[0], atlas.personPoses * atlas.personColours.length * atlas.personFrame[1]),
+    source(residents.directions * residents.variants * residents.ages.length * residents.frame[0], residents.poses * residents.frame[1]),
     source(16 * atlas.truckFrame, atlas.truckColours.length * atlas.truckFrame),
     { classic: landmark, sf: landmark, california: landmark, newyork: landmark });
 }

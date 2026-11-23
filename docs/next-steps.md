@@ -1,5 +1,7 @@
 # 後續工作檢視
 
+2026-11-23 最新進度：人物／頭像與單車已完成第一批並驗收（見 `superpowers/specs/2026-11-23-resident-bicycle-art.md`）。繼續處理已確認的慢速時鐘及一致路程時間；注意物流使用獨立計時，不能只改日曆就宣稱所有時間一致。保留按需載入與平板效能限制。
+
 2026-11-23 優先變更：使用者回報整體卡住，先處理近看素材載入負擔。已改成按需載入單一城市風格及清理快取，原風格圖片保留；詳見 `superpowers/specs/2026-11-23-closeup-loading-fix.md`。實體平板效能仍需確認，先不要繼續堆素材解析度；人物／頭像／腳踏車與慢速時鐘計畫保留待辦。
 
 2026-11-23 交接給 Codex：建築近看圖已依原圖重畫完成（`tools/draw_tiles_hd.py`，見 `implementation-progress.md` 最上方）。計畫中尚未做的：人物外觀與頭像、腳踏車（可用 `.agents/skills/sprite-stacking` 做多方向）、時鐘與路程統一。改任何建築請改 `tools/draw_tiles.py` 後依序跑 `draw_tiles.py`、`draw_tiles_hd.py`，不要另畫一套通用建築圖。

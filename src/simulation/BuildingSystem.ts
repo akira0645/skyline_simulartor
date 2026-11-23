@@ -1958,6 +1958,12 @@ export class BuildingSystem {
     return this.buildings.get(homeId)?.people?.find(person => person.job === workId)?.slot;
   }
 
+  /** Lightweight identity lookup for map appearance; avoids constructing the full person panel every frame. */
+  residentLook(home: number, slot: number): { id: number; age: number } | undefined {
+    const person = this.buildings.get(home)?.people?.find(person => person.slot === slot);
+    return person ? { id: person.identity?.id ?? home * 64 + slot, age: this.whoAt(home, person).age } : undefined;
+  }
+
   /** What the whole city thinks: the average mood, and how many people have each thought, most first. */
   voices() {
     const routes = new Map<number, Commute>();

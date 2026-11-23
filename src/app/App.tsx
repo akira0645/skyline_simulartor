@@ -1,4 +1,5 @@
 import { VehiclePanel } from './VehiclePanel';
+import { PersonPortrait } from './PersonPortrait';
 import { cellFromId } from '../simulation/FacilityAccess';
 import { weatherAt, weatherNames } from '../simulation/Weather';
 import { AutosaveSession, type AutosaveStatus } from '../storage/AutosaveSession';
@@ -634,7 +635,10 @@ export function App() {
   const spoken = seen && (said && seen.thoughts.includes(said) ? said : seen.thoughts[0]);
   const personCard = seen && doing && <section className="person">
     <button type="button" className="back" onClick={() => setWho(undefined)}>← 回上一頁</button>
-    <h2>{seen.name}</h2>
+    <div className="person-heading">
+      <PersonPortrait seed={engine.city.seed} id={seen.id ?? seen.homeId * 64 + seen.slot} age={seen.age} name={seen.name} />
+      <h2>{seen.name}</h2>
+    </div>
     <div className="tags">
       <Tag label={`${seen.age} 歲`} />
       {seen.trait && <Tag label={traitNames[seen.trait][0]} tip={traitNames[seen.trait][1]} />}
@@ -922,7 +926,7 @@ export function App() {
           ))}
         </div>
 
-        <div className="side-content" key={panelTab}>
+        <div className="side-content" key={panelTab === 'tile' && who ? `${panelTab}:${who.home}:${who.slot}` : panelTab}>
         {panelTab === 'tile' && (info?.tile === 'cityhall' || info?.tile === 'bank') && <section>
           <h2>{info.tile === 'cityhall' ? '市政廳' : '銀行'}</h2>
           {info.tile === 'cityhall' ? <>

@@ -39,16 +39,18 @@ def colourise(volume, colour):
     return result
 
 
-def render(volume, heading):
+def render(volume, heading, frame=None, pivot=None, squash=0.9, spacing=0.35):
+    frame = FRAME if frame is None else frame
+    pivot = PIVOT if pivot is None else pivot
     n, length, width = volume.shape[:3]
-    yy, xx = np.mgrid[:FRAME, :FRAME]
-    dx = xx - PIVOT[0]
+    yy, xx = np.mgrid[:frame, :frame]
+    dx = xx - pivot[0]
     turn = heading - math.pi / 2  # The source car's nose points down.
     ca, sa = math.cos(turn), math.sin(turn)
-    body = np.zeros((FRAME, FRAME, 4), dtype=np.uint8)
+    body = np.zeros((frame, frame, 4), dtype=np.uint8)
 
     def sample(z, offset_x=0, offset_y=0):
-        dy = (yy - PIVOT[1] + round(z * 0.35) - offset_y) / 0.9
+        dy = (yy - pivot[1] + round(z * spacing) - offset_y) / squash
         rx = dx - offset_x
         # Symmetric pivots; round half-up, not banker's rounding at half pixels.
         sx = np.floor(rx * ca + dy * sa + (width - 1) / 2 + 0.5).astype(int)

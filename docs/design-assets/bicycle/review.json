@@ -1,0 +1,143 @@
+{
+  "verdict": "PASS",
+  "score": 84,
+  "ship_ready": true,
+  "automated_score": 75.0,
+  "human_adjusted_score": 84,
+  "blocking_issues": [],
+  "soft_issues": [
+    "At side/oblique angles the visible lower rim arcs look flattened because of the elevated projection and frame/rider occlusion. Full parked tire outlines remain rounded enough to read as bicycle wheels; this is still a compact game sprite, not a circular-wheel orthographic illustration.",
+    "Hairstyles and glasses are heavily simplified, particularly at head-on angles. The 24 rider profiles are differentiated substantially by outfit/hair/skin colors; they do not preserve every resident portrait silhouette or accessory at this scale.",
+    "Both parked phase cells contain no rider, but differ in pedal/spoke pixels. A parked object should display a fixed phase if stationary appearance is desired."
+  ],
+  "false_positives": [
+    "Two sampled pillow-shading flags describe bright metal/skin within dark tire/structural contours. Visual inspection shows distinct material clusters, not a concentric lighting ramp.",
+    "One elder head-on sample reports 12 color orphans (9.84%) after the checker analyzes it as 32x32 even though the actual input is 64x64. The original 64px opaque sprite forms one four-connected component of 401 pixels. Flagged tiny glints/eyes/edge transitions are attached structural detail, not detached accidental specks; the normalized percentage is retained but not accepted as a native-sprite hygiene failure."
+  ],
+  "reasoning": "Inspected the supplied turntable, four-view sheet and slice strip, enlarged every orientation for representative child/adult/elder riders and the parked bike, compared both pedaling poses, and inspected a front-view sheet of all 24 rider profiles. White front light, red rear reflector, handlebars, saddle and facing direction remain coherent through all 16 angles. Head-on views appropriately overlap the two wheels into a narrow strip rather than losing a wheel. Across all 400 phase pairs, the lower front/rear-light masks stay at exactly the same coordinates; no global pivot translation is evident. All 800 cells are nonempty and have clear atlas margins; the parked version contains only bike parts, without head, torso, hands or rider legs.",
+  "specific_fixes": [],
+  "optional_polish": [
+    "Keep parked bikes on one pose to avoid visible pedal/spoke changes while stopped.",
+    "Retain the existing rider hair/accessory simplification limitation in product notes; a larger atlas is not required by this review."
+  ],
+  "validation": {
+    "assets": [
+      "docs/design-assets/bicycle/bicycle-turntable.png",
+      "docs/design-assets/bicycle/bicycle-views.png",
+      "docs/design-assets/bicycle/bicycle-slices.png",
+      "src/assets/street/bicycles.png",
+      "src/assets/street/bicycles.json"
+    ],
+    "atlas_dimensions": [
+      1024,
+      3200
+    ],
+    "frame": [
+      64,
+      64
+    ],
+    "directions": 16,
+    "phases": 2,
+    "rider_profiles": 24,
+    "parked_profile": 24,
+    "metadata_pivot": [
+      32,
+      45
+    ],
+    "frames_checked_for_bounds": 800,
+    "empty_or_edge_touching_cells": [],
+    "all_alpha_bbox_union": [
+      15,
+      4,
+      51,
+      61
+    ],
+    "phase_pairs_checked_for_light_anchor_stability": 400,
+    "light_anchor_mask_mismatches": 0,
+    "parked_angles_visually_checked": 16,
+    "rider_angles_visually_checked_per_representative_age": 16,
+    "all_24_profiles_front_view_compared": true,
+    "checker_samples": 6,
+    "checker_issues_retained": 3,
+    "parked_phase_pairs_with_different_pixels": 16,
+    "inspection_artifacts": [
+      "work/bicycle-review/adult-short.png",
+      "work/bicycle-review/second-age.png",
+      "work/bicycle-review/third-age.png",
+      "work/bicycle-review/parked.png",
+      "work/bicycle-review/phases.png",
+      "work/bicycle-review/parked-phases.png",
+      "work/bicycle-review/all-profiles.png"
+    ],
+    "inspection_caption_note": "The scratch file adult-short.png actually contains profile 0 (child/short); second-age.png is profile 8 (adult/short), third-age.png profile 16 (elder/short). Review used profile indices, not the first scratch caption.",
+    "quality_artifact": "work/bicycle-review/quality.json",
+    "bounds_artifact": "work/bicycle-review/bounds-phases.json",
+    "generator_code_inspected": false
+  },
+  "warning_adjudications": [
+    {
+      "input": "work/bicycle-review/check-8-0-2.png",
+      "summary_retained": {
+        "score": 50,
+        "verdict": "redesign",
+        "issues": [
+          "Pillow shading detected — refactor with explicit light direction"
+        ],
+        "warnings": []
+      },
+      "analyzed_dimensions": [
+        64,
+        64
+      ],
+      "orphan_count": 14,
+      "orphan_ratio": 0.019498607242339833,
+      "adjudication": "Distinct bright material planes/glints and dark structural contours, not a confirmed concentric shading ramp.",
+      "blocking": false
+    },
+    {
+      "input": "work/bicycle-review/check-16-0-4.png",
+      "summary_retained": {
+        "score": 50,
+        "verdict": "redesign",
+        "issues": [
+          "12 orphan pixels (9.8%) — exceeds 5% cap"
+        ],
+        "warnings": []
+      },
+      "analyzed_dimensions": [
+        32,
+        32
+      ],
+      "orphan_count": 12,
+      "orphan_ratio": 0.09836065573770492,
+      "adjudication": "Checker normalizes this input to 32x32; actual 64x64 opaque pixels are one connected structural cluster. Tiny eye/glint/metal transitions are intentional; no detached debris is visible.",
+      "blocking": false
+    },
+    {
+      "input": "work/bicycle-review/check-24-0-4.png",
+      "summary_retained": {
+        "score": 50,
+        "verdict": "redesign",
+        "issues": [
+          "Pillow shading detected — refactor with explicit light direction"
+        ],
+        "warnings": []
+      },
+      "analyzed_dimensions": [
+        64,
+        64
+      ],
+      "orphan_count": 3,
+      "orphan_ratio": 0.009259259259259259,
+      "adjudication": "Distinct bright material planes/glints and dark structural contours, not a confirmed concentric shading ramp.",
+      "blocking": false
+    }
+  ],
+  "limitations": [
+    "Static raster review and fixed-anchor comparisons establish no visible whole-object phase translation; they do not certify runtime movement, heading formulas or animation timing.",
+    "All frames were checked for clipping; detailed full-turn visual review used three representative rider profiles plus the parked version, with all other profiles checked at the front angle.",
+    "Two pedaling poses provide a small alternating motion; this review does not certify a physically exact crank/knee trajectory.",
+    "Projection parameters 0.8 squash / 0.75 spacing were supplied by the parent task; renderer implementation was not inspected.",
+    "No code or game assets were changed."
+  ]
+}

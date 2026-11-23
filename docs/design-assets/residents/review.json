@@ -1,0 +1,189 @@
+{
+  "verdict": "PASS",
+  "score": 85,
+  "ship_ready": true,
+  "automated_score": 73.33333333333333,
+  "human_adjusted_score": 85,
+  "blocking_issues": [],
+  "soft_issues": [
+    "At native size, some short/parted/bun profiles have similar head silhouettes; clothes, hair color and accessories carry much of the identity. The set supplies 24 coherent appearance/age combinations, not 24 completely different body silhouettes.",
+    "All elders use gray hair and glasses, so their original hairstyle differences are less distinct than adult variants.",
+    "Child portraits use cheerful closed-eye expressions while several front-facing world sprites have small open eyes; this is an expression variation rather than an identity mismatch."
+  ],
+  "false_positives": [
+    "Eight sampled checker outputs report pillow shading. Visual review of every flagged sample shows discrete flat clothing planes, skin/hair material boundaries and dark limb/hat outlines; brighter left sleeve/hair edges remain directional. The elder curly portrait has deliberate asymmetrical face/glasses shading rather than a concentric light center. None of these flags was visually confirmed as pillow shading."
+  ],
+  "reasoning": "All requested assets are present. Inspected the resident contact sheet, full portrait atlas, and separate age-group sheets pairing all 24 portraits with their four native actor directions. Hair family, outfit color, skin tone and accessories correspond across portrait and world sprite; front faces and rear hair/collar are distinct, and side views read as opposite directions with crisp native clusters. The muted palette, dark outlines and restrained window-sized detail match the established hand-drawn pixel game style. Exhaustive alpha-bound checks of all 672 actor cells found no empty cell or frame-edge contact; bust portraits intentionally meet their panel bottom rather than accidentally cutting off a head.",
+  "specific_fixes": [],
+  "optional_polish": [
+    "If stronger same-size silhouette differentiation is needed, separate the bun/parted rear-hair cluster by one native pixel, especially for elder variants, while preserving the atlas margins.",
+    "Keep face expressions allowed to vary, or align child portrait/sprite eye expression only if exact expression correspondence is a product requirement."
+  ],
+  "validation": {
+    "metadata": "src/assets/street/residents.json",
+    "profiles": 24,
+    "looks": 8,
+    "ages": [
+      "child",
+      "adult",
+      "elder"
+    ],
+    "directions": 4,
+    "poses": 7,
+    "actor_frames": 672,
+    "actor_atlas_dimensions": [
+      3072,
+      336
+    ],
+    "portrait_atlas_dimensions": [
+      384,
+      144
+    ],
+    "actor_frame_dimensions": [
+      32,
+      48
+    ],
+    "portrait_dimensions": [
+      48,
+      48
+    ],
+    "visually_compared_profiles": 24,
+    "visually_compared_neutral_direction_frames": 96,
+    "additional_walk_samples": 12,
+    "checker_actor_samples": 12,
+    "checker_portrait_samples": 3,
+    "sample_flagged_outputs": 8,
+    "empty_or_edge_touching_actor_cells": [],
+    "all_actor_alpha_bbox_union": [
+      6,
+      1,
+      26,
+      44
+    ],
+    "maximum_sampled_orphan_percent": 1.593625498007968,
+    "maximum_sampled_doublies": 0,
+    "maximum_sampled_colors": 14,
+    "inspection_artifacts": [
+      "docs/design-assets/residents/residents-contact.png",
+      "work/resident-review/child-profiles.png",
+      "work/resident-review/adult-profiles.png",
+      "work/resident-review/elder-profiles.png",
+      "work/resident-review/quality-samples.png"
+    ],
+    "recheck_artifact": "work/resident-review/quality.json",
+    "bounds_artifact": "work/resident-review/bounds.json"
+  },
+  "warning_adjudications": [
+    {
+      "input": "work\\resident-review\\actor-0-0-0-pose1.png",
+      "summary_retained": {
+        "score": 50,
+        "verdict": "redesign",
+        "issues": [
+          "Pillow shading detected — refactor with explicit light direction"
+        ],
+        "warnings": []
+      },
+      "adjudication": "False positive after direct nearest-neighbor visual inspection: material/contour contrast with directional flat clusters, not concentric shading.",
+      "blocking": false
+    },
+    {
+      "input": "work\\resident-review\\actor-0-4-2-pose1.png",
+      "summary_retained": {
+        "score": 50,
+        "verdict": "redesign",
+        "issues": [
+          "Pillow shading detected — refactor with explicit light direction"
+        ],
+        "warnings": []
+      },
+      "adjudication": "False positive after direct nearest-neighbor visual inspection: material/contour contrast with directional flat clusters, not concentric shading.",
+      "blocking": false
+    },
+    {
+      "input": "work\\resident-review\\actor-1-0-0-pose1.png",
+      "summary_retained": {
+        "score": 50,
+        "verdict": "redesign",
+        "issues": [
+          "Pillow shading detected — refactor with explicit light direction"
+        ],
+        "warnings": []
+      },
+      "adjudication": "False positive after direct nearest-neighbor visual inspection: material/contour contrast with directional flat clusters, not concentric shading.",
+      "blocking": false
+    },
+    {
+      "input": "work\\resident-review\\actor-1-4-2-pose1.png",
+      "summary_retained": {
+        "score": 50,
+        "verdict": "redesign",
+        "issues": [
+          "Pillow shading detected — refactor with explicit light direction"
+        ],
+        "warnings": []
+      },
+      "adjudication": "False positive after direct nearest-neighbor visual inspection: material/contour contrast with directional flat clusters, not concentric shading.",
+      "blocking": false
+    },
+    {
+      "input": "work\\resident-review\\actor-2-3-1-pose1.png",
+      "summary_retained": {
+        "score": 50,
+        "verdict": "redesign",
+        "issues": [
+          "Pillow shading detected — refactor with explicit light direction"
+        ],
+        "warnings": []
+      },
+      "adjudication": "False positive after direct nearest-neighbor visual inspection: material/contour contrast with directional flat clusters, not concentric shading.",
+      "blocking": false
+    },
+    {
+      "input": "work\\resident-review\\actor-2-4-2-pose1.png",
+      "summary_retained": {
+        "score": 50,
+        "verdict": "redesign",
+        "issues": [
+          "Pillow shading detected — refactor with explicit light direction"
+        ],
+        "warnings": []
+      },
+      "adjudication": "False positive after direct nearest-neighbor visual inspection: material/contour contrast with directional flat clusters, not concentric shading.",
+      "blocking": false
+    },
+    {
+      "input": "work\\resident-review\\actor-2-7-3-pose1.png",
+      "summary_retained": {
+        "score": 50,
+        "verdict": "redesign",
+        "issues": [
+          "Pillow shading detected — refactor with explicit light direction"
+        ],
+        "warnings": []
+      },
+      "adjudication": "False positive after direct nearest-neighbor visual inspection: material/contour contrast with directional flat clusters, not concentric shading.",
+      "blocking": false
+    },
+    {
+      "input": "work\\resident-review\\portrait-2.png",
+      "summary_retained": {
+        "score": 50,
+        "verdict": "redesign",
+        "issues": [
+          "Pillow shading detected — refactor with explicit light direction"
+        ],
+        "warnings": []
+      },
+      "adjudication": "False positive after direct nearest-neighbor visual inspection: material/contour contrast with directional flat clusters, not concentric shading.",
+      "blocking": false
+    }
+  ],
+  "limitations": [
+    "All 672 cells were checked for bounds; quality_check and detailed walk-pose visual review used the declared representative samples rather than all 672 frames.",
+    "Animation timing, speed, cycling, movement synchronization and runtime texture filtering were outside this review.",
+    "Portraits have opaque panel backgrounds; their checker silhouette metrics describe the whole panel and cannot be interpreted as character silhouette scores.",
+    "Generator code was not inspected; review used raster artifacts and descriptive atlas metadata.",
+    "No materials or program files were modified."
+  ]
+}

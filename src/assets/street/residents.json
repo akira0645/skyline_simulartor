@@ -1,0 +1,18 @@
+{
+  "variants": 8,
+  "ages": ["child", "adult", "elder"],
+  "directions": 4,
+  "poses": 7,
+  "frame": [32, 48],
+  "portrait": 48,
+  "looks": [
+    {"hair":"short","hairColour":"42362f","shirt":"58a8ba","skin":"e8b68b","bag":false},
+    {"hair":"bob","hairColour":"784b37","shirt":"df927a","skin":"b98061","bag":true},
+    {"hair":"curly","hairColour":"302f39","shirt":"aab566","skin":"94654f","bag":false},
+    {"hair":"ponytail","hairColour":"b68b50","shirt":"d89ab0","skin":"f0c99e","bag":true},
+    {"hair":"cap","hairColour":"493a33","shirt":"728fb4","skin":"d49b77","bag":false},
+    {"hair":"bun","hairColour":"664332","shirt":"ccad63","skin":"b98061","bag":false},
+    {"hair":"parted","hairColour":"ad7747","shirt":"79a386","skin":"e8b68b","bag":true},
+    {"hair":"glasses","hairColour":"393e48","shirt":"a694b8","skin":"d49b77","bag":false}
+  ]
+}

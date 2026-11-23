@@ -19,9 +19,13 @@ import sfDetailUrl from '../assets/buildings/city-sf-detail.png';
 import californiaDetailUrl from '../assets/buildings/city-california-detail.png';
 import newyorkDetailUrl from '../assets/buildings/city-newyork-detail.png';
 import { CarSprites } from './CarSprites';
+import { BicycleSprites } from './BicycleSprites';
+import bicycleUrl from '../assets/street/bicycles.png';
 import { carHeading } from './carAppearance';
 import { StreetArt } from './StreetArt';
 import { WalkerMotion } from './WalkerMotion';
+import { residentAppearance } from './residentAppearance';
+import residentStyles from '../assets/street/residents.json';
 import { footprint, isBig, isFacility, isRoad, isService, MAP_SIZE, TILE_SIZE, type Cell } from '../simulation/TileMap';
 import { services } from '../simulation/Services';
 import { transit } from '../simulation/Transit';
@@ -74,6 +78,7 @@ const detailUrls: Record<Theme, string> = { classic: cityDetailUrl, sf: sfDetail
   california: californiaDetailUrl, newyork: newyorkDetailUrl };
 const detailPool = new SharedAssetPool<Theme, Texture>(
   theme => Assets.load<Texture>(detailUrls[theme]), theme => Assets.unload(detailUrls[theme]));
+const bicyclePool = new SharedAssetPool<string, Texture>(() => Assets.load<Texture>(bicycleUrl), () => Assets.unload(bicycleUrl));
 
 type FacilityVisit = ReturnType<BuildingSystem['facilityVisits']>[number];
 
@@ -120,6 +125,8 @@ export class CityRenderer {
   private streetArt?: StreetArt;
   private detailAsset?: LazyThemeAsset<Texture>;
   private tileRenderer?: TileRenderer;
+  private bicycles?: BicycleSprites;
+  private bicycleLease = false;
 
   async mount(host: HTMLElement, signal: AbortSignal, getTool: () => Tool,
     report: (message: string) => void, inspect: (cell: Cell) => void): Promise<void> {
@@ -143,6 +150,18 @@ export class CityRenderer {
     this.app = app;
     this.streetArt = streetArt;
     const carSprites = this.carSprites = new CarSprites(sheets[5].source);
+    let bikeRequested = false;
+    const requestBicycles = () => {
+      if (bikeRequested) return;
+      bikeRequested = true;
+      void bicyclePool.acquire('bicycle').then(texture => {
+        if (signal.aborted || this.app !== app) { void bicyclePool.release('bicycle'); return; }
+        texture.source.scaleMode = 'nearest';
+        this.bicycles = new BicycleSprites(texture.source);
+        this.bicycleLease = true;
+        this.refresh?.();
+      }).catch(error => { if (!signal.aborted) console.warn('Bicycle detail unavailable; keeping simple bicycles', error); });
+    };
     const map = this.city.map;
     const camera = new Camera();
     // The panels float over the map: leave room to drag any corner out from under them, and
@@ -289,7 +308,7 @@ export class CityRenderer {
       return sx >= -margin && sy >= -margin && sx <= app.screen.width + margin && sy <= app.screen.height + margin;
     };
     const drawCar = (cx: number, cy: number, vertical: boolean, index: number, tier: number,
-      heading = vertical ? Math.PI / 2 : 0) => {
+      heading = vertical ? Math.PI / 2 : 0, bicycle?: { profile: number; distance: number }) => {
       if (!visible(cx, cy)) return;
       if (streetOpacity() === 0) return;
       if (camera.scale < 0.85) {
@@ -299,6 +318,10 @@ export class CityRenderer {
       if (tier >= 2 && camera.scale >= DETAIL_ZOOM) {
         carSprites.draw(people, cx, cy, heading, tier, index, this.city.theme);
         return;
+      }
+      if (tier === 0 && camera.scale >= DETAIL_ZOOM) {
+        if (this.bicycles) { this.bicycles.draw(people, cx, cy, heading, bicycle?.profile, bicycle?.distance); return; }
+        requestBicycles();
       }
       const [long, wide] = SIZES[tier];
       const width = vertical ? wide : long;
@@ -358,7 +381,8 @@ export class CityRenderer {
       advancePedestrian(roads, origin, along, advance, returning, (entry, vertical) =>
         !junctions.has(entry.y * MAP_SIZE + entry.x) || greenUpright(entry.x, entry.y) === vertical);
     const walkerMotion = new WalkerMotion();
-    const drawWalker = (cx: number, cy: number, index: number, heading = Math.PI / 2, actorKey = `person:${index}`) => {
+    const drawWalker = (cx: number, cy: number, index: number, heading = Math.PI / 2, actorKey = `person:${index}`,
+      profile = residentAppearance(this.city.seed, index, 30)) => {
       const motion = walkerMotion.update(actorKey, cx, cy, animationTime, heading);
       if (!visible(cx, cy)) return;
       if (streetOpacity() === 0) return;
@@ -370,7 +394,7 @@ export class CityRenderer {
       const x = Math.round(cx) - 1;
       const y = Math.round(cy) - 4;
       if (camera.scale >= DETAIL_ZOOM) {
-        streetArt.drawPerson(people, cx, cy, motion.heading, index, motion.distance, motion.walking);
+        streetArt.drawPerson(people, cx, cy, motion.heading, index, motion.distance, motion.walking, profile);
         if (wet) {
           const colour = [0xe5484d, 0x3f6fb0, 0xf2c94c, 0x5f9a6a, 0xf4f6f8][index % 5];
           people.rect(cx - 4.5, cy - 8, 9, 3).fill(0x25232b)
@@ -387,8 +411,9 @@ export class CityRenderer {
       }
       const stride = motion.walking ? Math.floor(motion.distance / 3 + index) % 2 : 0;
       people.rect(x - 1, y - 1, 5, 10).fill(0x25232b);
-      people.rect(x, y, 3, 3).fill(0xffd1a0);
-      people.rect(x, y + 3, 3, 3).fill([0x7edbed, 0xf6ba67, 0xe8799a, 0x8fbf6a, 0xd6d9de][index % 5]);
+      const look = residentStyles.looks[profile % residentStyles.variants];
+      people.rect(x, y, 3, 3).fill(parseInt(look.skin, 16));
+      people.rect(x, y + 3, 3, 3).fill(parseInt(look.shirt, 16));
       people.rect(x, y + 6, 1, 1 + stride).rect(x + 2, y + 6, 1, 2 - stride).fill(0xece6dd);
       if (camera.scale < DETAIL_ZOOM) return;
       // Close up: hair, eyes, arms, and a bag for some.
@@ -506,6 +531,9 @@ export class CityRenderer {
       this.city.shipments.junctionFlow.retainPrefix('commute:', new Set(runs.map(run => `commute:${run.key}`)));
       for (const real of runs) {
         const { key, index: i, tier, wanted } = real;
+        const slot = real.person?.slot ?? this.city.personOn(real.homeId, real.workId);
+        const identity = slot === undefined ? undefined : this.city.residentLook(real.person?.home ?? real.homeId, slot);
+        const profile = residentAppearance(this.city.seed, identity?.id ?? real.homeId * 64 + (slot ?? 0), identity?.age ?? 30);
         const actor = `commute:${key}`;
         let trip = trips.get(key);
         if (!trip) trips.set(key, trip = { at: 'home', wait: 0 });
@@ -614,7 +642,7 @@ export class CityRenderer {
           const spot = onRoad(along);
           const before = onRoad(Math.max(0, along - 0.05));
           const after = onRoad(Math.min(steps, along + 0.05));
-          drawWalker(spot.x, spot.y, i, carHeading(after.x - before.x, after.y - before.y), key);
+          drawWalker(spot.x, spot.y, i, carHeading(after.x - before.x, after.y - before.y), key, profile);
           seenAt(spot);
         } else if (along < 1) {
           this.city.shipments.junctionFlow.leave(actor);
@@ -623,7 +651,7 @@ export class CityRenderer {
           const car = kerb(from);
           park(from);
           const spot = { x: door.x + (car.x - door.x) * along, y: door.y + (car.y - door.y) * along };
-          if (!trip.garage?.[from]) drawWalker(spot.x, spot.y, i, carHeading(car.x - door.x, car.y - door.y), key);
+          if (!trip.garage?.[from]) drawWalker(spot.x, spot.y, i, carHeading(car.x - door.x, car.y - door.y), key, profile);
           seenAt(trip.garage?.[from] ? car : spot);
           if (trip.garage?.[from]) speed *= 3;
         } else if (along > steps - 1) {
@@ -634,7 +662,7 @@ export class CityRenderer {
           const part = along - (steps - 1);
           park(to);
           const spot = { x: car.x + (door.x - car.x) * part, y: car.y + (door.y - car.y) * part };
-          if (!trip.garage?.[to]) drawWalker(spot.x, spot.y, i, carHeading(door.x - car.x, door.y - car.y), key);
+          if (!trip.garage?.[to]) drawWalker(spot.x, spot.y, i, carHeading(door.x - car.x, door.y - car.y), key, profile);
           seenAt(trip.garage?.[to] ? car : spot);
           if (trip.garage?.[to]) speed *= 3;
         } else {
@@ -692,7 +720,8 @@ export class CityRenderer {
           trip.held = blocked ? (trip.held ?? 0) + elapsed : 0;
           const body = bodyAt(accepted);
           const drawn = { x: body.x * TILE_SIZE, y: body.y * TILE_SIZE };
-          drawCar(drawn.x, drawn.y, Math.abs(body.hy) > Math.abs(body.hx), i, tier, Math.atan2(body.hy, body.hx));
+          drawCar(drawn.x, drawn.y, Math.abs(body.hy) > Math.abs(body.hx), i, tier, Math.atan2(body.hy, body.hx),
+            { profile, distance: accepted * TILE_SIZE });
           seenAt(drawn);
           // Include vehicles merging from the kerb; update this frame's occupancy immediately.
           moving.push(body); queue.add(body);
@@ -778,8 +807,10 @@ export class CityRenderer {
         } else {
           const next = commuterPosition({ homeId: origin.y * MAP_SIZE + origin.x, workId: dest.y * MAP_SIZE + dest.x,
             path: trip.path.slice(1, -1) }, 0, 'walk', Math.min(1, trip.progress + 0.02), false) ?? point;
+          const identity = this.city.residentLook(trip.home, trip.slot);
           drawWalker(spot.x, spot.y, trip.home + trip.slot, carHeading(next.x - point.x, next.y - point.y, Math.PI / 2),
-            `visit:${trip.home}:${trip.slot}`);
+            `visit:${trip.home}:${trip.slot}`, residentAppearance(this.city.seed,
+              identity?.id ?? trip.home * 64 + trip.slot, identity?.age ?? 30));
         }
         spots.push({ ...spot, homeId: trip.home, slot: trip.slot });
         if (this.followVisitor?.home === trip.home && this.followVisitor.slot === trip.slot) pin = spot;
@@ -1481,6 +1512,9 @@ export class CityRenderer {
     this.app?.destroy(true, { children: true });
     this.carSprites?.destroy();
     this.carSprites = undefined;
+    this.bicycles?.destroy();
+    this.bicycles = undefined;
+    if (this.bicycleLease) { this.bicycleLease = false; void bicyclePool.release('bicycle'); }
     this.streetArt?.destroy();
     this.streetArt = undefined;
     this.app = undefined;

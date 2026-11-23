@@ -7,7 +7,7 @@ import numpy as np
 from PIL import Image
 
 
-def draw_person(Canvas, direction, phase):
+def draw_person(Canvas, direction, phase, carry=True):
     c = Canvas(32, 48)
     side = direction in (0, 2)
     west = direction == 2
@@ -56,10 +56,11 @@ def draw_person(Canvas, direction, phase):
                  (22, 9 + bob), (19, 7 + bob), (16, 9 + bob), (15, 13 + bob)], 'wood0')
         # Do not mirror the highlight together with the geometry.
         c.line((12 if not west else 10, 6 + bob, 17 if not west else 15, 4 + bob), 'wood2', 2)
-        line([(17, 19 + bob), (13, 29 + bob)], 'wood0', 2)
-        rect((10, 28 + bob, 16, 34 + bob), 'wood0')
-        rect((11, 29 + bob, 15, 33 + bob), 'wood1')
-        rect((12, 30 + bob, 14, 30 + bob), 'wood3')
+        if carry:
+            line([(17, 19 + bob), (13, 29 + bob)], 'wood0', 2)
+            rect((10, 28 + bob, 16, 34 + bob), 'wood0')
+            rect((11, 29 + bob, 15, 33 + bob), 'wood1')
+            rect((12, 30 + bob, 14, 30 + bob), 'wood3')
         line([(20, 20 + bob), (21 + step // 2, 25 + bob), (20 + step // 2, 30 + bob)], 'body1', 3)
         rect((19 + step // 2, 29 + bob, 21 + step // 2, 31 + bob), 'skin1')
     else:
@@ -96,8 +97,9 @@ def draw_person(Canvas, direction, phase):
         for x, shift in [(9, step // 3), (23, -step // 3)]:
             c.line([(x, 20 + bob), (x + shift, 27 + bob), (x + shift, 30 + bob)], 'body0' if x == 23 else 'body1', 3)
             c.rect((x + shift - 1, 29 + bob, x + shift + 1, 31 + bob), 'skin1')
-        c.line(strap, 'wood0', 2)
-        c.slab((bag_x, 29 + bob, bag_x + 5, 35 + bob), 'wood1', 'wood3', 'wood0')
+        if carry:
+            c.line(strap, 'wood0', 2)
+            c.slab((bag_x, 29 + bob, bag_x + 5, 35 + bob), 'wood1', 'wood3', 'wood0')
     return c.image
 
 

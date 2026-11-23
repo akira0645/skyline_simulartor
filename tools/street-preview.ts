@@ -1,6 +1,8 @@
 import { Application, Assets, Container, Graphics, type Texture } from 'pixi.js';
 import { StreetArt } from '../src/rendering/StreetArt';
 import { CarSprites } from '../src/rendering/CarSprites';
+import { BicycleSprites } from '../src/rendering/BicycleSprites';
+import bicycleUrl from '../src/assets/street/bicycles.png';
 import carsUrl from '../src/assets/vehicles/cars.png';
 import type { Theme } from '../src/simulation/SaveData';
 import type { StreetBuilding, StreetLandmark } from '../src/rendering/streetAppearance';
@@ -13,6 +15,9 @@ document.querySelector('#canvas')!.appendChild(app.canvas);
 const [art, carTexture] = await Promise.all([StreetArt.load(), Assets.load<Texture>(carsUrl)]);
 carTexture.source.scaleMode = 'nearest';
 const cars = new CarSprites(carTexture.source);
+const bicycleTexture = await Assets.load<Texture>(bicycleUrl);
+bicycleTexture.source.scaleMode = 'nearest';
+const bicycles = new BicycleSprites(bicycleTexture.source);
 const world = new Container();
 const g = new Graphics();
 world.addChild(g);
@@ -55,13 +60,14 @@ function inspectActors() {
     const x = 32 + i * 64;
     g.rect(x - 20, 5, 40, 39).fill(0xb7bd97);
     g.rect(x - 20, 50, 40, 37).fill(0x4b535a);
-    art.drawPerson(g, x, 24, heading, 0, time / 125 * 2, true);
+    art.drawPerson(g, x - 9, 24, heading, i, time / 125 * 2, true, 8 + i);
+    bicycles.draw(g, x + 9, 24, heading, 8 + i, time / 125 * 5);
     cars.draw(g, x, 70, heading, 2, 0, theme);
     art.drawTruck(g, x, 139, heading, 0x3b82f6);
   }
   g.rect(0, 92, 256, 32).fill(0x4b535a);
   for (let i = 0; i < 8; i++) cars.draw(g, 16 + i * 32, 110, i * Math.PI / 4, 2, 0, theme);
-  document.querySelector('#status')!.textContent = '方向／結構檢查：人物 → 汽車正向 → 汽車八角度 → 貨車';
+  document.querySelector('#status')!.textContent = '方向／結構檢查：人物與同造型騎士 → 汽車正向 → 汽車八角度 → 貨車';
   document.querySelector('#guide')!.textContent = '上排依序為：右側、正面、左側、背面。可暫停後按「下一幀」，逐格檢查步態；這個檢查模式刻意原地播放。';
 }
 

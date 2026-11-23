@@ -88,6 +88,9 @@ h2 { margin: 0 0 0.4rem; font-size: 0.9rem; color: var(--sand); }
 .viewport[data-tool="inspect"] canvas:active { cursor: grabbing; }
 .map-zoom { position: absolute; top: var(--below-top); left: 0.6rem; display: flex; flex-direction: column; gap: 0.25rem; padding: 0.25rem; }
 .map-zoom button { min-width: 44px; min-height: 44px; padding: 0.25rem 0.5rem; font-size: 1.3rem; touch-action: manipulation; }
+.person-heading { display: flex; align-items: center; gap: 0.8rem; margin: 0.6rem 0; }
+.person-heading h2 { flex: 1; margin: 0; }
+.person-portrait { display: inline-block; flex: none; box-sizing: content-box; image-rendering: pixelated; border: 2px solid var(--slate); background-repeat: no-repeat; box-shadow: 3px 3px 0 var(--shadow); }
 
 /* Each panel carries its own small handle to fold it away; none floats on its own. */
 .panel-toggle { z-index: 2; padding: 0.25rem 0.5rem; font-size: 0.85rem; }

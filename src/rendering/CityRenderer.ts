@@ -69,6 +69,8 @@ import { mind, SHOP_SHIFT } from '../simulation/Mind';
 /** The same for each vehicle, in the order of Wealth's `vehicles`: a bicycle is slow, a car quick. */
 const WALK_MS_PER_TILE = WALK_REAL_MS_PER_TILE;
 const VEHICLE_PACE = VEHICLE_REAL_PACE;
+/** Most driving steps a visible vehicle takes in one frame, however long the frame was. */
+const MAX_DRIVE_STEPS = 3;
 /** How long a traffic light stays green each way, in milliseconds at 1× speed. */
 const LIGHT = 2600;
 /** Commuters set out this many game hours before their shift. */
@@ -724,8 +726,11 @@ export class CityRenderer {
           speed = filling ? 0 : 1 / VEHICLE_PACE[tier];
           if (this.city.crashDelay({ x: Math.floor(tileX), y: Math.floor(tileY) })) speed *= 0.35;
           let accepted = along, remaining = elapsed, constrained = false;
+          // At most a few steps per frame: a slow frame at 4× must not cost more on the next one,
+          // or the frame rate collapses. The whole elapsed time is still driven.
+          const sliceMs = Math.max(50, elapsed / MAX_DRIVE_STEPS);
           while (remaining > 0) {
-            const slice = Math.min(50, remaining);
+            const slice = Math.min(sliceMs, remaining);
             const decision = this.city.shipments.junctionFlow.inspect(actor, accepted, trip.drivePath, 1,
               bodyAt, queue, trafficNetwork, this.city.shipments.elapsedMotionMs - remaining, steps - 1);
             const distance = decision.stop === undefined ? Infinity : Math.max(0, decision.stop - accepted);

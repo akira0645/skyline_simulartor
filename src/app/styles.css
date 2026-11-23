@@ -86,6 +86,8 @@ h2 { margin: 0 0 0.4rem; font-size: 0.9rem; color: var(--sand); }
 .viewport canvas { display: block; image-rendering: pixelated; touch-action: none; cursor: crosshair; }
 .viewport[data-tool="inspect"] canvas { cursor: grab; }
 .viewport[data-tool="inspect"] canvas:active { cursor: grabbing; }
+.map-zoom { position: absolute; top: var(--below-top); left: 0.6rem; display: flex; flex-direction: column; gap: 0.25rem; padding: 0.25rem; }
+.map-zoom button { min-width: 44px; min-height: 44px; padding: 0.25rem 0.5rem; font-size: 1.3rem; touch-action: manipulation; }
 
 /* Each panel carries its own small handle to fold it away; none floats on its own. */
 .panel-toggle { z-index: 2; padding: 0.25rem 0.5rem; font-size: 0.85rem; }
@@ -159,7 +161,7 @@ h2 { margin: 0 0 0.4rem; font-size: 0.9rem; color: var(--sand); }
 /* A line of guidance or news under the top bar, centred over the map. */
 .toast {
   top: var(--below-top);
-  left: 0.6rem;
+  left: 4.6rem;
   right: calc(var(--right) + 5.5rem);
   display: flex;
   align-items: flex-start;

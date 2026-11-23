@@ -841,6 +841,10 @@ export function App() {
         {autosaveStatus.phase === 'failed' && <button type="button" onClick={() => void retryAutosave()}>重試讀取</button>}
       </div>}
       <div className="viewport" ref={viewport} data-tool={tool} role="region" aria-label="城市地圖" />
+      <div className="hud map-zoom" role="group" aria-label="地圖縮放">
+        <button type="button" aria-label="放大地圖" title="放大地圖（也可雙指張開）" onClick={() => rendererRef.current?.zoomView?.(1)}>＋</button>
+        <button type="button" aria-label="縮小地圖" title="縮小地圖（也可雙指捏合）" onClick={() => rendererRef.current?.zoomView?.(-1)}>－</button>
+      </div>
 
       <header className="hud top">
         <div className="clock">

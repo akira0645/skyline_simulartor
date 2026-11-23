@@ -22,9 +22,16 @@ export class Camera {
   }
 
   zoom(x: number, y: number, delta: number, width: number, height: number) {
-    const next = Math.max(0.25, Math.min(6, this.scale * Math.exp(-delta * 0.002)));
-    const ratio = next / this.scale;
+    this.pinch({ x, y }, { x, y }, Math.exp(-delta * 0.002), width, height);
+  }
+
+  /** Keep the world under the two-finger midpoint anchored while it moves and scales. */
+  pinch(from: { x: number; y: number }, to: { x: number; y: number }, factor: number, width: number, height: number) {
+    if (!Number.isFinite(factor) || factor <= 0) return;
+    const next = Math.max(0.25, Math.min(6, this.scale * factor));
+    const dx = to.x - this.x - (from.x - this.x) * next / this.scale;
+    const dy = to.y - this.y - (from.y - this.y) * next / this.scale;
     this.scale = next;
-    this.pan((x - this.x) * (1 - ratio), (y - this.y) * (1 - ratio), width, height);
+    this.pan(dx, dy, width, height);
   }
 }

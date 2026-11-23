@@ -43,6 +43,7 @@ const CARS_SHOWN = 500;
 const RIDES_SHOWN = 200;
 import { selection, type Overlay, type Tool } from '../app/tools';
 import { Camera } from './Camera';
+import { MapPinch } from './MapPinch';
 import { DETAIL_ZOOM, TileRenderer } from './TileRenderer';
 import { advancePedestrian, commuterPosition } from './commuterPosition';
 import { shiftIndex, shifts, workShift } from '../simulation/WorkShift';
@@ -100,6 +101,7 @@ export class CityRenderer {
   crowdOn?: (cell: Cell) => number;
 
   resetView?: () => void;
+  zoomView?: (direction: number) => void;
   setPlaying?: (playing: boolean) => void;
 
   constructor(private readonly city: BuildingSystem, private readonly speed: () => SimulationSpeed,
@@ -1266,6 +1268,11 @@ export class CityRenderer {
       else { app.stop(); app.render(); }
     };
     this.resetView = () => { roadVehicles.clear(); roadVehiclePaths.clear(); frameCity(); draw(); };
+    this.zoomView = direction => {
+      if (drag) return;
+      camera.zoom(app.screen.width / 2, app.screen.height / 2, -direction * 160, app.screen.width, app.screen.height);
+      draw();
+    };
     this.lookAt = cell => {
       camera.x = app.screen.width / 2 - (cell.x + 0.5) * TILE_SIZE * camera.scale;
       camera.y = app.screen.height / 2 - (cell.y + 0.5) * TILE_SIZE * camera.scale;
@@ -1286,7 +1293,18 @@ export class CityRenderer {
       return { x: clamp(cell.x), y: clamp(cell.y) };
     };
 
+    const pinch = new MapPinch();
     canvas.addEventListener('pointerdown', event => {
+      if (event.pointerType === 'touch') {
+        pinch.start(event.pointerId, position(event));
+        canvas.setPointerCapture(event.pointerId);
+        if (pinch.active) {
+          event.preventDefault();
+          drag = undefined; preview = []; hover = undefined; aim = undefined;
+          draw();
+          return;
+        }
+      }
       if (drag || (event.button !== 0 && event.button !== 1)) return;
       const { x, y } = position(event);
       const tool = event.button === 1 ? 'pan' : getTool();
@@ -1302,6 +1320,15 @@ export class CityRenderer {
 
     canvas.addEventListener('pointermove', event => {
       const { x, y } = position(event);
+      if (event.pointerType === 'touch') {
+        const move = pinch.move(event.pointerId, { x, y });
+        if (pinch.active) {
+          event.preventDefault();
+          if (move) camera.pinch(move.from, move.to, move.ratio, app.screen.width, app.screen.height);
+          draw();
+          return;
+        }
+      }
       if (!drag) {
         const cell = camera.cellAt(x, y);
         const tool = getTool();
@@ -1327,12 +1354,14 @@ export class CityRenderer {
     }, { signal });
 
     const clearDrag = (event: PointerEvent) => {
+      if (event.pointerType === 'touch') pinch.end(event.pointerId);
       if (drag?.id !== event.pointerId) return;
       drag = undefined;
       preview = [];
       draw();
     };
     canvas.addEventListener('pointerup', event => {
+      if (event.pointerType === 'touch' && pinch.end(event.pointerId)) return;
       if (!drag || drag.id !== event.pointerId) return;
       const { tool, start } = drag;
       const { x, y } = position(event);
@@ -1415,6 +1444,7 @@ export class CityRenderer {
     this.city.shipments.setStreetTraffic([]);
     this.refresh = undefined;
     this.resetView = undefined;
+    this.zoomView = undefined;
     this.setPlaying = undefined;
     this.getVehicle = undefined;
     this.onVehicle = undefined;

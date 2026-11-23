@@ -2739,17 +2739,31 @@ export class BuildingSystem {
     }), this.freightSources, this.freightShops, this.warehouses);
   }
 
+  private freightJunctionRevision = -1;
+  private readonly freightJunctions = new Set<number>();
   advanceFreight(elapsedMs: number): void {
+    if (this.freightJunctionRevision !== this.map.roadRevision) {
+      this.freightJunctionRevision = this.map.roadRevision;
+      this.freightJunctions.clear();
+      for (let y = 0; y < MAP_SIZE; y++) for (let x = 0; x < MAP_SIZE; x++) {
+        if (!isRoad(this.map.get({ x, y }))) continue;
+        let roads = 0;
+        for (const [dx, dy] of [[0, -1], [1, 0], [0, 1], [-1, 0]]) if (isRoad(this.map.get({ x: x + dx, y: y + dy }))) roads++;
+        if (roads >= 3) this.freightJunctions.add(y * MAP_SIZE + x);
+      }
+      this.shipments.junctionFlow.revalidate(key => {
+        const [x, y] = key.split(',').map(Number); return this.freightJunctions.has(y * MAP_SIZE + x);
+      });
+    }
     this.shipments.advance(elapsedMs, (route, along, vehicle, time) => {
       const cell = route.path[Math.min(route.path.length - 1, Math.floor(along))];
       const pose = roadVehiclePose(route.path, vehicle);
       const x = Math.floor(pose.x + pose.hx * 0.55), y = Math.floor(pose.y + pose.hy * 0.55);
-      let roads = 0;
-      for (const [dx, dy] of [[0, -1], [1, 0], [0, 1], [-1, 0]]) if (isRoad(this.map.get({ x: x + dx, y: y + dy }))) roads++;
-      const red = (x !== Math.floor(pose.x) || y !== Math.floor(pose.y)) && roads >= 3 &&
+      const red = (x !== Math.floor(pose.x) || y !== Math.floor(pose.y)) && this.freightJunctions.has(y * MAP_SIZE + x) &&
         ((Math.floor(time / 2600) + x + y) % 2 === 0) !== pose.upright;
       return { load: cell ? this.congestionAt(cell) : 0, red };
-    });
+    }, { isJunction: cell => this.freightJunctions.has(cell.y * MAP_SIZE + cell.x),
+      green: (cell, hx, hy, time) => ((Math.floor(time / 2600) + cell.x + cell.y) % 2 === 0) === (Math.abs(hy) > Math.abs(hx)) });
   }
 
   private planFreight(): void {

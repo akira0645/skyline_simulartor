@@ -3,6 +3,9 @@ import { FreightRuntime, parseFreightRuntime, type ShippingRoute } from './Freig
 import { SimulationEngine } from './SimulationEngine';
 import { SCHEMA_VERSION } from './SaveData';
 import { SimulationClock } from './SimulationClock';
+import { bodiesOverlap } from './RoadOccupancy';
+import { roadVehiclePose } from './RoadVehicle';
+import { roadBodySize } from './VehicleGeometry';
 
 const route = (to = 11, length = 4): ShippingRoute => ({ key: 'manual:1', lineId: 1, vehicles: 1,
   from: 8, to, goods: 240, trucks: 10, minutes: 8,
@@ -51,7 +54,10 @@ describe('actual freight', () => {
     runtime.load(save, 0);
     runtime.advance(10000, (_route, _along, vehicle) => ({ load: 0, red: vehicle === runtime.frames()[0] }));
     expect(runtime.frames()[0].along).toBe(3);
-    expect(runtime.frames()[1].along).toBeLessThanOrEqual(2.3);
+    const [front, rear] = runtime.frames();
+    expect(bodiesOverlap({ ...roadVehiclePose(line.path, front), index: 0, ...roadBodySize('freight') },
+      { ...roadVehiclePose(line.path, rear), index: 1, ...roadBodySize('freight') })).toBe(false);
+    expect(rear.along).toBeLessThan(3);
     runtime.advance(100, empty);
     expect(runtime.frames()[0].along).toBeGreaterThan(3);
     expect(runtime.frames()[1].along).toBeGreaterThan(2.3);
@@ -180,7 +186,26 @@ it('records signal waiting and releases a truck when the light turns green', () 
   expect(runtime.stock(11)).toBe(0);
   expect(runtime.report().current[0].delayMs).toBe(400);
   runtime.advance(1200, empty);
+  expect(runtime.frames()[0].along).toBeGreaterThan(0);
+  // A queued driver now accelerates rather than jumping directly to cruising speed.
+  runtime.advance(400, empty);
   expect(runtime.report().current[0].delivered).toBe(24);
+});
+
+it('replays freight exactly after saving inside a reserved junction', () => {
+  const runtime = prepared();
+  const network = { isJunction: (cell: { x: number; y: number }) => cell.x === 10 && cell.y === 1, green: () => true };
+  runtime.advance(650, empty, network);
+  const saved = parseFreightRuntime(runtime.save())!;
+  expect(saved.junctionFlow!.owners.length).toBe(1);
+  const loaded = new FreightRuntime(); loaded.load(saved, 0);
+  loaded.sync([route()], [{ id: 8, amount: 240 }], [{ id: 11, amount: 240 }]);
+  // Reservations survive map-cache initialization when the road still exists.
+  loaded.junctionFlow.revalidate(key => key === '10,1');
+  for (let i = 0; i < 60; i++) {
+    runtime.advance(50, empty, network); loaded.advance(50, empty, network);
+    expect(loaded.save()).toEqual(runtime.save());
+  }
 });
 
 it('keeps shipment results independent of clock polling cadence at fractional and fast speeds', () => {

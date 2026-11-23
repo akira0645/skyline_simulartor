@@ -25,6 +25,9 @@ import { transit } from '../simulation/Transit';
 import { vehicleSizes } from './vehicleSizes';
 import { CarQueue } from './CarQueue';
 import { clearRoadAdvance, type RoadBody } from '../simulation/RoadOccupancy';
+import { passengerVehicleSizes, passengerBodySize, roadBodySize } from '../simulation/VehicleGeometry';
+import { followingSpeed } from '../simulation/RoadFollowing';
+import type { JunctionNetwork } from '../simulation/JunctionFlow';
 import { land, parcelAt, parcelCentre, parcelOrigin } from '../simulation/Land';
 import { lineColour } from '../app/lineColours';
 import { advancePathVehicle, roadVehiclePose, roadPathKey, type RoadVehicle } from './roadVehicle';
@@ -182,6 +185,7 @@ export class CityRenderer {
     const pendingRoadVehicles = new Set<string>();
     const trips = new Map<string, { at: 'home' | 'work'; along?: number; wait: number; driving?: boolean;
       garage?: { home: boolean; work: boolean }; lot?: { home?: number; work?: number }; held?: number;
+      speed?: number; drivePath?: Cell[]; driveSource?: readonly Cell[]; driveFrom?: 'home' | 'work';
       /** How many times they have set out, and the way by the filling station when this trip goes that way. */
       count?: number; detour?: { path: Cell[]; stop: number; wait: number } }>();
     /** The cars that were on the road in the last frame, for the ones behind to keep clear of. */
@@ -252,7 +256,7 @@ export class CityRenderer {
     const cellOf = (id: number): Cell => ({ x: id % MAP_SIZE, y: Math.floor(id / MAP_SIZE) });
     /** How long and how wide each vehicle is drawn, in the order of Wealth's `vehicles`. */
     // A lane is about a third of a tile wide, and a car must fit in it with room to spare.
-    const SIZES = [[7, 3], [8, 4], [10, 6], [12, 6], [13, 7]];
+    const SIZES = passengerVehicleSizes;
     const streetOpacity = () => Math.max(0, Math.min(1, (camera.scale - 0.45) / 0.55));
     const visible = (x: number, y: number, margin = 32) => {
       const sx = x * camera.scale + camera.x;
@@ -319,6 +323,10 @@ export class CityRenderer {
     };
     /** Whether the light at a junction is green for traffic going up and down; otherwise for across. */
     const greenUpright = (x: number, y: number) => (Math.floor(this.city.shipments.elapsedMs / LIGHT) + x + y) % 2 === 0;
+    const trafficNetwork: JunctionNetwork = {
+      isJunction: cell => junctions.has(cell.y * MAP_SIZE + cell.x),
+      green: (cell, hx, hy, time) => ((Math.floor(time / LIGHT) + cell.x + cell.y) % 2 === 0) === (Math.abs(hy) > Math.abs(hx)),
+    };
     /** Whether it is raining just now; set once a frame. */
     let wet = false;
     const walkForward = (roads: readonly Cell[], origin: Cell, along: number, advance: number, returning: boolean) =>
@@ -431,7 +439,7 @@ export class CityRenderer {
       for (const [i, shipment] of this.city.shipments.frames().entries()) {
         if (shipment.activity === 'working') continue;
         queue.add({ ...roadVehiclePose(shipment.route.path, shipment), index: -10000 - i,
-          length: (vehicleSizes.freight.length + 2) / TILE_SIZE, width: (vehicleSizes.freight.width + 2) / TILE_SIZE });
+          ...roadBodySize('freight'), speed: shipment.speed ?? 0 });
       }
       vehicleFrames = [];
       people.clear();
@@ -470,10 +478,13 @@ export class CityRenderer {
       // The clock runs far ahead of what can be watched, so only some of those out on wheels are
       // shown at once: about one for every twelve commuters, or the streets would fill with them.
       runs.push(...outingRuns(Math.min(RIDES_SHOWN, Math.max(6, Math.round(routes.length / 12)))));
+      this.city.shipments.junctionFlow.retainPrefix('commute:', new Set(runs.map(run => `commute:${run.key}`)));
       for (const real of runs) {
         const { key, index: i, tier, wanted } = real;
+        const actor = `commute:${key}`;
         let trip = trips.get(key);
         if (!trip) trips.set(key, trip = { at: 'home', wait: 0 });
+        if (trip.along === undefined || trip.wait > 0) this.city.shipments.junctionFlow.leave(actor);
         // On a trip by way of the filling station the car follows that way instead of the straight one.
         const route = trip.detour ? { ...real, path: trip.detour.path } : real;
         const tiles = route.path.length;
@@ -545,6 +556,10 @@ export class CityRenderer {
         const returning = trip.at === 'work';
         const from = trip.at;
         const to = from === 'home' ? 'work' : 'home';
+        if (!trip.drivePath || trip.driveSource !== route.path || trip.driveFrom !== from) {
+          trip.driveSource = route.path; trip.driveFrom = from;
+          trip.drivePath = returning ? [workplace, ...[...route.path].reverse(), home] : [home, ...route.path, workplace];
+        }
         /** Where on the road the commuter is after `along` tiles of the trip. */
         const onRoad = (along: number) => {
           const index = returning ? steps - along : along;
@@ -563,18 +578,21 @@ export class CityRenderer {
           const spot = carPoint(progress);
           const a = onRoad(Math.max(1, progress - 0.01)), b = onRoad(Math.min(steps - 1, progress + 0.01));
           const angle = carHeading(b.x - a.x, b.y - a.y, kerb(from).heading);
-          return { x: spot.x / TILE_SIZE, y: spot.y / TILE_SIZE, hx: Math.cos(angle), hy: Math.sin(angle), index: i };
+          return { x: spot.x / TILE_SIZE, y: spot.y / TILE_SIZE, hx: Math.cos(angle), hy: Math.sin(angle), index: i,
+            ...passengerBodySize(tier), speed: trip.speed ?? 1 / VEHICLE_PACE[tier] };
         };
         const along = trip.along;
         let speed = 1 / WALK_MS_PER_TILE;
 
         if (!driving) {
+          this.city.shipments.junctionFlow.leave(actor);
           const spot = onRoad(along);
           const before = onRoad(Math.max(0, along - 0.05));
           const after = onRoad(Math.min(steps, along + 0.05));
           drawWalker(spot.x, spot.y, i, carHeading(after.x - before.x, after.y - before.y), key);
           seenAt(spot);
         } else if (along < 1) {
+          this.city.shipments.junctionFlow.leave(actor);
           // Out of the door and over to the car; from a garage they are not seen until the car comes out.
           const door = centre(from === 'home' ? home : workplace);
           const car = kerb(from);
@@ -584,6 +602,7 @@ export class CityRenderer {
           seenAt(trip.garage?.[from] ? car : spot);
           if (trip.garage?.[from]) speed *= 3;
         } else if (along > steps - 1) {
+          this.city.shipments.junctionFlow.leave(actor);
           // Parked; the last few steps are on foot, unless the car went under the building.
           const door = centre(to === 'home' ? home : workplace);
           const car = kerb(to);
@@ -613,7 +632,6 @@ export class CityRenderer {
           // Keep clear of the car in front.
           const tileX = spot.x / TILE_SIZE;
           const tileY = spot.y / TILE_SIZE;
-          const blocked = carAhead(tileX, tileY, hx, hy, i);
           // A red light ahead: wait at the edge of the junction. Whoever is in it already goes on.
           const aheadX = Math.floor(tileX + hx * 0.55);
           const aheadY = Math.floor(tileY + hy * 0.55);
@@ -627,12 +645,26 @@ export class CityRenderer {
             people.rect(Math.round(spot.x) - 2, Math.round(spot.y) - 12, 5, 6).fill(0x25232b)
               .rect(Math.round(spot.x) - 1, Math.round(spot.y) - 11, 3, 4).fill(0xf2c94c);
           }
-          trip.held = blocked || red ? (trip.held ?? 0) + elapsed : 0;
-          speed = filling || blocked || red ? 0 : 1 / VEHICLE_PACE[tier];
+          speed = filling ? 0 : 1 / VEHICLE_PACE[tier];
           if (this.city.crashDelay({ x: Math.floor(tileX), y: Math.floor(tileY) })) speed *= 0.35;
-          const desired = Math.min(steps - 1, along + elapsed * speed);
-          const accepted = clearRoadAdvance(along, desired, bodyAt, queue);
-          if (accepted < desired - 1e-6) trip.held = (trip.held ?? 0) + elapsed;
+          let accepted = along, remaining = elapsed, constrained = false;
+          while (remaining > 0) {
+            const slice = Math.min(50, remaining);
+            const decision = this.city.shipments.junctionFlow.inspect(actor, accepted, trip.drivePath, 1,
+              bodyAt, queue, trafficNetwork, this.city.shipments.elapsedMs - remaining, steps - 1);
+            const distance = decision.stop === undefined ? Infinity : Math.max(0, decision.stop - accepted);
+            trip.speed = followingSpeed(bodyAt(accepted), trip.speed ?? speed, speed, slice, queue, distance);
+            const desired = Math.min(steps - 1, accepted + slice * trip.speed, decision.stop ?? Infinity);
+            const next = clearRoadAdvance(accepted, Math.max(accepted, desired), bodyAt, queue);
+            if (next < desired - 1e-6) { trip.speed = 0; constrained = true; }
+            if (trip.speed < speed * 0.2) constrained = true;
+            accepted = next;
+            this.city.shipments.junctionFlow.commit(actor, accepted, decision);
+            queue.add(bodyAt(accepted));
+            remaining -= slice;
+          }
+          const blocked = constrained || red && (trip.speed ?? speed) < speed * 0.2;
+          trip.held = blocked ? (trip.held ?? 0) + elapsed : 0;
           const body = bodyAt(accepted);
           const drawn = { x: body.x * TILE_SIZE, y: body.y * TILE_SIZE };
           drawCar(drawn.x, drawn.y, Math.abs(body.hy) > Math.abs(body.hx), i, tier, Math.atan2(body.hy, body.hx));
@@ -746,6 +778,7 @@ export class CityRenderer {
         if (signature === undefined) { signature = roadPathKey(path); pathKeys.set(path, signature); }
         let state = roadVehicles.get(key);
         if (!state || roadVehiclePaths.get(key) !== signature) {
+          this.city.shipments.junctionFlow.leave(key);
           state = { along: initial * last, returning: false, held: 0, wait: 0 };
           roadVehicles.set(key, state); roadVehiclePaths.set(key, signature);
           pendingRoadVehicles.add(key);
@@ -755,20 +788,21 @@ export class CityRenderer {
         const { x, y, hx, hy } = before;
         const self = -1000 - liveVehicles.size;
         const bodyAt = (state: RoadVehicle): RoadBody => ({ ...roadVehiclePose(path, state), index: self,
-          length: (vehicleSizes.bus.length + 2) / TILE_SIZE, width: (vehicleSizes.bus.width + 2) / TILE_SIZE });
+          ...roadBodySize('bus'), speed: state.speed ?? 1 / pace });
         if (pendingRoadVehicles.has(key)) {
           if (!queue.canOccupy(bodyAt(state))) return undefined;
           pendingRoadVehicles.delete(key);
         }
-        const blocked = carAhead(x, y, hx, hy, self, 0.8);
         const aheadX = Math.floor(x + hx * 0.55);
         const aheadY = Math.floor(y + hy * 0.55);
         const red = (aheadX !== Math.floor(x) || aheadY !== Math.floor(y)) &&
           junctions.has(aheadY * MAP_SIZE + aheadX) && greenUpright(aheadX, aheadY) !== before.upright;
         const load = this.city.congestionAt(path[before.index], this.hour());
-        const completed = advancePathVehicle(state, path, elapsed, pace, load, blocked, red, LIGHT,
-          (from, to) => queue.canTravel(bodyAt(from), bodyAt(to)));
+        const completed = advancePathVehicle(state, path, elapsed, pace, load, false, false, LIGHT,
+          undefined, { actor: key, time: this.city.shipments.elapsedMs - elapsed, occupancy: queue,
+            body: bodyAt, junctions: this.city.shipments.junctionFlow, network: trafficNetwork });
         const pose = roadVehiclePose(path, state);
+        const blocked = state.held > 0;
         const held = state.held > 0;
         const activity: VehicleActivity = state.turnFrom !== undefined ? 'turning' : held ? red ? 'red' : 'queued' : load > 1 ? 'slow' : 'moving';
         if (elapsed > 0) {
@@ -807,7 +841,7 @@ export class CityRenderer {
         vehicleFrames.push(info);
         if (shipment.activity !== 'working') {
           const car = { x: pose.x, y: pose.y, hx: pose.hx, hy: pose.hy, index: -10000 - shipmentIndex,
-            length: (size.length + 2) / TILE_SIZE, width: (size.width + 2) / TILE_SIZE };
+            ...roadBodySize('freight'), speed: shipment.speed ?? 0 };
           cars.push(car); queue.add(car);
         }
         if (!info.visible) continue;
@@ -902,6 +936,7 @@ export class CityRenderer {
         }
       }
       for (const key of roadVehicles.keys()) if (!liveVehicles.has(key)) {
+        this.city.shipments.junctionFlow.leave(key);
         roadVehicles.delete(key); roadVehiclePaths.delete(key); pendingRoadVehicles.delete(key);
       }
       if (elapsed > 0) settleCrowd(elapsed);
@@ -1375,6 +1410,8 @@ export class CityRenderer {
   }
 
   destroy(): void {
+    this.city.shipments.junctionFlow.leavePrefix('commute:');
+    this.city.shipments.junctionFlow.leavePrefix('bus:');
     this.city.shipments.setStreetTraffic([]);
     this.refresh = undefined;
     this.resetView = undefined;

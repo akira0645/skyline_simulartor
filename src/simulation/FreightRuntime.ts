@@ -2,6 +2,8 @@ import { freight, freightFleetSize, type FreightRoute, type FreightSite } from '
 import { MAP_SIZE } from './TileMap';
 import { advancePathVehicle, roadPathKey, roadVehiclePose, type RoadVehicle } from './RoadVehicle';
 import { RoadOccupancy, type RoadBody } from './RoadOccupancy';
+import { roadBodySize } from './VehicleGeometry';
+import { JunctionFlow, parseJunctionFlow, type JunctionNetwork, type JunctionFlowSave } from './JunctionFlow';
 
 export const WAREHOUSE_CAPACITY = 240;
 export interface FreightWarehouse { id: number; capacity: number }
@@ -19,6 +21,7 @@ export interface ShipmentVehicle extends RoadVehicle {
 export interface FreightRuntimeSave {
   time: number; pending?: number; directNext?: [string, number][]; stocks: [number, number][]; vehicles: ShipmentVehicle[];
   current: FreightMetrics[]; previous: FreightMetrics[];
+  junctionFlow?: JunctionFlowSave;
 }
 const freshMetrics = (key: string): FreightMetrics => ({ key, loaded: 0, delivered: 0, departures: 0, completed: 0,
   distance: 0, emptyDistance: 0, delayMs: 0, cost: 0, cancelled: 0 });
@@ -30,6 +33,7 @@ const cargoOf = (vehicle: ShipmentVehicle) => vehicle.cargo.reduce((sum, item) =
 
 /** Authoritative local stock and shipments. Independent of renderer, visibility and frame rate. */
 export class FreightRuntime {
+  readonly junctionFlow = new JunctionFlow();
   private time = 0;
   private pending = 0;
   private stocks = new Map<number, number>();
@@ -54,7 +58,7 @@ export class FreightRuntime {
   }
   private roadBody(truck: ShipmentVehicle, state: RoadVehicle = truck): RoadBody {
     return { ...roadVehiclePose(truck.route.path, state), index: this.vehicles.indexOf(truck),
-      length: 18 / 32, width: 9 / 32 };
+      ...roadBodySize('freight'), speed: state.speed ?? 1 / PACE };
   }
 
   sync(routes: ShippingRoute[], sources: readonly FreightSite[], shops: readonly FreightSite[], warehouses: readonly FreightWarehouse[] = []): void {
@@ -75,6 +79,7 @@ export class FreightRuntime {
         roadPathKey(route.path) === roadPathKey(vehicle.route.path) && JSON.stringify(route.stops) === JSON.stringify(vehicle.route.stops);
       if (keep) vehicle.route = route!;
       else {
+        this.junctionFlow.leave(`freight:${vehicle.key}`);
         const cargo = cargoOf(vehicle);
         if (sources.some(source => source.id === vehicle.route.from) || warehouses.some(site => site.id === vehicle.route.from)) this.stocks.set(vehicle.route.from, this.stock(vehicle.route.from) + cargo);
         if (cargo > 0) this.metric(vehicle.route.key).cancelled += cargo;
@@ -105,7 +110,7 @@ export class FreightRuntime {
     if (!value) { value = freshMetrics(key); this.current.set(key, value); }
     return value;
   }
-  advance(elapsed: number, loadAt: FreightTraffic): void {
+  advance(elapsed: number, loadAt: FreightTraffic, network?: JunctionNetwork): void {
     if (!Number.isFinite(elapsed) || elapsed <= 0) return;
     this.pending += elapsed;
     while (this.pending >= 50) {
@@ -126,14 +131,14 @@ export class FreightRuntime {
       this.roadOccupancy.reset([...this.streetTraffic,
         ...this.vehicles.filter(vehicle => vehicle.activity !== 'working').map(vehicle => this.roadBody(vehicle))]);
       for (const vehicle of this.vehicles) {
-        this.step(vehicle, dt, loadAt);
+        this.step(vehicle, dt, loadAt, network);
         if (vehicle.activity !== 'working') this.roadOccupancy.add(this.roadBody(vehicle));
       }
       this.time += dt; this.pending -= dt;
       if ((this.time + 2000) % MONTH === 0) { this.previous = [...this.current.values()].map(value => ({ ...value })); this.current.clear(); }
     }
   }
-  private step(vehicle: ShipmentVehicle, dt: number, loadAt: FreightTraffic): void {
+  private step(vehicle: ShipmentVehicle, dt: number, loadAt: FreightTraffic, network?: JunctionNetwork): void {
     if (vehicle.activity === 'working' && !vehicle.cargo.length && vehicle.along === 0 && !vehicle.wait) {
       if (this.time < vehicle.nextDeparture) return;
       if (this.vehicles.some(other => other !== vehicle && other.route.from === vehicle.route.from && other.activity !== 'working' && other.along < 0.8 && !other.returning)) return;
@@ -148,7 +153,7 @@ export class FreightRuntime {
       if (!route) { vehicle.nextDeparture = this.time + 1000; return; }
       // Do not materialize a loaded truck on top of a car at the shared driveway.
       if (!this.roadOccupancy.canOccupy({ ...roadVehiclePose(route.path, vehicle),
-        index: this.vehicles.indexOf(vehicle), length: 18 / 32, width: 9 / 32 })) return;
+        index: this.vehicles.indexOf(vehicle), ...roadBodySize('freight') })) return;
       vehicle.route = route;
       let available = Math.min(freight.load, this.stock(route.from));
       const cargo: ShipmentVehicle['cargo'] = [];
@@ -171,10 +176,9 @@ export class FreightRuntime {
     const traffic = loadAt(vehicle.route, before, vehicle, this.time);
     const load = Math.max(0, typeof traffic === 'number' ? traffic : traffic.load);
     const red = typeof traffic === 'number' ? false : traffic.red;
-    const pose = roadVehiclePose(vehicle.route.path, vehicle);
-    const blocked = this.roadOccupancy.ahead(pose.x, pose.y, pose.hx, pose.hy, this.vehicles.indexOf(vehicle), 0.8);
-    let done = advancePathVehicle(vehicle, vehicle.route.path, dt, PACE, load, blocked, red, 2600,
-      (from, to) => this.roadOccupancy.canTravel(this.roadBody(vehicle, from), this.roadBody(vehicle, to)));
+    let done = advancePathVehicle(vehicle, vehicle.route.path, dt, PACE, load, false, network ? false : red, 2600,
+      undefined, { actor: `freight:${vehicle.key}`, time: this.time, occupancy: this.roadOccupancy,
+        body: state => this.roadBody(vehicle, state), junctions: this.junctionFlow, network });
     const distance = Math.abs(vehicle.along - before);
     metric.distance += distance;
     if (cargoOf(vehicle) < 0.000001) metric.emptyDistance += distance;
@@ -191,6 +195,7 @@ export class FreightRuntime {
     }
     if (vehicle.route.path.length === 1) done = 'home';
     if (done) {
+      this.junctionFlow.leave(`freight:${vehicle.key}`);
       // A route edited or a receiver removed never creates a delivery: undelivered cargo goes home.
       const leftover = cargoOf(vehicle);
       if (leftover) this.stocks.set(vehicle.route.from, this.stock(vehicle.route.from) + leftover);
@@ -210,8 +215,9 @@ export class FreightRuntime {
       current: [...this.current.values()].map(value => ({ ...value })), previous: this.previous.map(value => ({ ...value })),
       inTransit: this.vehicles.reduce((sum, vehicle) => sum + cargoOf(vehicle), 0) };
   }
-  save(): FreightRuntimeSave { return { time: this.time, pending: this.pending, directNext: [...this.directNext], stocks: [...this.stocks], vehicles: this.vehicles.map(cloneVehicle), current: [...this.current.values()].map(m => ({ ...m })), previous: this.previous.map(m => ({ ...m })) }; }
+  save(): FreightRuntimeSave { return { time: this.time, pending: this.pending, directNext: [...this.directNext], stocks: [...this.stocks], vehicles: this.vehicles.map(cloneVehicle), current: [...this.current.values()].map(m => ({ ...m })), previous: this.previous.map(m => ({ ...m })), junctionFlow: this.junctionFlow.snapshot('freight:') }; }
   load(save: FreightRuntimeSave | undefined, tick: number): void {
+    this.junctionFlow.restore(save?.junctionFlow);
     this.streetTraffic = [];
     this.time = save?.time ?? tick * 1000; this.pending = save?.pending ?? 0; this.directNext = new Map(save?.directNext ?? []); this.stocks = new Map(save?.stocks ?? []);
     this.vehicles = (save?.vehicles ?? []).map(cloneVehicle); this.current = new Map((save?.current ?? []).map(value => [value.key, { ...value }]));
@@ -256,6 +262,7 @@ export function parseFreightRuntime(value: unknown): FreightRuntimeSave | undefi
     if (v.turnFrom !== undefined && typeof v.turnFrom !== 'boolean') fail();
     return { key: v.key, route, cargo, nextStop: integer(v.nextStop, route.stops.length), nextDeparture: number(v.nextDeparture),
       activity: v.activity, along: number(v.along, path.length - 1), returning: v.returning, held: number(v.held), wait: number(v.wait, 650),
+      speed: v.speed === undefined ? undefined : number(v.speed, 0.02),
       turnFrom: v.turnFrom, turnNode: v.turnNode === undefined ? undefined : integer(v.turnNode, path.length - 1) };
   }), vehicle => vehicle.key);
   const pending = number(s.pending ?? 0, 50);
@@ -264,5 +271,6 @@ export function parseFreightRuntime(value: unknown): FreightRuntimeSave | undefi
     if (!Array.isArray(entry) || entry.length !== 2) fail();
     return [key(entry[0]), number(entry[1])] as [string, number];
   }), entry => entry[0]);
-  return { time: number(s.time), pending, directNext, stocks, vehicles, current: metrics(s.current), previous: metrics(s.previous) };
+  return { time: number(s.time), pending, directNext, stocks, vehicles, current: metrics(s.current), previous: metrics(s.previous),
+    junctionFlow: parseJunctionFlow(s.junctionFlow, new Map(vehicles.map(v => [`freight:${v.key}`, v.route.path.length - 1])), number(s.time)) };
 }

@@ -1,4 +1,5 @@
 import { clearRoadAdvance, RoadOccupancy, type RoadBody } from '../simulation/RoadOccupancy';
+import { followingSpeed } from '../simulation/RoadFollowing';
 
 /** The art preview uses the game's body geometry rather than independent clock/modulo motion. */
 export class PreviewTraffic {
@@ -16,9 +17,12 @@ export class PreviewTraffic {
       const dt = Math.min(50, remaining);
       this.occupancy.reset(this.vehicles);
       for (const vehicle of this.vehicles) {
-        const speed = vehicle.index === 2 ? 1 / 75 : 1 / 60;
-        const desired = vehicle.x + vehicle.hx * dt * speed / 32;
-        vehicle.x = clearRoadAdvance(vehicle.x, desired, x => ({ ...vehicle, x }), this.occupancy);
+        const free = (vehicle.index === 2 ? 1 / 75 : 1 / 60) / 32;
+        vehicle.speed = followingSpeed(vehicle, vehicle.speed ?? free, free, dt, this.occupancy);
+        const desired = vehicle.x + vehicle.hx * dt * vehicle.speed;
+        const accepted = clearRoadAdvance(vehicle.x, desired, x => ({ ...vehicle, x }), this.occupancy);
+        if (Math.abs(accepted - desired) > 1e-6) vehicle.speed = 0;
+        vehicle.x = accepted;
         if (vehicle.x < -24 / 32 || vehicle.x > 280 / 32) {
           const wrapped = { ...vehicle, x: vehicle.hx > 0 ? -24 / 32 : 280 / 32 };
           if (this.occupancy.canOccupy(wrapped)) vehicle.x = wrapped.x;

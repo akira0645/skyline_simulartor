@@ -1,4 +1,7 @@
 import type { Cell } from './TileMap';
+import type { RoadBody, RoadOccupancy } from './RoadOccupancy';
+import { followingSpeed } from './RoadFollowing';
+import type { JunctionFlow, JunctionNetwork } from './JunctionFlow';
 
 export const TURN_MS = 650;
 export const ROAD_LANE = 0.19;
@@ -7,9 +10,17 @@ export interface RoadVehicle {
   returning: boolean;
   held: number;
   wait: number;
+  /** Tiles per simulation ms. Optional for older saves; free speed is used on first departure. */
+  speed?: number;
   /** Direction before a terminal or intermediate U-turn. */
   turnFrom?: boolean;
   turnNode?: number;
+}
+
+export interface RoadDrivingPolicy {
+  actor: string; time: number; occupancy: RoadOccupancy;
+  body(state: RoadVehicle): RoadBody;
+  junctions?: JunctionFlow; network?: JunctionNetwork;
 }
 
 /** Advance only with simulation-scaled time. Report a completed round trip after its home turn. */
@@ -94,7 +105,7 @@ export const roadPathKey = (path: readonly Cell[]) => path.map(cell => `${cell.x
 /** Consume the entire frame in small movement steps, including low-FPS and fast-speed frames. */
 export function advancePathVehicle(state: RoadVehicle, path: readonly Cell[], elapsed: number, pace: number,
   load: number, blocked: boolean, red: boolean, lightCycle: number,
-  canMove?: (before: RoadVehicle, after: RoadVehicle) => boolean): 'home' | undefined {
+  canMove?: (before: RoadVehicle, after: RoadVehicle) => boolean, driving?: RoadDrivingPolicy): 'home' | undefined {
   if (!Number.isFinite(elapsed) || elapsed <= 0 || path.length < 2) return;
   const step = Math.max(1, Math.min(50, pace / 4));
   let remaining = elapsed;
@@ -102,14 +113,35 @@ export function advancePathVehicle(state: RoadVehicle, path: readonly Cell[], el
     // Split exactly at a turn's end; a home completion must reach the caller before reassignment.
     const slice = Math.min(remaining, step, state.wait > 0 ? state.wait : step);
     const before = { ...state };
-    const completed = advancePathStep(state, path, slice, pace, load, blocked, red, lightCycle);
+    const direction = state.returning ? -1 : 1;
+    const decision = driving?.junctions && driving.network && !state.wait
+      ? driving.junctions.inspect(driving.actor, state.along, path, direction,
+        along => driving.body({ ...state, along }), driving.occupancy, driving.network, driving.time + elapsed - remaining)
+      : undefined;
+    let actualPace = pace, actualLoad = load;
+    if (driving && !state.wait) {
+      const free = 1 / (pace * (1 + 0.15 * load ** 4));
+      const stopDistance = decision?.stop === undefined ? Infinity : Math.max(0, direction * (decision.stop - state.along));
+      state.speed = blocked || red ? 0 : followingSpeed(driving.body(state), state.speed ?? free, free, slice, driving.occupancy, stopDistance);
+      actualPace = state.speed > 0 ? 1 / state.speed : Infinity;
+      actualLoad = 0;
+    }
+    const completed = advancePathStep(state, path, slice, actualPace, actualLoad,
+      blocked || !!driving && state.speed === 0 && !state.wait, red, lightCycle);
     const moved = before.along !== state.along || before.wait !== state.wait || before.returning !== state.returning;
-    if (canMove && moved && !canMove(before, state)) {
+    const gateBlocked = decision?.stop !== undefined && direction * (state.along - decision.stop) > 1e-7;
+    const bodyBlocked = driving && moved && !driving.occupancy.canTravel(driving.body(before), driving.body(state));
+    if (gateBlocked || bodyBlocked || canMove && moved && !canMove(before, state)) {
       Object.assign(state, before, { held: before.held + slice });
+      if (driving) state.speed = 0;
       if (before.turnFrom === undefined) delete state.turnFrom;
       if (before.turnNode === undefined) delete state.turnNode;
       remaining -= slice;
       continue;
+    }
+    if (driving) {
+      if (decision) driving.junctions?.commit(driving.actor, state.along, decision);
+      if (state.wait) state.speed = 0;
     }
     remaining -= slice;
     if (completed) return completed;

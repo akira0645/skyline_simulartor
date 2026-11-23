@@ -2,6 +2,8 @@
 export interface RoadBody {
   x: number; y: number; hx: number; hy: number; index: number;
   length?: number; width?: number;
+  /** Tiles per simulation millisecond; omitted bodies are treated as stationary. */
+  speed?: number;
 }
 export const CAR_LENGTH = 15 / 32;
 export const CAR_WIDTH = 9 / 32;
@@ -52,10 +54,29 @@ export class RoadOccupancy {
       const dx = other.x - x, dy = other.y - y;
       if (Math.abs(dx * hy - dy * hx) > 0.14) continue;
       const forward = dx * hx + dy * hy;
-      const clearance = Math.max(reach, (CAR_LENGTH + (other.length ?? CAR_LENGTH)) / 2 + GAP);
+      const clearance = Math.max(reach, ((this.bodies.get(self)?.length ?? CAR_LENGTH) + (other.length ?? CAR_LENGTH)) / 2 + GAP);
       if (forward > 0.03 && forward < clearance || Math.abs(forward) <= 0.03 && other.index < self) return true;
     }
     return false;
+  }
+  /** Bumper clearance, not centre distance. Opposing lanes and rear traffic are excluded. */
+  leader(body: RoadBody, reach = 2): { gap: number; speed: number } | undefined {
+    let leader: { gap: number; speed: number } | undefined;
+    for (const other of this.near(body.x, body.y, reach)) {
+      if (other.index === body.index) continue;
+      const dot = other.hx * body.hx + other.hy * body.hy;
+      if (dot < 0.7) continue;
+      const dx = other.x - body.x, dy = other.y - body.y;
+      const forward = dx * body.hx + dy * body.hy;
+      if (forward < -1e-6 || forward < 1e-6 && other.index > body.index) continue;
+      const side = Math.abs(dx * body.hy - dy * body.hx);
+      if (side > ((body.width ?? CAR_WIDTH) + (other.width ?? CAR_WIDTH)) / 2) continue;
+      const cross = Math.abs(other.hx * body.hy - other.hy * body.hx);
+      const gap = forward - (body.length ?? CAR_LENGTH) / 2 -
+        ((other.length ?? CAR_LENGTH) * Math.abs(dot) + (other.width ?? CAR_WIDTH) * cross) / 2 - GAP;
+      if (gap <= reach && (!leader || gap < leader.gap)) leader = { gap, speed: Math.max(0, other.speed ?? 0) * dot };
+    }
+    return leader;
   }
   canOccupy(candidate: RoadBody, origin?: RoadBody): boolean {
     for (const other of this.near(candidate.x, candidate.y, candidate.length ?? CAR_LENGTH)) {

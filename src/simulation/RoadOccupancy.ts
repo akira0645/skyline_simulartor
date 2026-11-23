@@ -151,17 +151,22 @@ export function clearRoadAdvance(from: number, to: number, at: (progress: number
   if (to === from) return from;
   const count = Math.max(1, Math.ceil(Math.abs(to - from) / 0.025));
   let safe = from;
+  let safeBody = at(from);
   for (let step = 1; step <= count; step++) {
     const next = from + (to - from) * step / count;
-    if (!occupancy.canTravel(at(safe), at(next))) {
+    const nextBody = at(next);
+    if (!occupancy.canTravel(safeBody, nextBody)) {
       let low = safe, high = next;
+      let lowBody = safeBody;
       for (let i = 0; i < 10; i++) {
         const middle = (low + high) / 2;
-        if (occupancy.canTravel(at(low), at(middle))) low = middle; else high = middle;
+        const middleBody = at(middle);
+        if (occupancy.canTravel(lowBody, middleBody)) { low = middle; lowBody = middleBody; } else high = middle;
       }
       return low;
     }
     safe = next;
+    safeBody = nextBody;
   }
   return to;
 }

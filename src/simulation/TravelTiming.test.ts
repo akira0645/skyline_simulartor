@@ -18,6 +18,18 @@ function walkingVisit() {
   return engine;
 }
 
+it('invalidates cached visit roads immediately and still checks demolished destinations', () => {
+  for (const cell of [{ x: 6, y: 4 }, { x: 4, y: 4 }]) {
+    const engine = walkingVisit(), clock = new SimulationClock(engine);
+    clock.advance(100);
+    expect(engine.city.visits.frames(engine.city.visitTime)).toHaveLength(1);
+    clock.advance(100); // Reuses the unchanged road validation.
+    expect(engine.city.execute({ type: 'DEMOLISH', ...cell }).error).toBeUndefined();
+    clock.advance(100);
+    expect(engine.city.visits.frames(engine.city.visitTime)).toHaveLength(0);
+  }
+});
+
 it('shows arrival, use and the return walk continuously before the first core tick', () => {
   const engine = walkingVisit(), clock = new SimulationClock(engine);
   clock.advance(3700);

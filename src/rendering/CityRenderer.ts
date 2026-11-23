@@ -56,6 +56,7 @@ import { Camera } from './Camera';
 import { MapPinch } from './MapPinch';
 import { DETAIL_ZOOM, TileRenderer } from './TileRenderer';
 import { advancePedestrian, commuterPosition } from './commuterPosition';
+import { CommuterGeometry } from './CommuterGeometry';
 import { shiftIndex, shifts, workShift } from '../simulation/WorkShift';
 import { calendar, hourAt, weekendAt } from '../simulation/calendar';
 import { rainingAt, seasonAt } from '../simulation/Seasons';
@@ -87,6 +88,8 @@ const bicyclePool = new SharedAssetPool<string, Texture>(() => Assets.load<Textu
 type FacilityVisit = ReturnType<BuildingSystem['facilityVisits']>[number];
 
 export class CityRenderer {
+  /** Optional diagnostic sink; the normal game does not collect per-frame timings. */
+  onFrameTiming?: (sample: { simulationMs: number; actorsMs: number; effectsMs: number }) => void;
   visitorsAt?: (cell: Cell) => (FacilityVisit & { phase: '前往中' | '使用中' | '回程' })[];
   refresh?: () => void;
   /** Called with the cell clicked while the line tool is in use. */
@@ -233,7 +236,7 @@ export class CityRenderer {
     const pendingRoadVehicles = new Set<string>();
     const trips = new Map<string, { at: 'home' | 'work'; along?: number; wait: number; driving?: boolean;
       garage?: { home: boolean; work: boolean }; lot?: { home?: number; work?: number }; held?: number;
-      speed?: number; drivePath?: Cell[]; driveSource?: readonly Cell[]; driveFrom?: 'home' | 'work'; admitting?: boolean;
+      speed?: number; drivePath?: Cell[]; driveSource?: readonly Cell[]; driveFrom?: 'home' | 'work'; admitting?: boolean; geometry?: CommuterGeometry;
       /** How many times they have set out, and the way by the filling station when this trip goes that way. */
       count?: number; detour?: { path: Cell[]; stop: number; wait: number } }>();
     /** The cars that were on the road in the last frame, for the ones behind to keep clear of. */
@@ -633,11 +636,10 @@ export class CityRenderer {
           trip.drivePath = returning ? [workplace, ...[...route.path].reverse(), home] : [home, ...route.path, workplace];
         }
         /** Where on the road the commuter is after `along` tiles of the trip. */
-        const onRoad = (along: number) => {
-          const index = returning ? steps - along : along;
-          const position = commuterPosition(route, 0, driving ? 'drive' : 'walk', index / steps, returning)!;
-          return centre(position);
-        };
+        const mode = driving ? 'drive' : 'walk';
+        if (!trip.geometry?.matches(route, mode, returning)) trip.geometry = new CommuterGeometry(route, mode, returning);
+        const geometry = trip.geometry;
+        const onRoad = (along: number) => geometry.at(returning ? steps - along : along);
         const carPoint = (progress: number) => {
           const spot = onRoad(progress);
           const edge = Math.min(progress - 1, steps - 1 - progress);
@@ -1249,14 +1251,19 @@ export class CityRenderer {
       }
     };
     app.ticker.add(ticker => {
+      const measure = this.onFrameTiming;
+      const begin = measure ? performance.now() : 0;
       this.advance?.();
+      const simulated = measure ? performance.now() : 0;
       const speed = this.speed();
       // Facility outings and life events also animate in towns without commuters.
       if (!speed) return;
       const elapsed = animationElapsed(ticker.elapsedMS, speed);
       animationTime += elapsed;
       drawPeople(elapsed);
+      const actorsDone = measure ? performance.now() : 0;
       drawEffects();
+      if (measure) measure({ simulationMs: simulated - begin, actorsMs: actorsDone - simulated, effectsMs: performance.now() - actorsDone });
       // The traffic colours follow the cars, so they are painted again a few times a second.
       repaint -= ticker.elapsedMS;
       if (repaint <= 0 && this.overlay() === 'traffic') {

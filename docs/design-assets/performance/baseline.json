@@ -1,0 +1,28 @@
+{
+  "label": "baseline",
+  "size": "large",
+  "tick": 23520,
+  "population": 2166,
+  "frames": 13,
+  "simulationMs": {
+    "mean": 5.4846153901173516,
+    "p50": 3.200000047683716,
+    "p95": 36
+  },
+  "actorsMs": {
+    "mean": 58.67692306408515,
+    "p50": 66.19999992847443,
+    "p95": 91.10000002384186
+  },
+  "effectsMs": {
+    "mean": 0.7076923205302312,
+    "p50": 0.7000000476837158,
+    "p95": 1.5
+  },
+  "frameIntervalMs": {
+    "mean": 659.9000000059605,
+    "p50": 986.2000000476837,
+    "p95": 1053.1000000238419
+  },
+  "note": "Same CityRenderer, 2s warm-up + 8s sampling. Browser CPU/frame cadence; not a physical tablet FPS claim."
+}

@@ -1,4 +1,5 @@
 import { roadVehiclePose } from './RoadVehicle';
+import { RoadPathValidity } from './RoadPathValidity';
 import { FreightRuntime, freightRuntimeKey, WAREHOUSE_CAPACITY, type FreightWarehouse } from './FreightRuntime';
 import { MOTION_SCALE } from './TravelTiming';
 import { freightLines as freightRules, planFreightLines, type FreightLine, type FreightMode, type SavedFreightLine } from './FreightLines';
@@ -119,6 +120,7 @@ function roll(seed: number, tick: number, salt: number): number {
 }
 
 export class BuildingSystem {
+  private visitRoads?: RoadPathValidity;
   private nextPersonId = 0;
   readonly relationships = new Relationships();
   readonly life = new LifeSystem();
@@ -407,6 +409,7 @@ export class BuildingSystem {
   private recordVisits(tick: number): void { this.advanceVisitTime(tick, true); }
 
   private advanceVisits(tick: number, step = 1 / 3, schedule = true): void {
+    this.visitRoads ??= new RoadPathValidity(this.map);
     if (schedule) { this.crowded.clear(); this.circled.clear(); this.waitingFor.clear(); }
     const count = (id: number, people: number) => {
       const anchor = indexOf(this.map.anchorOf(cellAt(id)) ?? cellAt(id));
@@ -414,7 +417,7 @@ export class BuildingSystem {
     };
     const arrived = this.visits.advance(tick, trip =>
       !!this.buildings.get(trip.home)?.people?.some(person => person.slot === trip.slot) &&
-      trip.path.slice(1, -1).every(cell => isRoad(this.map.get(cell))) &&
+      this.visitRoads!.hasRoads(trip.path) &&
       (trip.returning || this.map.get(cellAt(trip.destination)) !== 'grass'), trip => {
         const start = trip.path.at(-1)!;
         const from = trip.path.at(-2)!;

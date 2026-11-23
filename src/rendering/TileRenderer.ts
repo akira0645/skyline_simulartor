@@ -9,7 +9,6 @@ import { industryAt } from '../simulation/Industry';
 import { Camera } from './Camera';
 import buildingAtlas from '../assets/buildings/atlas.json';
 import { DETAIL_ZOOM, terrainResolution } from './detailLevel';
-import { streetBuilding, streetLandmark } from './streetAppearance';
 import type { StreetArt } from './StreetArt';
 export { DETAIL_ZOOM } from './detailLevel';
 
@@ -177,11 +176,8 @@ export class TileRenderer {
       g.texture(this.frame(sheet, column, row), 0xffffff,
         x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
     const tileAt = ([column, row]: number[], x: number, y: number) => put(this.kenney, column, row, x, y);
-    const cityAt = (column: number, row: number, x: number, y: number) => {
-      const prototype = detailed && streetBuilding(column, row);
-      if (prototype) this.streetArt.drawBuilding(g, prototype, x * TILE_SIZE, y * TILE_SIZE, theme);
-      else put(this.city, column, row, x, y);
-    };
+    // Close up, every building keeps its own picture from the 128 px atlas (tools/draw_tiles_hd.py).
+    const cityAt = (column: number, row: number, x: number, y: number) => put(this.city, column, row, x, y);
 
     // Housing complexes in view, by their top left tile. They are drawn after the lots they cover.
     const complexes = new Set<number>();
@@ -488,10 +484,8 @@ export class TileRenderer {
     }
 
     for (const [anchor, art] of bigs) {
-      const landmark = detailed && streetLandmark(art);
       const x = anchor % MAP_SIZE * TILE_SIZE, y = Math.floor(anchor / MAP_SIZE) * TILE_SIZE;
-      if (landmark) this.streetArt.drawLandmark(g, landmark, x, y, theme);
-      else g.texture(this.bigFrame(art), 0xffffff, x, y, 2 * TILE_SIZE, 2 * TILE_SIZE);
+      g.texture(this.bigFrame(art), 0xffffff, x, y, 2 * TILE_SIZE, 2 * TILE_SIZE);
     }
     for (const anchor of complexes) {
       g.texture(this.bigFrame(COMPLEX_ART), 0xffffff, anchor % MAP_SIZE * TILE_SIZE,

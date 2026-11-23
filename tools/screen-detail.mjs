@@ -115,7 +115,7 @@ try {
       const observed = await run(`window.__detail`);
       const source = observed.sources.at(-1);
       if (!source) throw Error(`No map repaint: ${theme} ${zoom}`);
-      if (source.unit !== (zoom >= 1.75 ? 64 : 32)) throw Error(`Wrong building resolution: ${JSON.stringify(source)}`);
+      if (source.unit !== (zoom >= 1.75 ? 128 : 32)) throw Error(`Wrong building resolution: ${JSON.stringify(source)}`);
       if (source.cacheResolution !== (zoom >= 3 ? 4 : zoom >= 1.75 ? 2 : 1)) throw Error(`Detail lost in terrain cache: ${JSON.stringify(source)}`);
       if (zoom < 1.75 && observed.cars !== 0) throw Error('Detailed cars rendered below threshold');
       if (zoom >= 1.75 && zoom < 6 && observed.cars === 0) throw Error(`No detailed cars in ${theme} at ${zoom}`);

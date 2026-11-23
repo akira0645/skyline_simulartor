@@ -1,5 +1,14 @@
 # 實作進度
 
+## 2026-11-23 建築近看圖依原圖重畫（Claude）
+
+- 使用者要求依原有風格提高細緻度，並把其餘工作交給 Codex。這是計畫 `superpowers/specs/2026-11-23-residents-art-and-travel-plan.md` 第一部分「建築」的實作。
+- 新工具 `tools/draw_tiles_hd.py`：直接讀 `draw_tiles.py` 的每一個建築函式，以每格 128 像素（原本 32，近看圖原本 64）重畫全部建築、道路、空地，四種城市各一張 `src/assets/buildings/city*-detail.png`，`atlas.json` 改為 density 4／tileSize 128。
+- 每棟的占地、外形、屋頂、門窗位置、招牌與配色都與原圖相同；只依材質加細節：斜屋頂的瓦片、平屋頂接縫、磚牆、牆面細線、金屬浪板、木門板、樹叢，玻璃加窗框、十字窗櫺、窗台、天空倒影與反光，三分之一的窗戶有窗簾。圖案固定不隨機。城市風格的上色照 `restyle`，紐約逃生梯與水塔、舊金山白色飾邊、加州屋脊瓦重畫成近看尺寸。
+- `TileRenderer.ts` 近看時不再用 `streetBuilding`／`streetLandmark` 的 16 種通用圖蓋掉原圖；每個變體保有自己的樣子。`streetAppearance.ts` 與 `StreetArt` 的建築部分已不被遊戲使用（人物、樹、貨車仍在用），預覽頁仍可看；之後可刪。`detail-buildings.py` 已被取代。
+- 驗證：`npx vitest run src/rendering` 15 檔／50 項、`npm run test:fast` 59 檔／233 項通過；`npm run build` 通過。`tools/screen-detail.mjs` 已改為預期 128 像素，四座城市 1×／1.74×／1.76×／3×／6× 截圖通過。長模擬沒有重跑（本次沒動模擬）。
+- 已知小問題：體育場藍色座位被當成窗戶畫上窗框；Kenney 草地與灌木在 6 倍下仍是原本較粗的圖。
+
 ## 2026-11-23 下一輪實作前計畫：人物、風格與路程
 
 - 使用者要求人物更多變化及個人頭像、腳踏車和其餘建築細化，並指出先前細化未保留原有風格。已確認改為依原圖逐格加細節，保留四種城市主題與建築變體，不能多種建築共用一個新造型。

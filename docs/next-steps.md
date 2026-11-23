@@ -1,5 +1,7 @@
 # 後續工作檢視
 
+2026-11-23 交接給 Codex：建築近看圖已依原圖重畫完成（`tools/draw_tiles_hd.py`，見 `implementation-progress.md` 最上方）。計畫中尚未做的：人物外觀與頭像、腳踏車（可用 `.agents/skills/sprite-stacking` 做多方向）、時鐘與路程統一。改任何建築請改 `tools/draw_tiles.py` 後依序跑 `draw_tiles.py`、`draw_tiles_hd.py`，不要另畫一套通用建築圖。
+
 2026-11-23 最新待製作：人物外觀與對應頭像、依原有風格細化建築與腳踏車、1× 約兩分鐘一天及一致的路程時間。使用者要求先提供並推送計畫再開始；本輪先記錄，素材與行為尚未修改。以 `superpowers/specs/2026-11-23-residents-art-and-travel-plan.md` 的製作順序為準。
 
 2026-11-23 最新更新：遠端使用者接續回報平板無法放大；已補上雙指縮放／移動與「＋／－」，點按可放大至 6 倍，橫向與直向瀏覽器版面已驗收，實體平板觸控仍待確認。詳見 `superpowers/specs/2026-11-23-tablet-map-zoom-design.md`。下列「先停在此處」是前一個交接點的歷史紀錄。

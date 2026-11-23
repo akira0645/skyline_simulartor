@@ -69,7 +69,7 @@ npm run build
 - `npm run test` 先跑一般測試，再跑長時間的城市模擬測試。
 - `npm run build` 先單獨檢查模擬核心，再檢查整個程式並輸出到 `dist/`。`dist/` 是一包靜態網頁，放到任何網頁空間都能玩。
 - `python tools/draw_tiles.py`（需要 Pillow）重畫 `src/assets/city*.png`。要改建築的圖就改這支程式再重跑。
-- `python tools/detail-buildings.py`（需要 Pillow、NumPy）在重畫建築後產生近看圖集；`python tools/bake-cars.py` 重製汽車的 16 方向圖集。遊戲建置直接使用 PNG，不需要 Python。[汽車素材說明](docs/design-assets/car/README.md)。
+- `python tools/draw_tiles_hd.py`（需要 Pillow、NumPy）在重畫建築後產生近看圖集（每格 128 像素、四種城市）：每棟沿用原圖的形狀和配色，只把屋瓦、磚、窗框窗台、門板、樹叢等表面畫細。改建築時先改 `draw_tiles.py`，再跑這兩支；`python tools/bake-cars.py` 重製汽車的 16 方向圖集。遊戲建置直接使用 PNG，不需要 Python。[汽車素材說明](docs/design-assets/car/README.md)。
 - 本輪手繪感素材從 `python tools/draw-handmade.py` 開始，全程式繪製，再用 pixel-art-studio 渲染與 sprite-stacking 烘焙車輛。重製步驟、像素 JSON 與品質檢查見 [手繪素材說明](docs/design-assets/handmade/README.md)。開發伺服器上的 `/tools/street-preview.html` 可比較完整代表街景。
 - `node tools/screen-detail.mjs http://127.0.0.1:5199/` 在開發伺服器上驗證三座示範城市的縮放細節切換，截圖與報告存入 `work/car-preview/`。
 - `tools/screen-*.mjs` 用無畫面的 Edge 開遊戲截圖，檢查排版、車流和人物卡。

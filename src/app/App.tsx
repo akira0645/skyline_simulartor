@@ -624,7 +624,7 @@ export function App() {
   // shows them on the road, that is what they are doing.
   const seen = who && engine.city.person(who.home, who.slot, hour);
   const trip = seen && seen.jobId >= 0 ? rendererRef.current?.tripOf?.(seen.homeId, seen.jobId) : undefined;
-  const doing = !seen ? undefined : trip === 'to-work' || trip === 'to-home' ? trip :
+  const doing = !seen ? undefined : seen.journey ? seen.doing : trip === 'to-work' || trip === 'to-home' ? trip :
     seen.doing === 'to-work' && trip === 'work' ? 'working' :
     seen.doing === 'to-home' && trip === 'home' ? 'home' : seen.doing;
   const pickPerson = (person: { homeId: number; slot: number }) => { setSelectedVehicle(undefined); setWho({ home: person.homeId, slot: person.slot }); };
@@ -666,7 +666,9 @@ export function App() {
     </dl>
     <dl>
       <dt>現在</dt>
-      <dd title={seen.activityReason}>{doingText(doing, seen.shift, seen.way)}
+      <dd title={seen.activityReason}>{seen.journey ? seen.journey.phase === '回程' ? '正在回家途中' :
+        `正在前往${seen.journey.destination ? tileNames[seen.journey.destination] : '目的地'}` : doingText(doing, seen.shift, seen.way)}
+        {seen.journey && <small>已走 {Math.round(seen.journey.progress * 100)}% · 行進尚需約 {Math.max(1, Math.ceil(seen.journey.remainingMinutes))} 分鐘（不含等候）</small>}
         {seen.activityWhy && reasonNote[seen.activityWhy] && `（${reasonNote[seen.activityWhy]}）`}
         {seen.weatherReason && <small>{seen.weatherReason}</small>}</dd>
       <dt>住在</dt><dd className="tags">{seen.kind ? homeKindNames[seen.kind][0] : '一般住宅'}，{howLong(seen.days)}

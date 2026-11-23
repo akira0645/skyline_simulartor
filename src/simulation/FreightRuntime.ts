@@ -8,6 +8,7 @@ import { JunctionFlow, parseJunctionFlow, type JunctionNetwork, type JunctionFlo
 export const WAREHOUSE_CAPACITY = 240;
 export interface FreightWarehouse { id: number; capacity: number }
 const MONTH = 240000, DAY = 8000, PACE = 400;
+const BODY = roadBodySize('freight');
 export const freightRuntimeKey = (route: FreightRoute) => route.lineId === undefined ? `auto:${route.from}:${route.to}` : `manual:${route.lineId}`;
 export interface ShippingRoute extends FreightRoute { key: string; stops: { to: number; index: number }[] }
 export interface FreightMetrics {
@@ -22,6 +23,7 @@ export interface FreightRuntimeSave {
   time: number; pending?: number; directNext?: [string, number][]; stocks: [number, number][]; vehicles: ShipmentVehicle[];
   current: FreightMetrics[]; previous: FreightMetrics[];
   junctionFlow?: JunctionFlowSave;
+  motionScale?: number;
 }
 const freshMetrics = (key: string): FreightMetrics => ({ key, loaded: 0, delivered: 0, departures: 0, completed: 0,
   distance: 0, emptyDistance: 0, delayMs: 0, cost: 0, cancelled: 0 });
@@ -51,14 +53,17 @@ export class FreightRuntime {
   private outgoingReserved = new Map<number, number>();
   private readonly roadOccupancy = new RoadOccupancy();
   private streetTraffic: RoadBody[] = [];
+  private motionScale: number;
+  constructor(private readonly configuredMotionScale?: number) { this.motionScale = configuredMotionScale ?? 1; }
   /** Physical cars/buses supplied by the street animation, including vehicles outside the viewport.
    * This transient input is not cargo/save data and is cleared when the street view detaches. */
   setStreetTraffic(bodies: readonly RoadBody[]): void {
     this.streetTraffic = bodies.map((body, index) => ({ ...body, index: -100000 - index }));
   }
   private roadBody(truck: ShipmentVehicle, state: RoadVehicle = truck): RoadBody {
-    return { ...roadVehiclePose(truck.route.path, state), index: this.vehicles.indexOf(truck),
-      ...roadBodySize('freight'), speed: state.speed ?? 1 / PACE };
+    const pose = roadVehiclePose(truck.route.path, state, false);
+    return { x: pose.x, y: pose.y, hx: pose.hx, hy: pose.hy, index: this.vehicles.indexOf(truck),
+      length: BODY.length, width: BODY.width, speed: state.speed ?? 1 / PACE };
   }
 
   sync(routes: ShippingRoute[], sources: readonly FreightSite[], shops: readonly FreightSite[], warehouses: readonly FreightWarehouse[] = []): void {
@@ -103,6 +108,8 @@ export class FreightRuntime {
   }
 
   get elapsedMs(): number { return this.time + this.pending; }
+  /** Real-time-equivalent movement clock, shared by rendered actors, lights and junction reservations. */
+  get elapsedMotionMs(): number { return this.elapsedMs * this.motionScale; }
   stock(id: number): number { return this.stocks.get(id) ?? 0; }
   frames(): readonly ShipmentVehicle[] { return this.vehicles; }
   private metric(key: string): FreightMetrics {
@@ -113,10 +120,20 @@ export class FreightRuntime {
   advance(elapsed: number, loadAt: FreightTraffic, network?: JunctionNetwork): void {
     if (!Number.isFinite(elapsed) || elapsed <= 0) return;
     this.pending += elapsed;
-    while (this.pending >= 50) {
-      const dt = Math.min(50, MONTH - ((this.time + 2000) % MONTH));
-      for (const source of this.sources) this.stocks.set(source.id, Math.min(Math.max(source.amount, this.stock(source.id)), this.stock(source.id) + source.amount * dt / MONTH));
-      for (const shop of this.shops) this.stocks.set(shop.id, Math.max(0, this.stock(shop.id) - shop.amount * dt / MONTH));
+    this.roadOccupancy.reset([...this.streetTraffic,
+      ...this.vehicles.filter(vehicle => vehicle.activity !== 'working').map(vehicle => this.roadBody(vehicle))]);
+    while (true) {
+      // Inactive fleets retain the cheap accounting step. Slow-clock trucks integrate at
+      // 100 motion ms, capped at 1/4 tile and swept against all physical bodies.
+      const moving = this.vehicles.some(vehicle => vehicle.activity !== 'working' || this.time >= vehicle.nextDeparture);
+      const accountingLeft = 50 - (Math.round(this.time * this.motionScale) % (50 * this.motionScale)) / this.motionScale;
+      const dt = Math.min(moving ? (this.motionScale === 1 ? 50 : 100) / this.motionScale : 50, accountingLeft, MONTH - ((this.time + 2000) % MONTH));
+      if (this.pending + 1e-8 < dt) break;
+      // Calendar accounting stays on its original 50-unit grid, independently of physical substeps.
+      if (dt >= accountingLeft - 1e-8) {
+        for (const source of this.sources) this.stocks.set(source.id, Math.min(Math.max(source.amount, this.stock(source.id)), this.stock(source.id) + source.amount * 50 / MONTH));
+        for (const shop of this.shops) this.stocks.set(shop.id, Math.max(0, this.stock(shop.id) - shop.amount * 50 / MONTH));
+      }
       for (const route of this.directRoutes) {
         if (this.time < (this.directNext.get(route.key) ?? 0)) continue;
         const to = route.stops[0].to;
@@ -128,13 +145,13 @@ export class FreightRuntime {
         metric.loaded += amount; metric.delivered += amount; metric.departures++; metric.completed++;
         this.directNext.set(route.key, this.time + DAY);
       }
-      this.roadOccupancy.reset([...this.streetTraffic,
-        ...this.vehicles.filter(vehicle => vehicle.activity !== 'working').map(vehicle => this.roadBody(vehicle))]);
-      for (const vehicle of this.vehicles) {
+      for (const [index, vehicle] of this.vehicles.entries()) {
         this.step(vehicle, dt, loadAt, network);
         if (vehicle.activity !== 'working') this.roadOccupancy.add(this.roadBody(vehicle));
+        else this.roadOccupancy.remove(index);
       }
-      this.time += dt; this.pending -= dt;
+      this.time = Math.round((this.time + dt) * this.motionScale) / this.motionScale;
+      this.pending = Math.max(0, Math.round((this.pending - dt) * 1e10) / 1e10);
       if ((this.time + 2000) % MONTH === 0) { this.previous = [...this.current.values()].map(value => ({ ...value })); this.current.clear(); }
     }
   }
@@ -173,11 +190,12 @@ export class FreightRuntime {
     }
     const metric = this.metric(vehicle.route.key);
     const before = vehicle.along;
-    const traffic = loadAt(vehicle.route, before, vehicle, this.time);
+    const traffic = loadAt(vehicle.route, before, vehicle, this.time * this.motionScale);
     const load = Math.max(0, typeof traffic === 'number' ? traffic : traffic.load);
     const red = typeof traffic === 'number' ? false : traffic.red;
-    let done = advancePathVehicle(vehicle, vehicle.route.path, dt, PACE, load, false, network ? false : red, 2600,
-      undefined, { actor: `freight:${vehicle.key}`, time: this.time, occupancy: this.roadOccupancy,
+    let done = advancePathVehicle(vehicle, vehicle.route.path, dt * this.motionScale, PACE, load, false, network ? false : red, 2600,
+      undefined, { actor: `freight:${vehicle.key}`, time: this.time * this.motionScale, occupancy: this.roadOccupancy,
+        stepMs: this.motionScale === 1 ? 50 : 100,
         body: state => this.roadBody(vehicle, state), junctions: this.junctionFlow, network });
     const distance = Math.abs(vehicle.along - before);
     metric.distance += distance;
@@ -215,9 +233,13 @@ export class FreightRuntime {
       current: [...this.current.values()].map(value => ({ ...value })), previous: this.previous.map(value => ({ ...value })),
       inTransit: this.vehicles.reduce((sum, vehicle) => sum + cargoOf(vehicle), 0) };
   }
-  save(): FreightRuntimeSave { return { time: this.time, pending: this.pending, directNext: [...this.directNext], stocks: [...this.stocks], vehicles: this.vehicles.map(cloneVehicle), current: [...this.current.values()].map(m => ({ ...m })), previous: this.previous.map(m => ({ ...m })), junctionFlow: this.junctionFlow.snapshot('freight:') }; }
+  save(): FreightRuntimeSave { return { time: this.time, pending: this.pending, directNext: [...this.directNext], stocks: [...this.stocks], vehicles: this.vehicles.map(cloneVehicle), current: [...this.current.values()].map(m => ({ ...m })), previous: this.previous.map(m => ({ ...m })), junctionFlow: this.junctionFlow.snapshot('freight:'), motionScale: this.motionScale }; }
   load(save: FreightRuntimeSave | undefined, tick: number): void {
-    this.junctionFlow.restore(save?.junctionFlow);
+    this.motionScale = this.configuredMotionScale ?? save?.motionScale ?? 1;
+    const ratio = this.motionScale / (save?.motionScale ?? 1);
+    const flow = save?.junctionFlow;
+    this.junctionFlow.restore(flow && ratio !== 1 ? { owners: flow.owners,
+      requests: flow.requests.map(([actor, request]) => [actor, { ...request, first: request.first * ratio, seen: request.seen * ratio }]) } : flow);
     this.streetTraffic = [];
     this.time = save?.time ?? tick * 1000; this.pending = save?.pending ?? 0; this.directNext = new Map(save?.directNext ?? []); this.stocks = new Map(save?.stocks ?? []);
     this.vehicles = (save?.vehicles ?? []).map(cloneVehicle); this.current = new Map((save?.current ?? []).map(value => [value.key, { ...value }]));
@@ -271,6 +293,8 @@ export function parseFreightRuntime(value: unknown): FreightRuntimeSave | undefi
     if (!Array.isArray(entry) || entry.length !== 2) fail();
     return [key(entry[0]), number(entry[1])] as [string, number];
   }), entry => entry[0]);
-  return { time: number(s.time), pending, directNext, stocks, vehicles, current: metrics(s.current), previous: metrics(s.previous),
-    junctionFlow: parseJunctionFlow(s.junctionFlow, new Map(vehicles.map(v => [`freight:${v.key}`, v.route.path.length - 1])), number(s.time)) };
+  if (s.motionScale !== undefined && ![1, 15].includes(s.motionScale)) fail();
+  const motionScale = s.motionScale === undefined ? undefined : number(s.motionScale, 15);
+  return { time: number(s.time), pending, directNext, stocks, vehicles, current: metrics(s.current), previous: metrics(s.previous), motionScale,
+    junctionFlow: parseJunctionFlow(s.junctionFlow, new Map(vehicles.map(v => [`freight:${v.key}`, v.route.path.length - 1])), number(s.time) * (motionScale ?? 1)) };
 }

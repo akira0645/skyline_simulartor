@@ -1,6 +1,7 @@
 import { expect, it } from 'vitest';
 import { animationElapsed } from './animationElapsed';
-import { SimulationClock, TICK_MS } from '../simulation/SimulationClock';
+import { SimulationClock } from '../simulation/SimulationClock';
+import { REAL_TICK_MS as TICK_MS } from '../simulation/TravelTiming';
 import { SimulationEngine } from '../simulation/SimulationEngine';
 import { hourAt } from '../simulation/calendar';
 import { advancePathVehicle, type RoadVehicle } from './roadVehicle';

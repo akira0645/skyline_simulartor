@@ -154,7 +154,7 @@ export function demoCity(engine: SimulationEngine, size: DemoSize = 'small') {
   // The city is laid out with money to spare, then handed over with its opening balance. It
   // starts at the rank a city of its size has reached, which is what lets it have its buildings.
   // Each size wears another city's colours, so the three do not look alike.
-  engine.load({ ...engine.save(), tick: years * YEAR, funds: 10_000_000, rank,
+  engine.load({ ...engine.save(), tick: years * YEAR, visitsAt: years * YEAR, freightRuntime: undefined, funds: 10_000_000, rank,
     theme: size === 'small' ? 'california' : size === 'medium' ? 'newyork' : 'sf' });
   if (size === 'small') {
     oldTown(city, 32);

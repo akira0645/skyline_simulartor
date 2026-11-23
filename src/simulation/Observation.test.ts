@@ -42,7 +42,7 @@ it('walks straight from shopping to another venue, keeping the real origin, iden
   engine.load({ ...engine.save(), rank: 1 });
   expect(city.execute({ type: 'BUILD_SERVICE', x: 2, y: 1, service: 'market' }).error).toBeUndefined();
   city.execute({ type: 'BUILD_SERVICE', x: 1, y: 3, service: 'community' });
-  engine.load({ ...engine.save(), tick: 2 }); // Noon.
+  engine.load({ ...engine.save(), tick: 2, visitsAt: 2, freightRuntime: undefined }); // Noon.
   const person = engine.save().buildings[0].people![0];
   city.visits.start([{ home: 129, slot: person.slot, doing: 'shopping', destination: 130, reason: 'supplies',
     path: [{ x: 1, y: 1 }, { x: 1, y: 2 }, { x: 2, y: 2 }, { x: 2, y: 1 }] }], 2 + 1 / 3);

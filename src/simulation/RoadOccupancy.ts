@@ -8,6 +8,8 @@ export interface RoadBody {
 export const CAR_LENGTH = 15 / 32;
 export const CAR_WIDTH = 9 / 32;
 const GAP = 1 / 32;
+// Map tile coordinates fit signed 16-bit integers, including off-map query margins.
+const bucketKey = (x: number, y: number) => (x & 0xffff) | ((y & 0xffff) << 16);
 
 /** Separating-axis test for two oriented vehicle rectangles, including a small safety gap. */
 export function bodiesOverlap(a: RoadBody, b: RoadBody): boolean {
@@ -26,25 +28,35 @@ export function bodiesOverlap(a: RoadBody, b: RoadBody): boolean {
 /** Occupancy is updated immediately after each accepted move, including between tile buckets. */
 export class RoadOccupancy {
   private readonly bodies = new Map<number, RoadBody>();
-  private readonly buckets = new Map<string, Set<number>>();
+  private readonly buckets = new Map<number, Set<number>>();
   reset(cars: readonly RoadBody[]): void {
     this.bodies.clear(); this.buckets.clear();
     for (const car of cars) this.add(car);
   }
   add(car: RoadBody): void {
     const before = this.bodies.get(car.index);
-    if (before) this.buckets.get(`${Math.floor(before.x)},${Math.floor(before.y)}`)?.delete(car.index);
+    if (before) this.buckets.get(bucketKey(Math.floor(before.x), Math.floor(before.y)))?.delete(car.index);
     this.bodies.set(car.index, { ...car });
-    const key = `${Math.floor(car.x)},${Math.floor(car.y)}`;
+    const key = bucketKey(Math.floor(car.x), Math.floor(car.y));
     let bucket = this.buckets.get(key);
     if (!bucket) this.buckets.set(key, bucket = new Set());
     bucket.add(car.index);
   }
+  remove(index: number): void {
+    const before = this.bodies.get(index);
+    if (!before) return;
+    this.buckets.get(bucketKey(Math.floor(before.x), Math.floor(before.y)))?.delete(index);
+    this.bodies.delete(index);
+  }
   private *near(x: number, y: number, reach: number): Generator<RoadBody> {
+    // Freight fleets have at most eight bodies. Scanning that small set is cheaper
+    // than probing 9–25 grid buckets; callers still apply the exact geometry tests.
+    if (this.bodies.size <= 8) { yield* this.bodies.values(); return; }
     const radius = Math.max(1, Math.ceil(reach));
-    for (let by = Math.floor(y) - radius; by <= Math.floor(y) + radius; by++) {
-      for (let bx = Math.floor(x) - radius; bx <= Math.floor(x) + radius; bx++) {
-        for (const id of this.buckets.get(`${bx},${by}`) ?? []) yield this.bodies.get(id)!;
+    const floorX = Math.floor(x), floorY = Math.floor(y);
+    for (let by = floorY - radius; by <= floorY + radius; by++) {
+      for (let bx = floorX - radius; bx <= floorX + radius; bx++) {
+        for (const id of this.buckets.get(bucketKey(bx, by)) ?? []) yield this.bodies.get(id)!;
       }
     }
   }
@@ -61,6 +73,7 @@ export class RoadOccupancy {
   }
   /** Bumper clearance, not centre distance. Opposing lanes and rear traffic are excluded. */
   leader(body: RoadBody, reach = 2): { gap: number; speed: number } | undefined {
+    if (!this.bodies.size || this.bodies.size === 1 && this.bodies.has(body.index)) return;
     let leader: { gap: number; speed: number } | undefined;
     for (const other of this.near(body.x, body.y, reach)) {
       if (other.index === body.index) continue;
@@ -79,6 +92,7 @@ export class RoadOccupancy {
     return leader;
   }
   canOccupy(candidate: RoadBody, origin?: RoadBody): boolean {
+    if (!this.bodies.size || this.bodies.size === 1 && this.bodies.has(candidate.index)) return true;
     for (const other of this.near(candidate.x, candidate.y, candidate.length ?? CAR_LENGTH)) {
       if (other.index === candidate.index || !bodiesOverlap(candidate, other)) continue;
       // Previously overlapping saves may separate, but must never move deeper into a body.
@@ -92,13 +106,21 @@ export class RoadOccupancy {
     return true;
   }
   canTravel(from: RoadBody, to: RoadBody): boolean {
+    if (!this.bodies.size || this.bodies.size === 1 && this.bodies.has(to.index)) return true;
     const midX = (from.x + to.x) / 2, midY = (from.y + to.y) / 2;
     const halfX = Math.abs(to.x - from.x) / 2, halfY = Math.abs(to.y - from.y) / 2;
     const radius = Math.hypot(to.length ?? CAR_LENGTH, to.width ?? CAR_WIDTH) / 2;
+    // A straight, non-rotating sweep is itself a rectangle. Reject parallel/opposing
+    // lanes exactly before allocating and sampling intermediate oriented bodies.
+    const straight = Math.abs(from.hx - to.hx) + Math.abs(from.hy - to.hy) < 1e-10 &&
+      Math.abs((to.x - from.x) * to.hy - (to.y - from.y) * to.hx) < 1e-10;
+    const swept = straight ? { ...to, x: midX, y: midY,
+      length: (to.length ?? CAR_LENGTH) + Math.hypot(to.x - from.x, to.y - from.y) } : undefined;
     const candidates: RoadBody[] = [];
     // Query once per sweep, then reject distant bodies before doing any sampled SAT work.
     for (const other of this.near(midX, midY, Math.max(halfX, halfY) + radius + 0.5)) {
       if (other.index === to.index) continue;
+      if (swept && !bodiesOverlap(swept, other)) continue;
       const reach = radius + Math.hypot(other.length ?? CAR_LENGTH, other.width ?? CAR_WIDTH) / 2 + GAP;
       if (Math.abs(other.x - midX) <= halfX + reach && Math.abs(other.y - midY) <= halfY + reach) candidates.push(other);
     }

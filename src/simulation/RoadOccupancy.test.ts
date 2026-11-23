@@ -23,11 +23,14 @@ it('stops before a vehicle even when one frame would move several tiles', () => 
 
 it('reserves accepted moves immediately and removes stale bucket occupancy', () => {
   const occupancy = new RoadOccupancy();
+  occupancy.reset(Array.from({ length: 8 }, (_, i) => car(i + 10, 100 + i * 2, 100)));
   occupancy.add(car(1, 1));
   occupancy.add(car(1, 3));
   expect(occupancy.canOccupy(car(2, 1))).toBe(true);
   expect(occupancy.canOccupy(car(2, 3))).toBe(false);
   expect(occupancy.canOccupy(car(1, 3))).toBe(true);
+  occupancy.remove(1);
+  expect(occupancy.canOccupy(car(2, 3))).toBe(true);
 });
 
 it('checks perpendicular crossings, turns and the entire swept movement', () => {

@@ -6,11 +6,12 @@ import { TileMap } from './TileMap';
 
 
 export class SimulationEngine {
-  readonly city = new BuildingSystem(new TileMap());
-  readonly roadGraph = this.city.roadGraph;
+  readonly city: BuildingSystem;
+  get roadGraph() { return this.city.roadGraph; }
   private readonly state: WorldState;
 
   constructor(initialState: WorldState) {
+    this.city = new BuildingSystem(new TileMap(), initialState.tick);
     this.state = { ...initialState };
     this.city.seed = initialState.seed;
   }

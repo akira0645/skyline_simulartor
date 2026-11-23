@@ -22,6 +22,7 @@ import { challenges, type Challenge } from './Seasons';
 import { brands, dilemmas, type Boost, type Brand, type Dilemma } from './Dilemmas';
 
 /**
+ * 11 preserves sub-tick visits and travel delays on the slower live clock.
  * 10 adds logistics warehouse tiles and transshipment inventory.
  * 9 adds actual local freight stocks, vehicle manifests and monthly operating reports.
  * 8 adds player-managed logistics lines and fleet settings.
@@ -31,14 +32,14 @@ import { brands, dilemmas, type Boost, type Brand, type Dilemma } from './Dilemm
  * 4 added funds, the milestone rank and avenue tiles; 3 added power and water facility tiles;
  * 2 added per-building capacity and occupants.
  */
-export const SCHEMA_VERSION = 10;
+export const SCHEMA_VERSION = 11;
 /**
  * How a city looks: which city's colours its homes and shops wear, and the trees, cars and
  * bridges that go with them. Nothing in the simulation goes by it.
  */
 export const THEMES = ['classic', 'sf', 'california', 'newyork'] as const;
 export type Theme = (typeof THEMES)[number];
-const READABLE = [1, 2, 3, 4, 5, 6, 7, 8, 9, SCHEMA_VERSION];
+const READABLE = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, SCHEMA_VERSION];
 
 export interface SavedBuilding {
   id: number;
@@ -115,6 +116,7 @@ export interface SaveData {
   monthlyVisits?: [number, number][];
   activeVisits?: ActiveVisit[];
   dailyActivities?: ActivityEntry[];
+  visitsAt?: number;
   scares?: { id: number; until: number }[];
   tasksRest?: [string, number][];
   nextPersonId?: number;
@@ -332,6 +334,10 @@ export function parseSave(data: unknown): SaveData {
     return { a: edge.a, b: edge.b, familiarity: edge.familiarity, lastDay: edge.lastDay };
   });
   const freightRuntime = parseFreightRuntime((data as Record<string, unknown>).freightRuntime);
+  const visitsAt = (data as Record<string, unknown>).visitsAt ?? tick;
+  if (typeof visitsAt !== 'number' || !Number.isFinite(visitsAt) || visitsAt < tick || visitsAt > tick + 1) throw new Error('存檔資料損壞。');
+  const liveVisitTime = Math.max(visitsAt, Math.min(tick + 1,
+    freightRuntime ? tick + ((freightRuntime.time + (freightRuntime.pending ?? 0)) % 1000) / 1000 : tick));
   if (freightRuntime) {
     const reserved = new Map(freightRuntime.stocks);
     for (const vehicle of freightRuntime.vehicles) for (const cargo of vehicle.cargo) {
@@ -352,8 +358,9 @@ export function parseSave(data: unknown): SaveData {
     tasks: parseList((data as Record<string, unknown>).tasks, value => typeof value === 'string') as string[],
     combos: parseList((data as Record<string, unknown>).combos, value => typeof value === 'string') as string[],
     nextPersonId, relationships, life,
-    dailyActivities: parseDiary((data as Record<string, unknown>).dailyActivities, tick, isVisitDoing),
-    activeVisits: parseVisits((data as Record<string, unknown>).activeVisits, tick),
+    visitsAt,
+    dailyActivities: parseDiary((data as Record<string, unknown>).dailyActivities, visitsAt, isVisitDoing),
+    activeVisits: parseVisits((data as Record<string, unknown>).activeVisits, liveVisitTime),
     scares: parseScares((data as Record<string, unknown>).scares),
     tasksRest: parseCooldowns((data as Record<string, unknown>).tasksRest, taskList.map(task => task.id)),
     monthlyVisits: parseStock((data as Record<string, unknown>).monthlyVisits, Number.MAX_SAFE_INTEGER),

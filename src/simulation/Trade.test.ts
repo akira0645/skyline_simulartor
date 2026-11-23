@@ -82,6 +82,6 @@ it('frightens the neighbourhood when a theft or a fire is left alone', { timeout
   calm.load(snapshot);
   expect(calm.city.getStats().complaints.scared).toBe(city.getStats().complaints.scared);
   const expired = Math.max(...snapshot.scares!.map(item => item.until));
-  calm.load({ ...snapshot, tick: expired });
+  calm.load({ ...snapshot, tick: expired, visitsAt: expired, freightRuntime: undefined });
   expect(calm.city.getStats().complaints.scared).toBe(0);
 });

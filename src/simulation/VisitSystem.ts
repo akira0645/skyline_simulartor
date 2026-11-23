@@ -3,9 +3,10 @@ import { cellId } from './FacilityAccess';
 import type { Cell } from './TileMap';
 import type { VisitReason } from './ActivityDiary';
 import { delivery } from './Delivery';
+import { WALK_TICKS_PER_TILE } from './TravelTiming';
 
 /** One tick is three game hours. Nearby errands fit into a day, including the return walk. */
-export const VISIT_WALK_TICKS = 0.08;
+export const VISIT_WALK_TICKS = WALK_TICKS_PER_TILE;
 export const VISIT_STAY_TICKS = 1;
 export const stayTicks = (doing: Doing): number =>
   doing === 'delivering' ? 0.05 : ['school', 'highschool', 'daycare', 'bank', 'clinic', 'bakery', 'flowers', 'cake'].includes(doing) ? 0.2 :
@@ -37,6 +38,8 @@ export interface FacilityVisit {
 export interface ActiveVisit extends FacilityVisit {
   started: number;
   arrived: boolean;
+  /** Actual waiting/parking delay, in game ticks. Persists; live driver handles do not. */
+  delay?: number;
   returning: boolean;
 }
 export const visitKey = (visit: Pick<FacilityVisit, 'home' | 'slot'>) => `${visit.home}:${visit.slot}`;
@@ -47,6 +50,19 @@ export const travelTicks = (path: readonly Cell[], doing?: Doing, ride?: number)
 /** Pure simulation state: arriving once is the only event that increments monthly visits. */
 export class VisitSystem {
   private readonly active = new Map<string, ActiveVisit>();
+  private readonly drivers = new Map<string, { started: number; returning: boolean; progress: number }>();
+
+  /** Report the physical car's complete door-to-door leg, including parking, lights and queues. */
+  reportJourney(home: number, slot: number, started: number, returning: boolean, progress: number, tick: number): void {
+    const key = visitKey({ home, slot }), trip = this.active.get(key);
+    if (!trip || trip.started !== started || trip.returning !== returning || !Number.isFinite(progress) || tick < started || trip.arrived && !returning) return;
+    progress = Math.max(0, Math.min(1, progress));
+    this.drivers.set(key, { started, returning, progress });
+    const delay = Math.max(0, tick - trip.started - progress * travelTicks(trip.path, trip.doing, trip.ride));
+    if (delay > 1e-10) trip.delay = delay; else delete trip.delay;
+  }
+  retainDrivers(live: ReadonlySet<string>): void { for (const key of this.drivers.keys()) if (!live.has(key)) this.drivers.delete(key); }
+  releaseDrivers(): void { this.drivers.clear(); }
   /** Actual use intervals from the latest core step, including visits that already finished. */
   readonly usage: { visit: ActiveVisit; from: number; until: number }[] = [];
 
@@ -87,12 +103,15 @@ export class VisitSystem {
     }
   }
 
-  cancelResident(home: number, slot: number): void { this.active.delete(visitKey({ home, slot })); this.tally = undefined; }
+  cancelResident(home: number, slot: number): void { this.active.delete(visitKey({ home, slot })); this.drivers.delete(visitKey({ home, slot })); this.tally = undefined; }
 
   start(visits: readonly FacilityVisit[], tick: number): void {
     for (const visit of visits) {
       const key = visitKey(visit);
-      if (!this.active.has(key)) this.active.set(key, { ...visit, started: tick, arrived: false, returning: false });
+      if (!this.active.has(key)) {
+        this.drivers.delete(key);
+        this.active.set(key, { ...visit, started: tick, arrived: false, returning: false });
+      }
     }
     this.tally = undefined;
   }
@@ -109,10 +128,16 @@ export class VisitSystem {
         if (!valid(trip)) { this.active.delete(key); this.recount(trip, undefined); break; }
         const travel = travelTicks(trip.path, trip.doing, trip.ride);
         const stay = stayTicks(trip.doing);
-        const age = tick - trip.started;
+        const driver = this.drivers.get(key);
+        if (driver && driver.started === trip.started && driver.returning === trip.returning && driver.progress < 1 && !trip.arrived) {
+          trip.delay = Math.max(0, tick - trip.started - driver.progress * travel);
+          break;
+        }
+        const began = trip.started + (trip.delay ?? 0);
+        const age = tick - began;
         if (!trip.returning) {
-          const from = Math.max(tick - step, trip.started + travel);
-          const until = Math.min(tick, trip.started + travel + stay);
+          const from = Math.max(tick - step, began + travel);
+          const until = Math.min(tick, began + travel + stay);
           if (until > from) this.usage.push({ visit: { ...trip }, from, until });
         }
         if (!trip.returning && !trip.arrived && age >= travel) {
@@ -123,7 +148,7 @@ export class VisitSystem {
           if (age >= travel) this.active.delete(key);
           break;
         } else if (age >= travel + stay) {
-          const departed = trip.started + travel + stay;
+          const departed = began + travel + stay;
           const next = !trip.transfer && (trip.legs ?? 1) < 3 ? nextVisit?.(trip, departed) : undefined;
           const before = trip;
           if (next) {
@@ -136,7 +161,7 @@ export class VisitSystem {
           if (!path) { this.active.delete(key); this.recount(trip, undefined); break; }
           const referral = !!trip.transfer;
           trip = { ...trip, path,
-            started: trip.started + travel + stay,
+            started: began + travel + stay, delay: undefined,
             destination: referral ? trip.transferDestination! : trip.home,
             doing: referral ? 'referred' : trip.doing,
             transfer: undefined, transferDestination: undefined,
@@ -148,6 +173,7 @@ export class VisitSystem {
         }
       }
     }
+    if (this.drivers.size) this.retainDrivers(new Set(this.active.keys()));
     return arrivals;
   }
 
@@ -161,18 +187,23 @@ export class VisitSystem {
     for (const [key, trip] of this.active) {
       if (cells.has(trip.home) || cells.has(trip.destination) ||
           (trip.transferDestination !== undefined && cells.has(trip.transferDestination)) ||
-          trip.path.some(cell => cells.has(cellId(cell)))) this.active.delete(key);
+          trip.path.some(cell => cells.has(cellId(cell)))) {
+        this.active.delete(key);
+        this.drivers.delete(key);
+      }
     }
   }
 
   frames(tick: number) {
     return [...this.active.values()].map(trip => {
-      const age = tick - trip.started;
+      const age = tick - trip.started - (trip.delay ?? 0);
       const travel = travelTicks(trip.path, trip.doing, trip.ride);
-      const progress = Math.max(0, Math.min(1, age / travel));
+      const driver = this.drivers.get(visitKey(trip));
+      const driven = driver?.started === trip.started && driver.returning === trip.returning && !trip.arrived;
+      const progress = driven ? driver.progress : Math.max(0, Math.min(1, age / travel));
       // Read-only sub-tick projection: even a short errand can appear as in use between core updates.
       return { ...trip, progress, phase: trip.returning || age >= travel + stayTicks(trip.doing) ? '回程' as const :
-        trip.arrived || age >= travel ? '使用中' as const : '前往中' as const };
+        trip.arrived || (driven ? progress >= 1 : age >= travel) ? '使用中' as const : '前往中' as const };
     });
   }
 
@@ -182,6 +213,7 @@ export class VisitSystem {
   }
 
   load(visits: readonly ActiveVisit[]): void {
+    this.drivers.clear();
     this.tally = undefined;
     this.active.clear();
     this.usage.length = 0;

@@ -1,5 +1,6 @@
 import { roadVehiclePose } from './RoadVehicle';
 import { FreightRuntime, freightRuntimeKey, WAREHOUSE_CAPACITY, type FreightWarehouse } from './FreightRuntime';
+import { MOTION_SCALE } from './TravelTiming';
 import { freightLines as freightRules, planFreightLines, type FreightLine, type FreightMode, type SavedFreightLine } from './FreightLines';
 import { LifeSystem, EMPTY_LIFE, type LifeResident } from './LifeSystem';
 import { planFacilityVisits, type CivicVisitContext } from './CivicVisits';
@@ -297,7 +298,7 @@ export class BuildingSystem {
   private readonly shiftFlows = shifts.map(() => new Float32Array(MAP_SIZE ** 2));
   /** The busiest shift's commuters on each road tile. Routing and pollution go by this. */
   private readonly flows = new Float32Array(MAP_SIZE ** 2);
-  readonly shipments = new FreightRuntime();
+  readonly shipments = new FreightRuntime(MOTION_SCALE);
   private freightMode: FreightMode = 'auto';
   private readonly freightLines: SavedFreightLine[] = [];
   private freightPlans: FreightLine[] = [];
@@ -374,24 +375,33 @@ export class BuildingSystem {
     return undefined;
   }
 
-  private recordVisits(tick: number): void {
-    // Schedule every game hour so 07:00 school and 16:00 childcare are not skipped.
+  private visitsAdvancedTo = 0;
+  get visitTime(): number { return this.visitsAdvancedTo; }
+
+  /** Travel advances between core ticks; new departures are still scheduled on game-hour boundaries. */
+  advanceVisitTime(tick: number, force = false): void {
+    if (!Number.isFinite(tick) || tick <= this.visitsAdvancedTo) return;
+    // At 1x, update travel at least every 100 real ms, with read-only interpolation between updates.
+    if (!force && tick - this.visitsAdvancedTo < 1 / 150 && Math.floor(tick * 3) === Math.floor(this.visitsAdvancedTo * 3)) return;
+    const clock = this.clock;
     try {
-      for (let part = 1; part <= 3; part++) {
-        const at = tick - 1 + part / 3;
-        const previous = tick - 1 + (part - 1) / 3;
+      while (this.visitsAdvancedTo < tick - 1e-10) {
+        const previous = this.visitsAdvancedTo;
+        const hour = (Math.floor((previous + 1e-9) * 3) + 1) / 3;
+        const at = Math.min(tick, hour);
         if (activityDay(previous) !== activityDay(at)) this.diary.retain(at, new Set(this.peopleById.keys()));
         if (dateAt(previous).month !== dateAt(at).month) this.monthlyVisits.clear();
         this.clock = at;
-        this.advanceVisits(at);
+        this.advanceVisits(at, at - previous, Math.abs(at - hour) < 1e-9);
+        this.visitsAdvancedTo = at;
       }
-    } finally { this.clock = tick; }
+    } finally { this.clock = clock; }
   }
 
-  private advanceVisits(tick: number): void {
-    this.crowded.clear();
-    this.circled.clear();
-    this.waitingFor.clear();
+  private recordVisits(tick: number): void { this.advanceVisitTime(tick, true); }
+
+  private advanceVisits(tick: number, step = 1 / 3, schedule = true): void {
+    if (schedule) { this.crowded.clear(); this.circled.clear(); this.waitingFor.clear(); }
     const count = (id: number, people: number) => {
       const anchor = indexOf(this.map.anchorOf(cellAt(id)) ?? cellAt(id));
       this.monthlyVisits.set(anchor, (this.monthlyVisits.get(anchor) ?? 0) + people);
@@ -404,12 +414,12 @@ export class BuildingSystem {
         const from = trip.path.at(-2)!;
         const route = routeToSite(this.map, this.roadGraph, from, cellAt(trip.home), trip.slot);
         return route && [start, ...route.path];
-      }, (trip, departed) => this.continueVisit(trip, departed), 1 / 3);
+      }, (trip, departed) => this.continueVisit(trip, departed), step);
     for (const trip of arrived) {
       // A rider at a customer's door is no visitor.
       if (trip.doing !== 'delivering') count(trip.destination, 1);
       const person = this.buildings.get(trip.home)?.people?.find(person => person.slot === trip.slot);
-      if (person?.identity) this.diary.arrive(person.identity.id, trip, trip.started + travelTicks(trip.path, trip.doing, trip.ride));
+      if (person?.identity) this.diary.arrive(person.identity.id, trip, trip.started + (trip.delay ?? 0) + travelTicks(trip.path, trip.doing, trip.ride));
       const site = this.map.at(trip.destination);
       if (person?.identity && ['clinic', 'familyclinic', 'hospital', 'eldercare'].includes(site)) this.life.treat(person.identity.id, Math.ceil(tick), site === 'hospital');
     }
@@ -428,6 +438,7 @@ export class BuildingSystem {
         if (together.length > 1) this.relationships.meet(new Map([[venue, together]]), Math.floor(tick / calendar.ticksPerDay));
       }
     }
+    if (!schedule) return;
     const hour = hourAt(tick);
     // Riders set out first, so that nobody is both out with deliveries and off on an errand.
     const runs = this.deliverMeals(tick);
@@ -553,8 +564,11 @@ export class BuildingSystem {
   private readonly green = new Float32Array(MAP_SIZE ** 2);
   readonly roadGraph: RoadGraph;
 
-  constructor(readonly map: TileMap) {
+  constructor(readonly map: TileMap, tick = 0) {
     this.roadGraph = new RoadGraph(map);
+    this.clock = tick;
+    this.visitsAdvancedTo = tick;
+    this.shipments.load(undefined, tick);
   }
 
   getCommutes(): readonly Commute[] {
@@ -1802,13 +1816,13 @@ export class BuildingSystem {
     if (!building || !person) return undefined;
     const facts = this.factsFor(home, building)(person);
     const list = thoughtsOf(facts);
-    const visit = this.visits.frames(this.clock).filter(entry => entry.home === home && !entry.returning)
+    const visit = this.visits.frames(Math.max(this.clock, this.visitTime)).filter(entry => entry.home === home)
       .find(trip => trip.slot === slot);
     const contacts = this.relationships.contacts(person.identity!.id).flatMap(contact => {
       const other = this.peopleById.get(contact.id);
       return other ? [{ ...contact, homeId: other.home, slot: other.person.slot, name: this.whoAt(other.home, other.person).name }] : [];
     });
-    let activity = visit?.doing ?? doingAt(facts, hour, Math.floor(this.clock / calendar.ticksPerDay), weekendAt(this.clock));
+    let activity = visit?.returning ? 'to-home' as const : visit?.doing ?? doingAt(facts, hour, Math.floor(this.clock / calendar.ticksPerDay), weekendAt(this.clock));
     if (!visit && ['park', 'outing', 'nightmarket'].includes(activity) && !wantsOutdoor(this.seed, home, person.slot, this.clock)) activity = 'home';
     if (this.whoAt(home, person).age >= 65 && ['job-hunting', 'working', 'to-work'].includes(activity)) activity = 'home';
     const health = this.life.health(person.identity!.id);
@@ -1822,6 +1836,8 @@ export class BuildingSystem {
         { runs: this.diary.count(person.identity!.id, 'delivering', this.clock) } : undefined,
       /** The kind of place they are ill and waiting at home to get into, because it is full. */
       waitingFor: waiting === undefined ? undefined : this.map.at(waiting),
+      journey: visit && visit.phase !== '使用中' ? { phase: visit.phase, progress: visit.progress,
+        destination: this.map.at(visit.destination), remainingMinutes: (1 - visit.progress) * travelTicks(visit.path, visit.doing, visit.ride) * 180 } : undefined,
       activityReason: visit?.reason ? visitReasons[visit.reason] : undefined, activityWhy: visit?.reason,
       activities: this.diary.today(person.identity!.id, this.clock),
       weatherReason: facts.way ? weatherTravel(weatherAt(this.seed, this.clock), person.car ?? 0,
@@ -2763,7 +2779,7 @@ export class BuildingSystem {
     }
     this.shipments.advance(elapsedMs, (route, along, vehicle, time) => {
       const cell = route.path[Math.min(route.path.length - 1, Math.floor(along))];
-      const pose = roadVehiclePose(route.path, vehicle);
+      const pose = roadVehiclePose(route.path, vehicle, false);
       const x = Math.floor(pose.x + pose.hx * 0.55), y = Math.floor(pose.y + pose.hy * 0.55);
       const red = (x !== Math.floor(pose.x) || y !== Math.floor(pose.y)) && this.freightJunctions.has(y * MAP_SIZE + x) &&
         ((Math.floor(time / 2600) + x + y) % 2 === 0) !== pose.upright;
@@ -3435,11 +3451,11 @@ export class BuildingSystem {
       goals: [...this.goalsDone], loans: [...this.loans], tasks: [...this.tasksOn],
       combos: [...this.combosSeen], policies: [...this.policiesOn], challenge: this.challenge && { ...this.challenge },
       dilemma: this.dilemma && { ...this.dilemma }, boosts: this.boosts.map(boost => ({ ...boost })), level: this.level, theme: this.theme,
-      coldStock: [...this.coldStock], marketStock: [...this.marketStock], monthlyVisits: [...this.monthlyVisits], activeVisits: this.visits.save(), dailyActivities: this.diary.save(),
+      coldStock: [...this.coldStock], marketStock: [...this.marketStock], monthlyVisits: [...this.monthlyVisits], activeVisits: this.visits.save(), dailyActivities: this.diary.save(), visitsAt: this.visitsAdvancedTo,
       scares: this.scares.map(entry => ({ ...entry })), tasksRest: [...this.tasksRest], nextPersonId: this.nextPersonId, relationships: this.relationships.save(), life: this.life.save() };
   }
 
-  load({ freightRuntime, freightMode, freightLines, ownedLand, tiles, zones, buildings, funds, rank, taxRate, tick, lines, goals: done, loans, seed, metros, tasks: saved, combos: known, policies: chosen, challenge, spans, dilemma, boosts, level, theme, coldStock, marketStock, monthlyVisits, activeVisits, dailyActivities, scares, tasksRest, nextPersonId, relationships, life }: SaveData): void {
+  load({ freightRuntime, freightMode, freightLines, ownedLand, tiles, zones, buildings, funds, rank, taxRate, tick, lines, goals: done, loans, seed, metros, tasks: saved, combos: known, policies: chosen, challenge, spans, dilemma, boosts, level, theme, coldStock, marketStock, monthlyVisits, activeVisits, dailyActivities, visitsAt, scares, tasksRest, nextPersonId, relationships, life }: SaveData): void {
     this.shipments.load(freightRuntime, tick);
     this.freightMode = freightMode ?? 'auto';
     this.freightLines.splice(0, this.freightLines.length, ...(freightLines ?? []).map(line => ({ ...line, stops: [...line.stops] })));
@@ -3475,6 +3491,7 @@ export class BuildingSystem {
     this.visits.load(activeVisits ?? []);
     this.diary.load(dailyActivities ?? []);
     this.clock = tick;
+    this.visitsAdvancedTo = visitsAt ?? tick;
     this.funds = funds;
     this.rank = rank;
     this.taxRate = taxRate;

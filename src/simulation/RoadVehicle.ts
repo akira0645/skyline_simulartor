@@ -19,6 +19,8 @@ export interface RoadVehicle {
 
 export interface RoadDrivingPolicy {
   actor: string; time: number; occupancy: RoadOccupancy;
+  /** Optional physical integration step; distance is still capped at one quarter tile. */
+  stepMs?: number;
   body(state: RoadVehicle): RoadBody;
   junctions?: JunctionFlow; network?: JunctionNetwork;
 }
@@ -70,7 +72,7 @@ function advancePathStep(state: RoadVehicle, path: readonly Cell[], elapsed: num
 }
 
 /** World tile coordinates, including a smooth half-circle between opposing lanes at a U-turn. */
-export function roadVehiclePose(path: readonly Cell[], state: RoadVehicle) {
+export function roadVehiclePose(path: readonly Cell[], state: RoadVehicle, withAngle = true) {
   const last = path.length - 1;
   if (last < 1) return { x: path[0].x + 0.5, y: path[0].y + 0.5, hx: 1, hy: 0, angle: 0, index: 0, upright: false };
   const along = Math.max(0, Math.min(last, state.along));
@@ -86,7 +88,7 @@ export function roadVehiclePose(path: readonly Cell[], state: RoadVehicle) {
     const dy = hy * cos - hx * sin;
     return { x: centre.x + 0.5 + ROAD_LANE * (-hy * cos + hx * sin),
       y: centre.y + 0.5 + ROAD_LANE * (hx * cos + hy * sin),
-      hx: dx, hy: dy, angle: Math.atan2(dy, dx), index: Math.min(last - 1, node), upright: Math.abs(dy) > Math.abs(dx) };
+      hx: dx, hy: dy, angle: withAngle ? Math.atan2(dy, dx) : 0, index: Math.min(last - 1, node), upright: Math.abs(dy) > Math.abs(dx) };
   }
   const index = Math.max(0, Math.min(last - 1, state.returning ? Math.ceil(along) - 1 : Math.floor(along)));
   const from = path[index], to = path[index + 1];
@@ -96,7 +98,7 @@ export function roadVehiclePose(path: readonly Cell[], state: RoadVehicle) {
   const hy = Math.sign(to.y - from.y) * direction;
   return { x: from.x + (to.x - from.x) * part + 0.5 - hy * ROAD_LANE,
     y: from.y + (to.y - from.y) * part + 0.5 + hx * ROAD_LANE,
-    hx, hy, angle: Math.atan2(hy, hx), index, upright: hy !== 0 };
+    hx, hy, angle: withAngle ? Math.atan2(hy, hx) : 0, index, upright: hy !== 0 };
 }
 
 /** Compare geometry, not map layout revisions: unrelated building edits must not restart a trip. */
@@ -107,22 +109,26 @@ export function advancePathVehicle(state: RoadVehicle, path: readonly Cell[], el
   load: number, blocked: boolean, red: boolean, lightCycle: number,
   canMove?: (before: RoadVehicle, after: RoadVehicle) => boolean, driving?: RoadDrivingPolicy): 'home' | undefined {
   if (!Number.isFinite(elapsed) || elapsed <= 0 || path.length < 2) return;
-  const step = Math.max(1, Math.min(50, pace / 4));
+  const step = Math.max(1, Math.min(driving?.stepMs ?? 50, pace / 4));
   let remaining = elapsed;
   while (remaining > 0) {
     // Split exactly at a turn's end; a home completion must reach the caller before reassignment.
     const slice = Math.min(remaining, step, state.wait > 0 ? state.wait : step);
-    const before = { ...state };
+    // ShipmentVehicle also holds routes/manifests. Copy only the motion fields for rollback.
+    const before: RoadVehicle = { along: state.along, returning: state.returning, held: state.held,
+      wait: state.wait, speed: state.speed, turnFrom: state.turnFrom, turnNode: state.turnNode };
+    const bodyBefore = driving?.body(before);
     const direction = state.returning ? -1 : 1;
     const decision = driving?.junctions && driving.network && !state.wait
       ? driving.junctions.inspect(driving.actor, state.along, path, direction,
-        along => driving.body({ ...state, along }), driving.occupancy, driving.network, driving.time + elapsed - remaining)
+        along => along === before.along ? bodyBefore! : driving.body({ ...before, along }),
+        driving.occupancy, driving.network, driving.time + elapsed - remaining)
       : undefined;
     let actualPace = pace, actualLoad = load;
     if (driving && !state.wait) {
       const free = 1 / (pace * (1 + 0.15 * load ** 4));
       const stopDistance = decision?.stop === undefined ? Infinity : Math.max(0, direction * (decision.stop - state.along));
-      state.speed = blocked || red ? 0 : followingSpeed(driving.body(state), state.speed ?? free, free, slice, driving.occupancy, stopDistance);
+      state.speed = blocked || red ? 0 : followingSpeed(bodyBefore!, state.speed ?? free, free, slice, driving.occupancy, stopDistance);
       actualPace = state.speed > 0 ? 1 / state.speed : Infinity;
       actualLoad = 0;
     }
@@ -130,7 +136,7 @@ export function advancePathVehicle(state: RoadVehicle, path: readonly Cell[], el
       blocked || !!driving && state.speed === 0 && !state.wait, red, lightCycle);
     const moved = before.along !== state.along || before.wait !== state.wait || before.returning !== state.returning;
     const gateBlocked = decision?.stop !== undefined && direction * (state.along - decision.stop) > 1e-7;
-    const bodyBlocked = driving && moved && !driving.occupancy.canTravel(driving.body(before), driving.body(state));
+    const bodyBlocked = driving && moved && !driving.occupancy.canTravel(bodyBefore!, driving.body(state));
     if (gateBlocked || bodyBlocked || canMove && moved && !canMove(before, state)) {
       Object.assign(state, before, { held: before.held + slice });
       if (driving) state.speed = 0;

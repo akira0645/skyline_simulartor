@@ -32,8 +32,10 @@ export function parseVisits(value: unknown, tick: number): ActiveVisit[] {
     if (item.reason !== undefined && !Object.hasOwn(visitReasons, item.reason)) return invalid();
     if (item.legs !== undefined && (!count(item.legs) || item.legs < 1 || item.legs > 3)) return invalid();
     if (item.ride !== undefined && (!count(item.ride) || item.ride < 1 || item.ride > 4)) return invalid();
+    if (item.delay !== undefined && (!Number.isFinite(item.delay) || item.delay < 0 || item.delay > tick - item.started + 1e-8)) return invalid();
     return { home: item.home, slot: item.slot, destination: item.destination, doing: item.doing,
       started: item.started, arrived: item.arrived, returning: item.returning, path: path(item.path),
+      ...(item.delay !== undefined ? { delay: item.delay } : {}),
       transfer, transferDestination: transfer ? item.transferDestination : undefined,
       ...(item.reason !== undefined ? { reason: item.reason } : {}), ...(item.legs !== undefined ? { legs: item.legs } : {}), ...(item.ride !== undefined ? { ride: item.ride } : {}) };
   });

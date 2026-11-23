@@ -25,6 +25,8 @@ import { carHeading } from './carAppearance';
 import { StreetArt } from './StreetArt';
 import { WalkerMotion } from './WalkerMotion';
 import { residentAppearance } from './residentAppearance';
+import { WALK_REAL_MS_PER_TILE, VEHICLE_REAL_PACE, REAL_TICK_MS } from '../simulation/TravelTiming';
+import { travelTicks } from '../simulation/VisitSystem';
 import residentStyles from '../assets/street/residents.json';
 import { footprint, isBig, isFacility, isRoad, isService, MAP_SIZE, TILE_SIZE, type Cell } from '../simulation/TileMap';
 import { services } from '../simulation/Services';
@@ -61,12 +63,11 @@ import { mind, SHOP_SHIFT } from '../simulation/Mind';
 
 /**
  * How long a commuter takes per tile, in milliseconds at 1× speed. Trips start by the game
- * clock but run at this pace: a game day lasts eight seconds, so a commute timed in game hours
- * would be over in a blink.
+ * clock; walking and errand progress share TravelTiming's two-minute game day.
  */
 /** The same for each vehicle, in the order of Wealth's `vehicles`: a bicycle is slow, a car quick. */
-const WALK_MS_PER_TILE = 1250;
-const VEHICLE_PACE = [700, 520, 450, 450, 430];
+const WALK_MS_PER_TILE = WALK_REAL_MS_PER_TILE;
+const VEHICLE_PACE = VEHICLE_REAL_PACE;
 /** How long a traffic light stays green each way, in milliseconds at 1× speed. */
 const LIGHT = 2600;
 /** Commuters set out this many game hours before their shift. */
@@ -229,7 +230,7 @@ export class CityRenderer {
     const pendingRoadVehicles = new Set<string>();
     const trips = new Map<string, { at: 'home' | 'work'; along?: number; wait: number; driving?: boolean;
       garage?: { home: boolean; work: boolean }; lot?: { home?: number; work?: number }; held?: number;
-      speed?: number; drivePath?: Cell[]; driveSource?: readonly Cell[]; driveFrom?: 'home' | 'work';
+      speed?: number; drivePath?: Cell[]; driveSource?: readonly Cell[]; driveFrom?: 'home' | 'work'; admitting?: boolean;
       /** How many times they have set out, and the way by the filling station when this trip goes that way. */
       count?: number; detour?: { path: Cell[]; stop: number; wait: number } }>();
     /** The cars that were on the road in the last frame, for the ones behind to keep clear of. */
@@ -244,16 +245,17 @@ export class CityRenderer {
      * front and stopping at lights. `wanted` is the end the driver should be at now.
      */
     interface Run { key: string; homeId: number; workId: number; path: readonly Cell[]; tier: number; index: number;
-      wanted: 'home' | 'work'; walks: boolean; commute: boolean; person?: { home: number; slot: number } }
+      wanted: 'home' | 'work'; walks: boolean; commute: boolean; person?: { home: number; slot: number };
+      journey?: { started: number; returning: boolean }; initialProgress?: number }
     /**
-     * Those out on wheels. The simulation moves an outing along by the clock, far quicker than a
-     * car can be watched; so, as with commuting, the map drives each leg of it at a car's pace,
-     * one after another, and the car waits at the kerb where its driver is.
+     * Those out on wheels. Visible drivers report physical progress back to the visit system,
+     * so lights, queues and parking delay arrival. The car waits at the kerb during the visit.
      */
-    interface Leg { from: number; to: number; path: Cell[]; tier: number; id: number }
+    interface Leg { from: number; to: number; path: Cell[]; tier: number; id: number; started: number; returning: boolean; initialProgress: number }
     const rides = new Map<string, { home: number; slot: number; queue: Leg[]; leg?: Leg; seen: number; live: boolean }>();
     let legs = 0;
     const outingRuns = (most: number): Run[] => {
+      const current = this.city.now + Math.min(1, ((this.hour() - hourAt(this.city.now) + 24) % 24) / (24 / calendar.ticksPerDay));
       for (const ride of rides.values()) ride.live = false;
       this.city.visits.each(trip => {
         if (!trip.ride || trip.doing === 'delivering' || trip.path.length < 4) return;
@@ -268,9 +270,9 @@ export class CityRenderer {
         ride.seen = trip.started;
         const from = trip.path[0];
         const to = trip.path[trip.path.length - 1];
-        ride.queue.push({ from: from.y * MAP_SIZE + from.x, to: to.y * MAP_SIZE + to.x, path: trip.path.slice(1, -1), tier: trip.ride, id: legs++ });
-        // Someone who has been to three places since the car last moved skips to the latest.
-        if (ride.queue.length > 3) ride.queue.shift();
+        ride.queue.push({ from: from.y * MAP_SIZE + from.x, to: to.y * MAP_SIZE + to.x, path: trip.path.slice(1, -1), tier: trip.ride, id: legs++,
+          started: trip.started, returning: trip.returning,
+          initialProgress: Math.max(0, Math.min(1, (current - trip.started - (trip.delay ?? 0)) / travelTicks(trip.path, trip.doing, trip.ride))) });
       });
       const runs: Run[] = [];
       for (const [key, ride] of rides) {
@@ -286,7 +288,8 @@ export class CityRenderer {
           continue;
         }
         runs.push({ key: `o:${ride.leg.id}`, homeId: ride.leg.from, workId: ride.leg.to, path: ride.leg.path, tier: ride.leg.tier,
-          index: 100000 + ride.leg.id, wanted: 'work', walks: false, commute: false, person: { home: ride.home, slot: ride.slot } });
+          index: 100000 + ride.leg.id, wanted: 'work', walks: false, commute: false, person: { home: ride.home, slot: ride.slot },
+          journey: { started: ride.leg.started, returning: ride.leg.returning }, initialProgress: ride.leg.initialProgress });
       }
       return runs;
     };
@@ -370,7 +373,7 @@ export class CityRenderer {
       }
     };
     /** Whether the light at a junction is green for traffic going up and down; otherwise for across. */
-    const greenUpright = (x: number, y: number) => (Math.floor(this.city.shipments.elapsedMs / LIGHT) + x + y) % 2 === 0;
+    const greenUpright = (x: number, y: number) => (Math.floor(this.city.shipments.elapsedMotionMs / LIGHT) + x + y) % 2 === 0;
     const trafficNetwork: JunctionNetwork = {
       isJunction: cell => junctions.has(cell.y * MAP_SIZE + cell.x),
       green: (cell, hx, hy, time) => ((Math.floor(time / LIGHT) + cell.x + cell.y) % 2 === 0) === (Math.abs(hy) > Math.abs(hx)),
@@ -484,6 +487,7 @@ export class CityRenderer {
     this.visitorsAt = cell => this.city.visitorsAt(cell);
 
     const drawPeople = (elapsed = 0) => {
+      const travelTick = this.city.now + Math.min(1, ((this.hour() - hourAt(this.city.now) + 24) % 24) / (24 / calendar.ticksPerDay));
       queue.reset(cars);
       // Authoritative deliveries are present before commuters move, including the first frame.
       for (const [i, shipment] of this.city.shipments.frames().entries()) {
@@ -521,13 +525,15 @@ export class CityRenderer {
         const sinceStart = (this.hour() - start + 24) % 24;
         // At the weekend only the shops are open, so only their people go to work.
         const dayOff = weekendAt(this.city.now) && shiftIndex(zone, real.workId) !== SHOP_SHIFT;
+        const walks = weatherTravel(weatherAt(this.city.seed, this.city.now), tier, real.path.length).way === 'walk';
+        const headStart = Math.min(23, Math.max(HEAD_START,
+          (real.path.length + 1) * (walks ? WALK_MS_PER_TILE : VEHICLE_PACE[tier]) / REAL_TICK_MS * (24 / calendar.ticksPerDay)));
         runs.push({ key: `${real.homeId}:${real.workId}`, homeId: real.homeId, workId: real.workId, path: real.path, tier, index: i, commute: true,
-          wanted: !dayOff && (sinceStart < end - start || sinceStart >= 24 - HEAD_START) ? 'work' : 'home',
-          walks: weatherTravel(weatherAt(this.city.seed, this.city.now), tier, real.path.length).way === 'walk' });
+          wanted: !dayOff && (sinceStart < end - start || sinceStart >= 24 - headStart) ? 'work' : 'home', walks });
       }
-      // The clock runs far ahead of what can be watched, so only some of those out on wheels are
-      // shown at once: about one for every twelve commuters, or the streets would fill with them.
+      // Render a bounded sample of outings; the others use the same calendar travel pace.
       runs.push(...outingRuns(Math.min(RIDES_SHOWN, Math.max(6, Math.round(routes.length / 12)))));
+      this.city.visits.retainDrivers(new Set(runs.flatMap(run => run.person && run.journey ? [`${run.person.home}:${run.person.slot}`] : [])));
       this.city.shipments.junctionFlow.retainPrefix('commute:', new Set(runs.map(run => `commute:${run.key}`)));
       for (const real of runs) {
         const { key, index: i, tier, wanted } = real;
@@ -536,12 +542,19 @@ export class CityRenderer {
         const profile = residentAppearance(this.city.seed, identity?.id ?? real.homeId * 64 + (slot ?? 0), identity?.age ?? 30);
         const actor = `commute:${key}`;
         let trip = trips.get(key);
-        if (!trip) trips.set(key, trip = { at: 'home', wait: 0 });
+        if (!trip) trips.set(key, trip = { at: (real.initialProgress ?? 0) >= 1 ? 'work' : 'home', wait: 0,
+          along: real.initialProgress && real.initialProgress < 1 ? real.initialProgress * (real.path.length + 1) : undefined,
+          admitting: !!real.initialProgress && real.initialProgress < 1 });
         if (trip.along === undefined || trip.wait > 0) this.city.shipments.junctionFlow.leave(actor);
         // On a trip by way of the filling station the car follows that way instead of the straight one.
         const route = trip.detour ? { ...real, path: trip.detour.path } : real;
         const tiles = route.path.length;
         const steps = tiles + 1;
+        const reportJourney = () => {
+          if (real.person && real.journey) this.city.visits.reportJourney(real.person.home, real.person.slot,
+            real.journey.started, real.journey.returning, trip!.at === 'work' ? 1 : (trip!.along ?? 0) / steps, travelTick);
+        };
+        reportJourney();
         const driving = trip.along !== undefined && trip.driving !== undefined ? trip.driving : !real.walks;
         const home = cellOf(route.homeId);
         const workplace = cellOf(route.workId);
@@ -635,6 +648,12 @@ export class CityRenderer {
             ...passengerBodySize(tier), speed: trip.speed ?? 1 / VEHICLE_PACE[tier] };
         };
         const along = trip.along;
+        // Reattach saved/invisible outings only into a free road footprint; never spawn inside a car.
+        if (driving && trip.admitting && along >= 1 && along <= steps - 1) {
+          if (!queue.canOccupy(bodyAt(along))) continue;
+          queue.add(bodyAt(along));
+        }
+        trip.admitting = false;
         let speed = 1 / WALK_MS_PER_TILE;
 
         if (!driving) {
@@ -704,7 +723,7 @@ export class CityRenderer {
           while (remaining > 0) {
             const slice = Math.min(50, remaining);
             const decision = this.city.shipments.junctionFlow.inspect(actor, accepted, trip.drivePath, 1,
-              bodyAt, queue, trafficNetwork, this.city.shipments.elapsedMs - remaining, steps - 1);
+              bodyAt, queue, trafficNetwork, this.city.shipments.elapsedMotionMs - remaining, steps - 1);
             const distance = decision.stop === undefined ? Infinity : Math.max(0, decision.stop - accepted);
             trip.speed = followingSpeed(bodyAt(accepted), trip.speed ?? speed, speed, slice, queue, distance);
             const desired = Math.min(steps - 1, accepted + slice * trip.speed, decision.stop ?? Infinity);
@@ -746,6 +765,7 @@ export class CityRenderer {
             }
           } else trip.along = proposed;
         } else trip.along = walkForward(route.path, returning ? workplace : home, along, elapsed * speed, returning);
+        reportJourney();
         if (trip.along >= steps) trips.set(key, { at: to, wait: 0, count: trip.count });
       }
       if (elapsed > 0) {
@@ -855,7 +875,7 @@ export class CityRenderer {
           junctions.has(aheadY * MAP_SIZE + aheadX) && greenUpright(aheadX, aheadY) !== before.upright;
         const load = this.city.congestionAt(path[before.index], this.hour());
         const completed = advancePathVehicle(state, path, elapsed, pace, load, false, false, LIGHT,
-          undefined, { actor: key, time: this.city.shipments.elapsedMs - elapsed, occupancy: queue,
+          undefined, { actor: key, time: this.city.shipments.elapsedMotionMs - elapsed, occupancy: queue,
             body: bodyAt, junctions: this.city.shipments.junctionFlow, network: trafficNetwork });
         const pose = roadVehiclePose(path, state);
         const blocked = state.held > 0;
@@ -1495,6 +1515,7 @@ export class CityRenderer {
   }
 
   destroy(): void {
+    this.city.visits.releaseDrivers();
     this.city.shipments.junctionFlow.leavePrefix('commute:');
     this.city.shipments.junctionFlow.leavePrefix('bus:');
     this.city.shipments.setStreetTraffic([]);

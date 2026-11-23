@@ -10,8 +10,8 @@ import { roadBodySize } from './VehicleGeometry';
 const route = (to = 11, length = 4): ShippingRoute => ({ key: 'manual:1', lineId: 1, vehicles: 1,
   from: 8, to, goods: 240, trucks: 10, minutes: 8,
   path: Array.from({ length }, (_, x) => ({ x: x + 8, y: 1 })), stops: [{ to, index: length - 1 }] });
-function prepared() {
-  const runtime = new FreightRuntime();
+function prepared(motionScale = 1) {
+  const runtime = new FreightRuntime(motionScale);
   runtime.load({ time: 0, stocks: [[8, 24]], vehicles: [], current: [], previous: [] }, 0);
   runtime.sync([route()], [{ id: 8, amount: 240 }], [{ id: 11, amount: 240 }]);
   return runtime;
@@ -42,8 +42,8 @@ describe('actual freight', () => {
     runtime.advance(50, empty);
     expect(runtime.report().inTransit).toBeGreaterThan(0);
   });
-  it('keeps a queued truck behind a red-light truck for longer than the former timeout', () => {
-    const runtime = prepared();
+  it.each([1, 15])('keeps a queued truck behind a red-light truck without timing out at motion scale %s', motionScale => {
+    const runtime = prepared(motionScale);
     const line = { ...route(11, 10), vehicles: 2 };
     runtime.sync([line], [{ id: 8, amount: 240 }], [{ id: 11, amount: 240 }]);
     const save = runtime.save();

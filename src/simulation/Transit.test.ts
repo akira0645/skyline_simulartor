@@ -29,7 +29,7 @@ it('increases rainy-day transit demand without exceeding train capacity', () => 
   const dryRiders = city.getStats().riders;
   const wetTick = Array.from({ length: 200 }, (_, day) => dryTick + (day + 1) * 8)
     .find(tick => weatherAt(1, tick) !== 'clear')!;
-  engine.load({ ...engine.save(), tick: wetTick });
+  engine.load({ ...engine.save(), tick: wetTick, visitsAt: wetTick, freightRuntime: undefined });
   expect(city.getStats().riders).toBeGreaterThan(dryRiders);
   expect(city.getLines()[0].riders).toBeLessThanOrEqual(city.getLines()[0].capacity);
 });

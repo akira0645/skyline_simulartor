@@ -2,21 +2,23 @@ import { Graphics, Rectangle, Texture, type TextureSource } from 'pixi.js';
 import atlas from '../assets/street/bicycles.json';
 import { carDirection } from './carAppearance';
 
-export function bicycleFrame(heading: number, profile = atlas.parkedProfile, distance = 0) {
-  const rider = Math.max(0, Math.min(atlas.parkedProfile, Math.floor(profile)));
-  const phase = rider === atlas.parkedProfile ? 0 : Math.floor(Math.max(0, distance) / 5) % atlas.phases;
-  return { column: carDirection(heading), row: rider * atlas.phases + phase };
+export function bicycleFrame(heading: number, profile = atlas.parkedProfile, distance = 0, layout = atlas) {
+  const rider = Math.max(0, Math.min(layout.parkedProfile, Math.floor(profile)));
+  const phase = rider === layout.parkedProfile ? 0 : Math.floor(Math.max(0, distance) / 5) % layout.phases;
+  return { column: carDirection(heading), row: rider * layout.phases + phase };
 }
 
 /** Baked stacks share the car heading convention; pedals advance only with travelled distance. */
 export class BicycleSprites {
   private readonly frames = new Map<number, Texture>();
-  constructor(private readonly source: TextureSource) {
+  constructor(private readonly source: TextureSource, private readonly layout = atlas) {
+    const atlas = layout;
     if (source.width !== atlas.directions * atlas.frame || source.height !== (atlas.profiles + 1) * atlas.phases * atlas.frame)
       throw new Error('Bicycle atlas dimensions do not match its metadata');
   }
   draw(g: Graphics, x: number, y: number, heading: number, profile?: number, distance = 0) {
-    const { column, row } = bicycleFrame(heading, profile, distance);
+    const atlas = this.layout;
+    const { column, row } = bicycleFrame(heading, profile, distance, atlas);
     const key = row * atlas.directions + column;
     let frame = this.frames.get(key);
     if (!frame) {

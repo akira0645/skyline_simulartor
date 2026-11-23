@@ -1,8 +1,7 @@
 """Bake sprite-stacked cars for PixiJS. Requires Pillow and NumPy.
 
-Input: code-authored volume saved by draw-handmade.py as
-docs/design-assets/car/hatchback-slices.png (24 layers). Four diagnostic views
-are projected from that same volume; do not carve them back into a new volume.
+Input: code-authored master from vehicle_master.py (48 layers). Four diagnostic
+views and the saved strip are projected from that same volume.
 Run: python tools/bake-cars.py
 The game consumes only the baked atlas and JSON; Python is not a build dependency.
 """
@@ -12,12 +11,15 @@ import math
 
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
+from vehicle_master import car_volume, SCALE
+from draw_residents import handmade
+from pixel_actors import orthographic_views
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / 'docs/design-assets/car/hatchback-slices.png'
 OUTPUT = ROOT / 'src/assets/vehicles'
 ART = ROOT / 'docs/design-assets/car'
-COUNT, FRAME, DENSITY, DIRECTIONS = 24, 96, 4, 16
+COUNT, FRAME, DENSITY, DIRECTIONS = 48, 96, 4, 16
 PIVOT = (48, 56)
 COLOURS = ['5bb6ce', 'd87856', 'e6c15a', '8fbf6a', 'd6d9de',
            '2b2f3a', '8a1f2b', 'f4f6f8', 'f2c21f']
@@ -29,7 +31,10 @@ def colourise(volume, colour):
     target = np.array(tuple(bytes.fromhex(colour)), dtype=float)
     rgb = volume[..., :3].astype(float)
     r, g, b = np.moveaxis(rgb, -1, 0)
-    body = (g > r + 12) & (g > b * 0.86) & (b > r + 4) & (volume[..., 3] > 0)
+    body = np.zeros(volume.shape[:3], dtype=bool)
+    for name in ['body0', 'body1', 'body2', 'body3']:
+        body |= np.all(volume[..., :3] == np.array(tuple(bytes.fromhex(handmade.P[name][1:]))), axis=-1)
+    body &= volume[..., 3] > 0
     # Preserve glass, rubber, headlamps and red tail lamps. Body shading survives recolouring.
     brightness = (0.21 * r + 0.72 * g + 0.07 * b) / 145
     shaded = target * np.minimum(brightness, 1)[..., None]
@@ -39,7 +44,7 @@ def colourise(volume, colour):
     return result
 
 
-def render(volume, heading, frame=None, pivot=None, squash=0.9, spacing=0.35):
+def render(volume, heading, frame=None, pivot=None, squash=0.9, spacing=0.35, outline=True):
     frame = FRAME if frame is None else frame
     pivot = PIVOT if pivot is None else pivot
     n, length, width = volume.shape[:3]
@@ -73,46 +78,72 @@ def render(volume, heading, frame=None, pivot=None, squash=0.9, spacing=0.35):
     solid = body[..., 3] > 0
     pad = np.pad(solid, 1)
     ring = ~solid & (pad[:-2, 1:-1] | pad[2:, 1:-1] | pad[1:-1, :-2] | pad[1:-1, 2:])
-    canvas[ring] = (30, 37, 47, 255)
+    if outline: canvas[ring] = (30, 37, 47, 255)
     canvas[solid] = body[solid]
     assert not canvas[0, :, 3].any() and not canvas[-1, :, 3].any(), 'Vertical frame clipping'
     assert not canvas[:, 0, 3].any() and not canvas[:, -1, 3].any(), 'Horizontal frame clipping'
     return Image.fromarray(canvas)
 
 
+def reduce_master(master, frame):
+    """Select authored clusters at game size, then trace the finished silhouette once."""
+    data = np.array(master.resize((frame,frame),Image.Resampling.NEAREST))
+    solid = data[...,3] == 255
+    pad = np.pad(solid,1)
+    ring = ~solid & (pad[:-2,1:-1] | pad[2:,1:-1] | pad[1:-1,:-2] | pad[1:-1,2:])
+    data[ring] = (30,37,47,255)
+    assert not data[0,:,3].any() and not data[-1,:,3].any()
+    assert not data[:,0,3].any() and not data[:,-1,3].any()
+    return Image.fromarray(data)
+
+
 def main():
-    source = Image.open(SOURCE).convert('RGBA')
-    assert source.width % COUNT == 0, f'Unexpected slice strip: {source.size}'
-    width = source.width // COUNT
-    slices = [source.crop((z * width, 0, (z + 1) * width, source.height)) for z in range(COUNT)]
+    master = car_volume(handmade.P)
+    source = Image.new('RGBA', (master.shape[2] * COUNT, master.shape[1]))
+    for z, layer in enumerate(master): source.paste(Image.fromarray(layer), (z * master.shape[2], 0))
+    source.save(SOURCE)
+    views = orthographic_views(master)
+    diagnostic = Image.new('RGB', (sum(v.width for v in views)*3+120, max(v.height for v in views)*3+40), '#202a33')
+    x = 15
+    for name, view in zip(['TOP','SIDE','FRONT','BACK'], views):
+        ImageDraw.Draw(diagnostic).text((x,5), name, fill='#e1d8bf')
+        diagnostic.paste(view.resize((view.width*3,view.height*3),Image.Resampling.NEAREST),(x,25),view.resize((view.width*3,view.height*3),Image.Resampling.NEAREST)); x += view.width*3+30
+    diagnostic.save(ART/'hatchback-views.png')
     atlas = Image.new('RGBA', (FRAME * DIRECTIONS, FRAME * len(COLOURS) * len(SIZES)))
+    masters = []
     for size, (length, width) in enumerate(SIZES):
-        volume = np.stack([np.array(layer.resize((width * DENSITY, length * DENSITY), Image.Resampling.NEAREST)) for layer in slices])
+        volume = np.stack([np.array(Image.fromarray(layer).resize((width * DENSITY * SCALE, length * DENSITY * SCALE), Image.Resampling.NEAREST)) for layer in car_volume(handmade.P,size)])
         for variant, colour in enumerate(COLOURS):
             tinted = colourise(volume, colour)
             # Small physical details are in the stack, so every heading shares the same pivot.
             if variant == 8:
-                roof = Image.fromarray(tinted[-1])
-                d = ImageDraw.Draw(roof)
-                cx, cy = roof.width // 2, roof.height // 2
-                d.rectangle((cx - 5, cy - 2, cx + 4, cy + 1), fill='#25232b')
-                d.rectangle((cx - 4, cy - 2, cx + 3, cy), fill='#fff2b3')
-                tinted[-1] = np.array(roof)
+                # A supported roof lamp, built upward from the cabin rather than floating.
+                for level in range(-4,0):
+                    roof = Image.fromarray(tinted[level]); d = ImageDraw.Draw(roof)
+                    cx, cy = roof.width // 2, roof.height // 2
+                    d.rectangle((cx - 8, cy - 3, cx + 7, cy + 2), fill='#25232b')
+                    if level >= -2: d.rectangle((cx - 6, cy - 2, cx + 5, cy + 1), fill='#fff2b3')
+                    tinted[level] = np.array(roof)
             if size == 2:
                 # Gold trim on the bonnet, below the glass and centred across the body.
-                y = length * DENSITY - 7
-                for x in range(width * DENSITY // 2 - 5, width * DENSITY // 2 + 5):
+                y = length * DENSITY * SCALE - 14
+                for x in range(width * DENSITY * SCALE // 2 - 7, width * DENSITY * SCALE // 2 + 7):
                     solid = np.flatnonzero(tinted[:, y, x, 3])
                     if solid.size:
                         tinted[solid[-1], y, x] = (224, 178, 62, 255)
             for direction in range(DIRECTIONS):
-                atlas.paste(render(tinted, direction * math.tau / DIRECTIONS),
+                master_frame = render(tinted, direction * math.tau / DIRECTIONS, frame=FRAME*SCALE, pivot=tuple(p*SCALE for p in PIVOT),outline=False)
+                if variant == 0 and size == 0: masters.append(master_frame)
+                atlas.paste(reduce_master(master_frame,FRAME),
                             (direction * FRAME, (size * len(COLOURS) + variant) * FRAME))
     OUTPUT.mkdir(parents=True, exist_ok=True)
     atlas.save(OUTPUT / 'cars.png', optimize=True)
     metadata = dict(artSource='code', frameSize=FRAME, directions=DIRECTIONS, density=DENSITY, pivot=list(PIVOT),
                     colours=COLOURS, sizes=[list(size) for size in SIZES])
     (OUTPUT / 'cars.json').write_text(json.dumps(metadata, indent=2) + '\n', encoding='utf-8')
+    master_sheet = Image.new('RGBA',(FRAME*SCALE*DIRECTIONS,FRAME*SCALE))
+    for direction, frame in enumerate(masters): master_sheet.paste(frame,(direction*FRAME*SCALE,0))
+    master_sheet.save(ART/'car-master-turntable.png',optimize=True)
 
     # Contact sheet at actual game zooms, plus enlarged turntable angles for art inspection.
     preview = Image.new('RGB', (1080, 540), '#19252b')

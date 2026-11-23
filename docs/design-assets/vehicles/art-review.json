@@ -1,0 +1,23 @@
+{
+  "verdict": "PASS",
+  "score": 83,
+  "ship_ready": true,
+  "automated_score": 50,
+  "human_adjusted_score": 83,
+  "blocking_issues": [],
+  "soft_issues": [
+    "Bicycle side views (0 and 180 degrees) pack the lower leg, crank, and frame into a dense cluster; pedal contact remains less legible than the scooter foot contact.",
+    "The actual black luxury variant has weak body/tire separation against the dark overview background, particularly at diagonal angles; its windows and trim provide most of the readable structure."
+  ],
+  "false_positives": [
+    "The final scooter native check flags pillow shading, but visible dark tire/outline regions surround distinct clothing, skin, and scooter material planes rather than concentric shading. The face/clothing lighting is asymmetric, so this is a heuristic false positive.",
+    "The final scooter has 11 same-color orphan pixels (1.29% of visible pixels), zero doublies, and no anti-aliasing warning. Small trim and face accents are intentional; no detached pixel noise is visible.",
+    "The earlier car native check's 11 same-color orphan pixels were compact lamp, bumper, tire, and trim accents attached to its silhouette, not accidental detached noise."
+  ],
+  "reasoning": "Inspected the refreshed final vehicles-overview.png with the actual black production luxury variant; retained the immediately preceding native scooter inspection and quality check because that artifact is unchanged. Scooter wheels remain attached and rider seat, handlebar, and foot contact remain plausible; no visible broken vehicle structure or clipping was observed. The black luxury variant restores the earlier low-contrast concern, which is a readability limitation rather than a structural failure. Exact pivot alignment still requires a marked anchor or integration overlay because the overview has no pivot markers.",
+  "specific_fixes": [
+    "Optional polish: separate the bicycle pedal/ankle from the adjacent frame cluster with one contrasting pixel where its side-view overlap is densest.",
+    "Optional polish: add restrained body-edge or tire-separation accents where the black luxury silhouette merges with dark backgrounds.",
+    "For integration verification, overlay the shared wheel-ground pivot across all eight directions and retain an invariant ground anchor."
+  ]
+}

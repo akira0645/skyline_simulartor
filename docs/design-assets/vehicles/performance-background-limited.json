@@ -1,0 +1,28 @@
+{
+  "label": "vehicle-masters",
+  "size": "large",
+  "tick": 23520,
+  "population": 2166,
+  "frames": 415,
+  "simulationMs": {
+    "mean": 0.47542168433407705,
+    "p50": 0.20000004768371582,
+    "p95": 1.5
+  },
+  "actorsMs": {
+    "mean": 16.55012048181281,
+    "p50": 15.899999976158142,
+    "p95": 24
+  },
+  "effectsMs": {
+    "mean": 0.5537349416548947,
+    "p50": 0.5,
+    "p95": 0.8000000715255737
+  },
+  "frameIntervalMs": {
+    "mean": 19.348067632619884,
+    "p50": 18.399999976158142,
+    "p95": 27.799999952316284
+  },
+  "note": "Same CityRenderer, 2s warm-up + 8s sampling. Browser CPU/frame cadence; not a physical tablet FPS claim."
+}

@@ -1,0 +1,13 @@
+{
+  "artSource": "code",
+  "density": 4,
+  "frame": 64,
+  "directions": 16,
+  "phases": 1,
+  "profiles": 24,
+  "parkedProfile": 24,
+  "pivot": [
+    32,
+    45
+  ]
+}

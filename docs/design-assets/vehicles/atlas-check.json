@@ -1,0 +1,50 @@
+[
+  {
+    "name": "cars",
+    "size": [
+      1536,
+      2592
+    ],
+    "frames": 432,
+    "rgbaMiB": 15.1875,
+    "pngBytes": 300421,
+    "frameEdgesClear": true,
+    "alpha": [
+      0,
+      55,
+      255
+    ]
+  },
+  {
+    "name": "bicycles",
+    "size": [
+      1024,
+      3200
+    ],
+    "frames": 800,
+    "rgbaMiB": 12.5,
+    "pngBytes": 489835,
+    "frameEdgesClear": true,
+    "alpha": [
+      0,
+      55,
+      255
+    ]
+  },
+  {
+    "name": "scooters",
+    "size": [
+      1024,
+      1600
+    ],
+    "frames": 400,
+    "rgbaMiB": 6.25,
+    "pngBytes": 241937,
+    "frameEdgesClear": true,
+    "alpha": [
+      0,
+      55,
+      255
+    ]
+  }
+]

@@ -21,6 +21,8 @@ import newyorkDetailUrl from '../assets/buildings/city-newyork-detail.png';
 import { CarSprites } from './CarSprites';
 import { BicycleSprites } from './BicycleSprites';
 import bicycleUrl from '../assets/street/bicycles.png';
+import scooterUrl from '../assets/street/scooters.png';
+import scooterAtlas from '../assets/street/scooters.json';
 import { carHeading } from './carAppearance';
 import { StreetArt } from './StreetArt';
 import { WalkerMotion } from './WalkerMotion';
@@ -84,6 +86,7 @@ const detailUrls: Record<Theme, string> = { classic: cityDetailUrl, sf: sfDetail
 const detailPool = new SharedAssetPool<Theme, Texture>(
   theme => Assets.load<Texture>(detailUrls[theme]), theme => Assets.unload(detailUrls[theme]));
 const bicyclePool = new SharedAssetPool<string, Texture>(() => Assets.load<Texture>(bicycleUrl), () => Assets.unload(bicycleUrl));
+const scooterPool = new SharedAssetPool<string, Texture>(() => Assets.load<Texture>(scooterUrl), () => Assets.unload(scooterUrl));
 
 type FacilityVisit = ReturnType<BuildingSystem['facilityVisits']>[number];
 
@@ -134,6 +137,8 @@ export class CityRenderer {
   private tileRenderer?: TileRenderer;
   private bicycles?: BicycleSprites;
   private bicycleLease = false;
+  private scooters?: BicycleSprites;
+  private scooterLease = false;
 
   async mount(host: HTMLElement, signal: AbortSignal, getTool: () => Tool,
     report: (message: string) => void, inspect: (cell: Cell) => void): Promise<void> {
@@ -170,6 +175,18 @@ export class CityRenderer {
       }).catch(error => { if (!signal.aborted) console.warn('Bicycle detail unavailable; keeping simple bicycles', error); });
     };
     const map = this.city.map;
+    let scooterRequested = false;
+    const requestScooters = () => {
+      if (scooterRequested) return;
+      scooterRequested = true;
+      void scooterPool.acquire('scooter').then(texture => {
+        if (signal.aborted || this.app !== app) { void scooterPool.release('scooter'); return; }
+        texture.source.scaleMode = 'nearest';
+        this.scooters = new BicycleSprites(texture.source, scooterAtlas);
+        this.scooterLease = true;
+        this.refresh?.();
+      }).catch(error => { if (!signal.aborted) console.warn('Scooter detail unavailable; keeping simple scooters', error); });
+    };
     const camera = new Camera();
     // The panels float over the map: leave room to drag any corner out from under them, and
     // start with the map's corner clear of the top bar.
@@ -327,7 +344,7 @@ export class CityRenderer {
         people.rect(Math.round(cx) - 2, Math.round(cy) - 2, vertical ? 3 : 6, vertical ? 6 : 3).fill(0xc0c5c9);
         return;
       }
-      if (tier >= 2 && camera.scale >= DETAIL_ZOOM) {
+      if (tier >= 2) {
         carSprites.draw(people, cx, cy, heading, tier, index, this.city.theme);
         return;
       }
@@ -335,35 +352,19 @@ export class CityRenderer {
         if (this.bicycles) { this.bicycles.draw(people, cx, cy, heading, bicycle?.profile, bicycle?.distance); return; }
         requestBicycles();
       }
+      if (tier === 1) {
+        if (this.scooters) { this.scooters.draw(people, cx, cy, heading, bicycle?.profile); return; }
+        requestScooters();
+      }
       const [long, wide] = SIZES[tier];
       const width = vertical ? wide : long;
       const height = vertical ? long : wide;
       const left = Math.round(cx - width / 2);
       const top = Math.round(cy - height / 2);
       people.rect(left, top, width, height).fill(0x232831);
-      if (tier < 2) {
-        // A bicycle or a scooter: a thin frame and the rider's head.
-        if (tier) people.rect(left + 1, top + 1, width - 2, height - 2).fill([0xd87856, 0x5bb6ce, 0xe6c15a][index % 3]);
-        people.rect(Math.round(cx) - 1, Math.round(cy) - 1, 3, 3).fill(0xffd1a0);
-        return;
-      }
-      // In New York most of the ordinary cars are yellow cabs.
-      const cab = this.city.theme === 'newyork' && tier < 4 && index % 5 < 3;
-      people.rect(left + 1, top + 1, width - 2, height - 2).fill(cab ? 0xf2c21f : tier === 4 ? [0x2b2f3a, 0x8a1f2b, 0xf4f6f8][index % 3] :
-        [0x5bb6ce, 0xd87856, 0xe6c15a, 0x8fbf6a, 0xd6d9de][index % 5]);
-      people.rect(left + (vertical ? 2 : 4), top + (vertical ? 4 : 2), width - (vertical ? 4 : 8), height - (vertical ? 8 : 4))
-        .fill(0xa9d8de);
-      if (camera.scale >= DETAIL_ZOOM) {
-        // Close up: tyres at the corners.
-        for (const end of [2, long - 4]) {
-          for (const side of [0, wide - 0.5]) {
-            people.rect(left + (vertical ? side : end), top + (vertical ? end : side), vertical ? 0.5 : 2, vertical ? 2 : 0.5)
-              .fill(0x0c0d10);
-          }
-        }
-      }
-      // The dearest cars carry a gold trim.
-      if (tier === 4) people.rect(left + 1, top + 1, vertical ? width - 2 : 2, vertical ? 2 : height - 2).fill(0xe0b23e);
+      // Temporary fallback while a two-wheeler's shared atlas loads.
+      if (tier) people.rect(left + 1, top + 1, width - 2, height - 2).fill([0xd87856, 0x5bb6ce, 0xe6c15a][index % 3]);
+      people.rect(Math.round(cx) - 1, Math.round(cy) - 1, 3, 3).fill(0xffd1a0);
     };
     /** Road tiles where three or four roads meet, which get traffic lights; looked up again now and then. */
     let junctions = new Set<number>();
@@ -829,7 +830,11 @@ export class CityRenderer {
           const next = commuterPosition({ homeId: origin.y * MAP_SIZE + origin.x, workId: dest.y * MAP_SIZE + dest.x,
             path: trip.path.slice(1, -1) }, 0, 'walk', Math.min(1, trip.progress + 0.02), false) ?? point;
           const upright = Math.abs(next.y - point.y) > Math.abs(next.x - point.x);
-          drawCar(spot.x, spot.y, upright, trip.home + trip.slot, 1);
+          const identity = this.city.residentLook(trip.home, trip.slot);
+          drawCar(spot.x, spot.y, upright, trip.home + trip.slot, 1,
+            carHeading(next.x - point.x, next.y - point.y, Math.PI / 2),
+            { profile: residentAppearance(this.city.seed, identity?.id ?? trip.home * 64 + trip.slot,
+              identity?.age ?? 30, identity?.gender), distance: 0 });
           if (camera.scale >= 0.85) {
             const back = { x: Math.sign(point.x - next.x) * 4, y: Math.sign(point.y - next.y) * 4 };
             people.rect(Math.round(spot.x + back.x) - 2, Math.round(spot.y + back.y) - 2, 5, 5).fill(0x25232b)
@@ -1550,8 +1555,11 @@ export class CityRenderer {
     this.carSprites?.destroy();
     this.carSprites = undefined;
     this.bicycles?.destroy();
+    this.scooters?.destroy();
+    this.scooters = undefined;
     this.bicycles = undefined;
     if (this.bicycleLease) { this.bicycleLease = false; void bicyclePool.release('bicycle'); }
+    if (this.scooterLease) { this.scooterLease = false; void scooterPool.release('scooter'); }
     this.streetArt?.destroy();
     this.streetArt = undefined;
     this.app = undefined;

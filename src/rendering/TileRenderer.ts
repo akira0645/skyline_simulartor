@@ -112,10 +112,19 @@ export class TileRenderer {
   private cityUnit = CITY_TILE;
 
   constructor(private readonly kenney: TextureSource, private readonly sheets: Record<Theme, TextureSource>,
-    private readonly detailedSheets: Record<Theme, TextureSource>, private readonly streetArt: StreetArt) {
+    private readonly detailedSheets: Partial<Record<Theme, TextureSource>>, private readonly streetArt: StreetArt) {
     this.city = sheets.classic;
     this.terrain.addChild(this.tiles);
     this.view.addChild(this.terrain, this.overlay);
+  }
+
+  releaseSheet(source: TextureSource): void {
+    for (const frame of this.frames.get(source)?.values() ?? []) frame.destroy(false);
+    this.frames.delete(source);
+  }
+
+  destroy(): void {
+    for (const source of [...this.frames.keys()]) this.releaseSheet(source);
   }
 
   /** A building of two tiles by two from the city sheet, by its place in the row of them. */
@@ -162,8 +171,8 @@ export class TileRenderer {
     this.terrain.updateCacheTexture();
     const map = city.map;
     const { theme } = city;
-    const detailed = camera.scale >= DETAIL_ZOOM;
-    this.city = (detailed ? this.detailedSheets : this.sheets)[theme];
+    const detailed = camera.scale >= DETAIL_ZOOM && !!this.detailedSheets[theme];
+    this.city = detailed ? this.detailedSheets[theme]! : this.sheets[theme];
     this.cityUnit = detailed ? buildingAtlas.tileSize : CITY_TILE;
     const start = camera.cellAt(0, 0);
     const end = camera.cellAt(width, height);

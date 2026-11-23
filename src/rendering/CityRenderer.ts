@@ -4,7 +4,10 @@ import { hitVehicle, nextDeliveryStop, type VehicleInfo, type VehicleActivity } 
 import { numberBadge } from './routeBadges';
 import { freightMapRoutes, freightColourId, selectedFreightKey } from './routeViews';
 import { weatherAt, weatherTravel } from '../simulation/Weather';
-import { Application, Assets, Graphics, type Texture } from 'pixi.js';
+import { Application, Assets, Graphics, type Texture, type TextureSource } from 'pixi.js';
+import type { Theme } from '../simulation/SaveData';
+import { LazyThemeAsset } from './LazyThemeAsset';
+import { SharedAssetPool } from './SharedAssetPool';
 import cityUrl from '../assets/city.png';
 import sfUrl from '../assets/city-sf.png';
 import californiaUrl from '../assets/city-california.png';
@@ -67,6 +70,11 @@ const HEAD_START = 2;
 
 import type { BuildingSystem } from '../simulation/BuildingSystem';
 
+const detailUrls: Record<Theme, string> = { classic: cityDetailUrl, sf: sfDetailUrl,
+  california: californiaDetailUrl, newyork: newyorkDetailUrl };
+const detailPool = new SharedAssetPool<Theme, Texture>(
+  theme => Assets.load<Texture>(detailUrls[theme]), theme => Assets.unload(detailUrls[theme]));
+
 type FacilityVisit = ReturnType<BuildingSystem['facilityVisits']>[number];
 
 export class CityRenderer {
@@ -110,6 +118,8 @@ export class CityRenderer {
   private observer?: ResizeObserver;
   private carSprites?: CarSprites;
   private streetArt?: StreetArt;
+  private detailAsset?: LazyThemeAsset<Texture>;
+  private tileRenderer?: TileRenderer;
 
   async mount(host: HTMLElement, signal: AbortSignal, getTool: () => Tool,
     report: (message: string) => void, inspect: (cell: Cell) => void): Promise<void> {
@@ -117,8 +127,7 @@ export class CityRenderer {
     await app.init({ width: host.clientWidth, height: host.clientHeight,
       background: '#1d1f24', antialias: false, autoStart: false });
     const [sheets, streetArt] = await Promise.all([
-      Promise.all([tilesUrl, cityUrl, sfUrl, californiaUrl, newyorkUrl, carsUrl,
-        cityDetailUrl, sfDetailUrl, californiaDetailUrl, newyorkDetailUrl].map(url => Assets.load<Texture>(url))),
+      Promise.all([tilesUrl, cityUrl, sfUrl, californiaUrl, newyorkUrl, carsUrl].map(url => Assets.load<Texture>(url))),
       StreetArt.load()])
       .catch((error: unknown) => {
         app.destroy(true);
@@ -151,9 +160,23 @@ export class CityRenderer {
       camera.pan(0, 0, app.screen.width, app.screen.height);
     };
     frameCity();
-    const tiles = new TileRenderer(sheets[0].source,
+    const detailedSheets: Partial<Record<Theme, TextureSource>> = {};
+    const tiles = this.tileRenderer = new TileRenderer(sheets[0].source,
       { classic: sheets[1].source, sf: sheets[2].source, california: sheets[3].source, newyork: sheets[4].source },
-      { classic: sheets[6].source, sf: sheets[7].source, california: sheets[8].source, newyork: sheets[9].source }, streetArt);
+      detailedSheets, streetArt);
+    const detailAsset = this.detailAsset = new LazyThemeAsset(
+      theme => detailPool.acquire(theme),
+      async (theme, texture) => {
+        if (detailedSheets[theme] === texture.source) delete detailedSheets[theme];
+        tiles.releaseSheet(texture.source);
+        await detailPool.release(theme);
+      },
+      (theme, texture) => {
+        texture.source.scaleMode = 'nearest';
+        detailedSheets[theme] = texture.source;
+        if (!signal.aborted) this.refresh?.();
+      },
+      error => { if (!signal.aborted) console.warn('Close-up art unavailable; retaining base city art', error); });
     const canvas = app.canvas;
     app.stage.addChild(tiles.view);
     const landGrid = new Graphics();
@@ -1196,6 +1219,8 @@ export class CityRenderer {
     let hasFocusMatches = false;
     let repaint = 0;
     const draw = (actors = true) => {
+      if (camera.scale >= DETAIL_ZOOM) detailAsset.request(this.city.theme);
+      else detailAsset.retain(this.city.theme);
       const focus = this.focus;
       if (focus !== lastFocus || lastRevision !== map.layoutRevision) {
         lastFocus = focus;
@@ -1448,6 +1473,10 @@ export class CityRenderer {
     this.setPlaying = undefined;
     this.getVehicle = undefined;
     this.onVehicle = undefined;
+    this.detailAsset?.destroy();
+    this.detailAsset = undefined;
+    this.tileRenderer?.destroy();
+    this.tileRenderer = undefined;
     this.observer?.disconnect();
     this.app?.destroy(true, { children: true });
     this.carSprites?.destroy();

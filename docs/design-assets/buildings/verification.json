@@ -1,0 +1,95 @@
+{
+  "baseline": "4dd3050",
+  "nativeExteriorFrames": 108,
+  "courtyardMaterialChecks": 2,
+  "themes": [
+    {
+      "theme": "classic",
+      "frames": 127,
+      "baseSize": [
+        512,
+        544
+      ],
+      "detailSize": [
+        2048,
+        2176
+      ],
+      "updatedFrames": 108,
+      "retainedFrames": 19,
+      "updatedBaseFromDetail": true,
+      "protectedGlazing": true,
+      "groundUnchanged": true,
+      "iconsUnchanged": true,
+      "baseAlphaChangedFrames": 108,
+      "detailRgbaMiB": 17.0,
+      "pngBeforeBytes": 448993,
+      "pngAfterBytes": 328906
+    },
+    {
+      "theme": "sf",
+      "frames": 127,
+      "baseSize": [
+        512,
+        544
+      ],
+      "detailSize": [
+        2048,
+        2176
+      ],
+      "updatedFrames": 108,
+      "retainedFrames": 19,
+      "updatedBaseFromDetail": true,
+      "protectedGlazing": true,
+      "groundUnchanged": true,
+      "iconsUnchanged": true,
+      "baseAlphaChangedFrames": 108,
+      "detailRgbaMiB": 17.0,
+      "pngBeforeBytes": 449397,
+      "pngAfterBytes": 331342
+    },
+    {
+      "theme": "california",
+      "frames": 127,
+      "baseSize": [
+        512,
+        544
+      ],
+      "detailSize": [
+        2048,
+        2176
+      ],
+      "updatedFrames": 108,
+      "retainedFrames": 19,
+      "updatedBaseFromDetail": true,
+      "protectedGlazing": true,
+      "groundUnchanged": true,
+      "iconsUnchanged": true,
+      "baseAlphaChangedFrames": 108,
+      "detailRgbaMiB": 17.0,
+      "pngBeforeBytes": 422869,
+      "pngAfterBytes": 304382
+    },
+    {
+      "theme": "newyork",
+      "frames": 127,
+      "baseSize": [
+        512,
+        544
+      ],
+      "detailSize": [
+        2048,
+        2176
+      ],
+      "updatedFrames": 108,
+      "retainedFrames": 19,
+      "updatedBaseFromDetail": true,
+      "protectedGlazing": true,
+      "groundUnchanged": true,
+      "iconsUnchanged": true,
+      "baseAlphaChangedFrames": 108,
+      "detailRgbaMiB": 17.0,
+      "pngBeforeBytes": 462665,
+      "pngAfterBytes": 353838
+    }
+  ]
+}

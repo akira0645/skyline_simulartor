@@ -1,0 +1,1032 @@
+{
+  "artSource": "code",
+  "masterTile": 256,
+  "detailTile": 128,
+  "baseTile": 32,
+  "framesPerTheme": 127,
+  "updatedPerTheme": 108,
+  "themes": [
+    "classic",
+    "sf",
+    "california",
+    "newyork"
+  ],
+  "frames": [
+    {
+      "row": 2,
+      "column": 0,
+      "span": 1,
+      "kind": "home",
+      "updated": true,
+      "exterior": "house"
+    },
+    {
+      "row": 2,
+      "column": 1,
+      "span": 1,
+      "kind": "home",
+      "updated": true,
+      "exterior": "house"
+    },
+    {
+      "row": 2,
+      "column": 2,
+      "span": 1,
+      "kind": "home",
+      "updated": true,
+      "exterior": "house"
+    },
+    {
+      "row": 2,
+      "column": 3,
+      "span": 1,
+      "kind": "home",
+      "updated": true,
+      "exterior": "apartments"
+    },
+    {
+      "row": 2,
+      "column": 4,
+      "span": 1,
+      "kind": "home",
+      "updated": true,
+      "exterior": "apartments"
+    },
+    {
+      "row": 2,
+      "column": 5,
+      "span": 1,
+      "kind": "home",
+      "updated": true,
+      "exterior": "residential-tower"
+    },
+    {
+      "row": 2,
+      "column": 6,
+      "span": 1,
+      "kind": "home",
+      "updated": true,
+      "exterior": "apartments"
+    },
+    {
+      "row": 2,
+      "column": 7,
+      "span": 1,
+      "kind": "home",
+      "updated": true,
+      "exterior": "apartments"
+    },
+    {
+      "row": 2,
+      "column": 8,
+      "span": 1,
+      "kind": "home",
+      "updated": true,
+      "exterior": "residential-tower"
+    },
+    {
+      "row": 2,
+      "column": 9,
+      "span": 1,
+      "kind": "home",
+      "updated": true,
+      "exterior": "residential-tower"
+    },
+    {
+      "row": 2,
+      "column": 10,
+      "span": 1,
+      "kind": "home",
+      "updated": true,
+      "exterior": "house"
+    },
+    {
+      "row": 3,
+      "column": 0,
+      "span": 1,
+      "kind": "shop",
+      "updated": true,
+      "exterior": "arcade-shop"
+    },
+    {
+      "row": 3,
+      "column": 1,
+      "span": 1,
+      "kind": "shop",
+      "updated": true,
+      "exterior": "arcade-shop"
+    },
+    {
+      "row": 3,
+      "column": 2,
+      "span": 1,
+      "kind": "office",
+      "updated": true,
+      "exterior": "rounded-office"
+    },
+    {
+      "row": 3,
+      "column": 3,
+      "span": 1,
+      "kind": "shop",
+      "updated": true,
+      "exterior": "arcade-shop"
+    },
+    {
+      "row": 3,
+      "column": 4,
+      "span": 1,
+      "kind": "shop",
+      "updated": true,
+      "exterior": "department-store"
+    },
+    {
+      "row": 3,
+      "column": 5,
+      "span": 1,
+      "kind": "office",
+      "updated": true,
+      "exterior": "rounded-office"
+    },
+    {
+      "row": 3,
+      "column": 6,
+      "span": 1,
+      "kind": "office",
+      "updated": true,
+      "exterior": "rounded-office"
+    },
+    {
+      "row": 3,
+      "column": 7,
+      "span": 1,
+      "kind": "shop",
+      "updated": true,
+      "exterior": "department-store"
+    },
+    {
+      "row": 3,
+      "column": 8,
+      "span": 1,
+      "kind": "office",
+      "updated": true,
+      "exterior": "rounded-office"
+    },
+    {
+      "row": 3,
+      "column": 9,
+      "span": 1,
+      "kind": "office",
+      "updated": true,
+      "exterior": "rounded-office"
+    },
+    {
+      "row": 4,
+      "column": 0,
+      "span": 1,
+      "kind": "industrial",
+      "updated": true,
+      "exterior": "factory"
+    },
+    {
+      "row": 4,
+      "column": 1,
+      "span": 1,
+      "kind": "industrial",
+      "updated": true,
+      "exterior": "warehouse"
+    },
+    {
+      "row": 4,
+      "column": 2,
+      "span": 1,
+      "kind": "industrial",
+      "updated": true,
+      "exterior": "tanks"
+    },
+    {
+      "row": 4,
+      "column": 3,
+      "span": 1,
+      "kind": "industrial",
+      "updated": true,
+      "exterior": "factory"
+    },
+    {
+      "row": 4,
+      "column": 4,
+      "span": 1,
+      "kind": "industrial",
+      "updated": true,
+      "exterior": "factory"
+    },
+    {
+      "row": 4,
+      "column": 5,
+      "span": 1,
+      "kind": "industrial",
+      "updated": true,
+      "exterior": "warehouse"
+    },
+    {
+      "row": 4,
+      "column": 6,
+      "span": 1,
+      "kind": "industrial",
+      "updated": true,
+      "exterior": "factory"
+    },
+    {
+      "row": 4,
+      "column": 7,
+      "span": 1,
+      "kind": "industrial",
+      "updated": true,
+      "exterior": "factory"
+    },
+    {
+      "row": 4,
+      "column": 8,
+      "span": 1,
+      "kind": "industrial",
+      "updated": true,
+      "exterior": "factory"
+    },
+    {
+      "row": 5,
+      "column": 0,
+      "span": 1,
+      "kind": "civic",
+      "updated": false,
+      "exterior": null
+    },
+    {
+      "row": 5,
+      "column": 1,
+      "span": 1,
+      "kind": "civic",
+      "updated": true,
+      "exterior": "water-tower"
+    },
+    {
+      "row": 5,
+      "column": 2,
+      "span": 1,
+      "kind": "civic",
+      "updated": false,
+      "exterior": null
+    },
+    {
+      "row": 5,
+      "column": 3,
+      "span": 1,
+      "kind": "civic",
+      "updated": false,
+      "exterior": null
+    },
+    {
+      "row": 5,
+      "column": 4,
+      "span": 1,
+      "kind": "civic",
+      "updated": true,
+      "exterior": "school"
+    },
+    {
+      "row": 5,
+      "column": 5,
+      "span": 1,
+      "kind": "civic",
+      "updated": true,
+      "exterior": "clinic"
+    },
+    {
+      "row": 5,
+      "column": 6,
+      "span": 1,
+      "kind": "civic",
+      "updated": false,
+      "exterior": null
+    },
+    {
+      "row": 5,
+      "column": 7,
+      "span": 1,
+      "kind": "civic",
+      "updated": false,
+      "exterior": null
+    },
+    {
+      "row": 5,
+      "column": 8,
+      "span": 1,
+      "kind": "civic",
+      "updated": false,
+      "exterior": null
+    },
+    {
+      "row": 5,
+      "column": 9,
+      "span": 1,
+      "kind": "civic",
+      "updated": true,
+      "exterior": "highschool"
+    },
+    {
+      "row": 5,
+      "column": 10,
+      "span": 1,
+      "kind": "civic",
+      "updated": true,
+      "exterior": "temple"
+    },
+    {
+      "row": 5,
+      "column": 11,
+      "span": 1,
+      "kind": "civic",
+      "updated": false,
+      "exterior": null
+    },
+    {
+      "row": 5,
+      "column": 12,
+      "span": 1,
+      "kind": "civic",
+      "updated": false,
+      "exterior": null
+    },
+    {
+      "row": 5,
+      "column": 13,
+      "span": 1,
+      "kind": "civic",
+      "updated": true,
+      "exterior": "library"
+    },
+    {
+      "row": 5,
+      "column": 14,
+      "span": 1,
+      "kind": "civic",
+      "updated": false,
+      "exterior": null
+    },
+    {
+      "row": 5,
+      "column": 15,
+      "span": 1,
+      "kind": "civic",
+      "updated": false,
+      "exterior": null
+    },
+    {
+      "row": 6,
+      "column": 0,
+      "span": 2,
+      "kind": "home",
+      "updated": true,
+      "exterior": "housing-complex"
+    },
+    {
+      "row": 6,
+      "column": 2,
+      "span": 2,
+      "kind": "civic",
+      "updated": true,
+      "exterior": "hospital"
+    },
+    {
+      "row": 6,
+      "column": 4,
+      "span": 2,
+      "kind": "civic",
+      "updated": true,
+      "exterior": "university"
+    },
+    {
+      "row": 6,
+      "column": 6,
+      "span": 2,
+      "kind": "civic",
+      "updated": true,
+      "exterior": "museum"
+    },
+    {
+      "row": 6,
+      "column": 8,
+      "span": 2,
+      "kind": "civic",
+      "updated": true,
+      "exterior": "stadium"
+    },
+    {
+      "row": 6,
+      "column": 10,
+      "span": 2,
+      "kind": "civic",
+      "updated": false,
+      "exterior": null
+    },
+    {
+      "row": 6,
+      "column": 12,
+      "span": 2,
+      "kind": "civic",
+      "updated": false,
+      "exterior": null
+    },
+    {
+      "row": 6,
+      "column": 14,
+      "span": 2,
+      "kind": "civic",
+      "updated": false,
+      "exterior": null
+    },
+    {
+      "row": 8,
+      "column": 0,
+      "span": 1,
+      "kind": "home",
+      "updated": true,
+      "exterior": "home-kind-0-level-1"
+    },
+    {
+      "row": 8,
+      "column": 1,
+      "span": 1,
+      "kind": "home",
+      "updated": true,
+      "exterior": "home-kind-0-level-1"
+    },
+    {
+      "row": 8,
+      "column": 2,
+      "span": 1,
+      "kind": "home",
+      "updated": true,
+      "exterior": "home-kind-1-level-1"
+    },
+    {
+      "row": 8,
+      "column": 3,
+      "span": 1,
+      "kind": "home",
+      "updated": true,
+      "exterior": "home-kind-1-level-1"
+    },
+    {
+      "row": 8,
+      "column": 4,
+      "span": 1,
+      "kind": "home",
+      "updated": true,
+      "exterior": "home-kind-2-level-1"
+    },
+    {
+      "row": 8,
+      "column": 5,
+      "span": 1,
+      "kind": "home",
+      "updated": true,
+      "exterior": "home-kind-2-level-1"
+    },
+    {
+      "row": 8,
+      "column": 6,
+      "span": 1,
+      "kind": "home",
+      "updated": true,
+      "exterior": "home-kind-3-level-1"
+    },
+    {
+      "row": 8,
+      "column": 7,
+      "span": 1,
+      "kind": "home",
+      "updated": true,
+      "exterior": "home-kind-3-level-1"
+    },
+    {
+      "row": 8,
+      "column": 8,
+      "span": 1,
+      "kind": "home",
+      "updated": true,
+      "exterior": "home-kind-4-level-1"
+    },
+    {
+      "row": 8,
+      "column": 9,
+      "span": 1,
+      "kind": "home",
+      "updated": true,
+      "exterior": "home-kind-4-level-1"
+    },
+    {
+      "row": 8,
+      "column": 10,
+      "span": 1,
+      "kind": "home",
+      "updated": true,
+      "exterior": "home-kind-5-level-1"
+    },
+    {
+      "row": 8,
+      "column": 11,
+      "span": 1,
+      "kind": "home",
+      "updated": true,
+      "exterior": "home-kind-5-level-1"
+    },
+    {
+      "row": 8,
+      "column": 12,
+      "span": 1,
+      "kind": "home",
+      "updated": true,
+      "exterior": "home-kind-6-level-1"
+    },
+    {
+      "row": 8,
+      "column": 13,
+      "span": 1,
+      "kind": "home",
+      "updated": true,
+      "exterior": "home-kind-6-level-1"
+    },
+    {
+      "row": 8,
+      "column": 14,
+      "span": 1,
+      "kind": "home",
+      "updated": true,
+      "exterior": "home-kind-7-level-1"
+    },
+    {
+      "row": 8,
+      "column": 15,
+      "span": 1,
+      "kind": "home",
+      "updated": true,
+      "exterior": "home-kind-7-level-1"
+    },
+    {
+      "row": 9,
+      "column": 0,
+      "span": 1,
+      "kind": "home",
+      "updated": true,
+      "exterior": "home-kind-0-level-2"
+    },
+    {
+      "row": 9,
+      "column": 1,
+      "span": 1,
+      "kind": "home",
+      "updated": true,
+      "exterior": "home-kind-0-level-2"
+    },
+    {
+      "row": 9,
+      "column": 2,
+      "span": 1,
+      "kind": "home",
+      "updated": true,
+      "exterior": "home-kind-1-level-2"
+    },
+    {
+      "row": 9,
+      "column": 3,
+      "span": 1,
+      "kind": "home",
+      "updated": true,
+      "exterior": "home-kind-1-level-2"
+    },
+    {
+      "row": 9,
+      "column": 4,
+      "span": 1,
+      "kind": "home",
+      "updated": true,
+      "exterior": "home-kind-2-level-2"
+    },
+    {
+      "row": 9,
+      "column": 5,
+      "span": 1,
+      "kind": "home",
+      "updated": true,
+      "exterior": "home-kind-2-level-2"
+    },
+    {
+      "row": 9,
+      "column": 6,
+      "span": 1,
+      "kind": "home",
+      "updated": true,
+      "exterior": "home-kind-3-level-2"
+    },
+    {
+      "row": 9,
+      "column": 7,
+      "span": 1,
+      "kind": "home",
+      "updated": true,
+      "exterior": "home-kind-3-level-2"
+    },
+    {
+      "row": 9,
+      "column": 8,
+      "span": 1,
+      "kind": "home",
+      "updated": true,
+      "exterior": "home-kind-4-level-2"
+    },
+    {
+      "row": 9,
+      "column": 9,
+      "span": 1,
+      "kind": "home",
+      "updated": true,
+      "exterior": "home-kind-4-level-2"
+    },
+    {
+      "row": 9,
+      "column": 10,
+      "span": 1,
+      "kind": "home",
+      "updated": true,
+      "exterior": "home-kind-5-level-2"
+    },
+    {
+      "row": 9,
+      "column": 11,
+      "span": 1,
+      "kind": "home",
+      "updated": true,
+      "exterior": "home-kind-5-level-2"
+    },
+    {
+      "row": 9,
+      "column": 12,
+      "span": 1,
+      "kind": "home",
+      "updated": true,
+      "exterior": "home-kind-6-level-2"
+    },
+    {
+      "row": 9,
+      "column": 13,
+      "span": 1,
+      "kind": "home",
+      "updated": true,
+      "exterior": "home-kind-6-level-2"
+    },
+    {
+      "row": 9,
+      "column": 14,
+      "span": 1,
+      "kind": "home",
+      "updated": true,
+      "exterior": "home-kind-7-level-2"
+    },
+    {
+      "row": 9,
+      "column": 15,
+      "span": 1,
+      "kind": "home",
+      "updated": true,
+      "exterior": "home-kind-7-level-2"
+    },
+    {
+      "row": 10,
+      "column": 0,
+      "span": 1,
+      "kind": "home",
+      "updated": true,
+      "exterior": "home-kind-0-level-3"
+    },
+    {
+      "row": 10,
+      "column": 1,
+      "span": 1,
+      "kind": "home",
+      "updated": true,
+      "exterior": "home-kind-0-level-3"
+    },
+    {
+      "row": 10,
+      "column": 2,
+      "span": 1,
+      "kind": "home",
+      "updated": true,
+      "exterior": "home-kind-1-level-3"
+    },
+    {
+      "row": 10,
+      "column": 3,
+      "span": 1,
+      "kind": "home",
+      "updated": true,
+      "exterior": "home-kind-1-level-3"
+    },
+    {
+      "row": 10,
+      "column": 4,
+      "span": 1,
+      "kind": "home",
+      "updated": true,
+      "exterior": "home-kind-2-level-3"
+    },
+    {
+      "row": 10,
+      "column": 5,
+      "span": 1,
+      "kind": "home",
+      "updated": true,
+      "exterior": "home-kind-2-level-3"
+    },
+    {
+      "row": 10,
+      "column": 6,
+      "span": 1,
+      "kind": "home",
+      "updated": true,
+      "exterior": "home-kind-3-level-3"
+    },
+    {
+      "row": 10,
+      "column": 7,
+      "span": 1,
+      "kind": "home",
+      "updated": true,
+      "exterior": "home-kind-3-level-3"
+    },
+    {
+      "row": 10,
+      "column": 8,
+      "span": 1,
+      "kind": "home",
+      "updated": true,
+      "exterior": "home-kind-4-level-3"
+    },
+    {
+      "row": 10,
+      "column": 9,
+      "span": 1,
+      "kind": "home",
+      "updated": true,
+      "exterior": "home-kind-4-level-3"
+    },
+    {
+      "row": 10,
+      "column": 10,
+      "span": 1,
+      "kind": "home",
+      "updated": true,
+      "exterior": "home-kind-5-level-3"
+    },
+    {
+      "row": 10,
+      "column": 11,
+      "span": 1,
+      "kind": "home",
+      "updated": true,
+      "exterior": "home-kind-5-level-3"
+    },
+    {
+      "row": 10,
+      "column": 12,
+      "span": 1,
+      "kind": "home",
+      "updated": true,
+      "exterior": "home-kind-6-level-3"
+    },
+    {
+      "row": 10,
+      "column": 13,
+      "span": 1,
+      "kind": "home",
+      "updated": true,
+      "exterior": "home-kind-6-level-3"
+    },
+    {
+      "row": 10,
+      "column": 14,
+      "span": 1,
+      "kind": "home",
+      "updated": true,
+      "exterior": "home-kind-7-level-3"
+    },
+    {
+      "row": 10,
+      "column": 15,
+      "span": 1,
+      "kind": "home",
+      "updated": true,
+      "exterior": "home-kind-7-level-3"
+    },
+    {
+      "row": 11,
+      "column": 0,
+      "span": 1,
+      "kind": "metal",
+      "updated": true,
+      "exterior": "factory"
+    },
+    {
+      "row": 11,
+      "column": 1,
+      "span": 1,
+      "kind": "metal",
+      "updated": true,
+      "exterior": "factory"
+    },
+    {
+      "row": 11,
+      "column": 2,
+      "span": 1,
+      "kind": "metal",
+      "updated": true,
+      "exterior": "factory"
+    },
+    {
+      "row": 12,
+      "column": 0,
+      "span": 1,
+      "kind": "food",
+      "updated": true,
+      "exterior": "warehouse"
+    },
+    {
+      "row": 12,
+      "column": 1,
+      "span": 1,
+      "kind": "food",
+      "updated": true,
+      "exterior": "warehouse"
+    },
+    {
+      "row": 12,
+      "column": 2,
+      "span": 1,
+      "kind": "food",
+      "updated": true,
+      "exterior": "tanks"
+    },
+    {
+      "row": 13,
+      "column": 0,
+      "span": 1,
+      "kind": "warehouse",
+      "updated": true,
+      "exterior": "warehouse"
+    },
+    {
+      "row": 13,
+      "column": 1,
+      "span": 1,
+      "kind": "warehouse",
+      "updated": true,
+      "exterior": "warehouse"
+    },
+    {
+      "row": 13,
+      "column": 2,
+      "span": 1,
+      "kind": "warehouse",
+      "updated": true,
+      "exterior": "warehouse"
+    },
+    {
+      "row": 14,
+      "column": 0,
+      "span": 1,
+      "kind": "front",
+      "updated": true,
+      "exterior": "cityhall"
+    },
+    {
+      "row": 14,
+      "column": 1,
+      "span": 1,
+      "kind": "front",
+      "updated": true,
+      "exterior": "bank"
+    },
+    {
+      "row": 14,
+      "column": 2,
+      "span": 1,
+      "kind": "civic",
+      "updated": true,
+      "exterior": "culture"
+    },
+    {
+      "row": 14,
+      "column": 3,
+      "span": 1,
+      "kind": "civic",
+      "updated": true,
+      "exterior": "coldstore"
+    },
+    {
+      "row": 14,
+      "column": 4,
+      "span": 1,
+      "kind": "civic",
+      "updated": false,
+      "exterior": null
+    },
+    {
+      "row": 14,
+      "column": 5,
+      "span": 1,
+      "kind": "civic",
+      "updated": true,
+      "exterior": "daycare"
+    },
+    {
+      "row": 14,
+      "column": 6,
+      "span": 1,
+      "kind": "civic",
+      "updated": false,
+      "exterior": null
+    },
+    {
+      "row": 14,
+      "column": 7,
+      "span": 1,
+      "kind": "civic",
+      "updated": true,
+      "exterior": "workshop"
+    },
+    {
+      "row": 14,
+      "column": 8,
+      "span": 1,
+      "kind": "civic",
+      "updated": false,
+      "exterior": null
+    },
+    {
+      "row": 14,
+      "column": 12,
+      "span": 1,
+      "kind": "civic",
+      "updated": true,
+      "exterior": "familyclinic"
+    },
+    {
+      "row": 14,
+      "column": 13,
+      "span": 1,
+      "kind": "shop",
+      "updated": true,
+      "exterior": "bakery"
+    },
+    {
+      "row": 14,
+      "column": 14,
+      "span": 1,
+      "kind": "shop",
+      "updated": true,
+      "exterior": "florist"
+    },
+    {
+      "row": 14,
+      "column": 15,
+      "span": 1,
+      "kind": "shop",
+      "updated": true,
+      "exterior": "cakeshop"
+    },
+    {
+      "row": 15,
+      "column": 0,
+      "span": 2,
+      "kind": "civic",
+      "updated": false,
+      "exterior": null
+    },
+    {
+      "row": 15,
+      "column": 2,
+      "span": 2,
+      "kind": "civic",
+      "updated": false,
+      "exterior": null
+    },
+    {
+      "row": 15,
+      "column": 4,
+      "span": 2,
+      "kind": "civic",
+      "updated": false,
+      "exterior": null
+    }
+  ]
+}

@@ -16,4 +16,4 @@ python tools/check-vehicle-art.py
 
 ## 建築
 
-`buildings-preview.png` 保留原有建築的程式細節補強對照，由 `tools/draw_tiles.py` 與 `tools/detail-buildings.py` 產生，無影像模型。目前十二種代表建築及公共設施改用獨立的程式繪製素材，詳見 `../handmade/README.md`。
+`buildings-preview.png` 與 `../handmade/` 保留歷史補強、代表建築原型。正式地圖第一批外型差異更新以 [建築原稿說明](../buildings/README.md) 為準，包含斜屋頂、退縮樓層、分翼與曲線結構。

@@ -1,0 +1,99 @@
+{
+  "verdict": "PASS",
+  "score": 88,
+  "ship_ready": true,
+  "automated_score": 95,
+  "human_adjusted_score": 88,
+  "blocking_issues": [],
+  "soft_issues": [
+    "Library and bank share almost the same pediment-and-columns silhouette; books versus coin distinguish them at enlarged scale, but the small emblem may need UI type labels at game 1x.",
+    "New York fire escapes overlap much of the narrow apartment facade, reducing window readability compared with the other regional variants.",
+    "Several office and industrial variants repeat the same exterior shape. Their category reads clearly, but individual variants are less distinguishable than the category silhouettes."
+  ],
+  "false_positives": [
+    "House hue-rotation warning (2.70 degrees) and school warning (12.39 degrees) measure the combined warm masonry palette, not a single lighting ramp. The cream fronts, darker side planes and distinct roof colors provide readable form without pillow shading.",
+    "School's six orphan pixels (0.078% of visible pixels) and bank's single orphan pixel (0.012%) occur at stepped roof/trim details; they do not read as accidental loose pixels.",
+    "School has 34 visible colors, but no palette reference or hard color limit was supplied. This is a soft game-prop palette consideration, not an off-palette violation."
+  ],
+  "reasoning": "The final exterior assets materially improve silhouette and type recognition: pitched houses, stepped apartment masses, a clock-tower school, sawtooth factory, cylindrical water tower and columned bank read as buildings rather than flat rectangular surface studies. Roof/wall connections, perspective side planes, entrances and repeated windows are structurally coherent; the supplied previews show intact roof tips, chimneys, steps and tower supports with no visible clipping. Hard pixel edges, restrained material shading and regional colors remain consistent, and no blocking regression, actual pillow shading, accidental double lines or blurred 45-degree outlines was observed.",
+  "specific_fixes": [
+    "Optional readability polish: strengthen the library book emblem versus the bank coin emblem within the existing pediment if these types must be recognized without UI labels at game 1x.",
+    "Optional readability polish: reduce New York fire-escape contrast where it competes with window frames.",
+    "Optional variety polish: retain a distinctive roofline or entry mass for office and industrial variants that gameplay expects players to distinguish."
+  ],
+  "scope": {
+    "asset_version": "Final production exterior assets; supersedes all earlier surface-study reviews and scores.",
+    "reviewed_images": [
+      "before-after-6x.png",
+      "master-to-game.png",
+      "all-buildings-classic.png",
+      "all-buildings-sf.png",
+      "all-buildings-california.png",
+      "all-buildings-newyork.png",
+      "house-native.png",
+      "office-native.png",
+      "school-native.png",
+      "bank-native.png"
+    ],
+    "quality_checks": "Fresh quality_check.py --verbose runs repeated on all four final native 128x128 PNGs after the pale-blue glass reflection correction; summary scores remain house 90, office 100, school 90, bank 100. No contact sheets passed to the checker. automated_score is their arithmetic mean. Refreshed New York gallery visually spot-checked: diagonal reflections remain pale blue within the glazing rather than inheriting brick or wall colors; no new visual issue observed.",
+    "limitations": "Clipping and type readability assessed from the supplied artifact previews. No in-scene map screenshot was supplied."
+  },
+  "native_results": {
+    "house": {
+      "automated_score": 90,
+      "dimensions": [
+        128,
+        128
+      ],
+      "visible_colors": 29,
+      "orphans": 0,
+      "orphan_ratio": 0,
+      "doublies": 0,
+      "pillow_shading": false,
+      "hue_rotation_deg": 2.6952843639749062,
+      "anti_aa_warning": false
+    },
+    "office": {
+      "automated_score": 100,
+      "dimensions": [
+        128,
+        128
+      ],
+      "visible_colors": 22,
+      "orphans": 0,
+      "orphan_ratio": 0,
+      "doublies": 0,
+      "pillow_shading": false,
+      "hue_rotation_deg": 101.15632152305146,
+      "anti_aa_warning": false
+    },
+    "school": {
+      "automated_score": 90,
+      "dimensions": [
+        128,
+        128
+      ],
+      "visible_colors": 34,
+      "orphans": 6,
+      "orphan_ratio": 0.0007814535035165407,
+      "doublies": 0,
+      "pillow_shading": false,
+      "hue_rotation_deg": 12.389289654057968,
+      "anti_aa_warning": false
+    },
+    "bank": {
+      "automated_score": 100,
+      "dimensions": [
+        128,
+        128
+      ],
+      "visible_colors": 22,
+      "orphans": 1,
+      "orphan_ratio": 0.00012177301509985388,
+      "doublies": 0,
+      "pillow_shading": false,
+      "hue_rotation_deg": 122.91231985738735,
+      "anti_aa_warning": false
+    }
+  }
+}
